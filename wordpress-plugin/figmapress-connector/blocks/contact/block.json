@@ -1,0 +1,18 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "figmapress/contact",
+  "title": "FigmaPress Contact",
+  "category": "design",
+  "icon": "email",
+  "description": "Contact section emitted by FigmaPress Builder.",
+  "supports": { "html": false },
+  "textdomain": "figmapress-connector",
+  "attributes": {
+    "headline": { "type": "string", "default": "" },
+    "text": { "type": "string", "default": "" },
+    "buttonText": { "type": "string", "default": "" },
+    "buttonUrl": { "type": "string", "default": "" }
+  },
+  "render": "file:./render.php"
+}

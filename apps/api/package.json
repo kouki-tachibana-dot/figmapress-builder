@@ -1,0 +1,14 @@
+{
+  "name": "@figmapress/api",
+  "version": "0.2.0",
+  "private": true,
+  "main": "src/index.ts",
+  "dependencies": {
+    "@figmapress/blueprint": "*",
+    "@figmapress/figma-parser": "*",
+    "@figmapress/exporter": "*",
+    "@figmapress/block-renderer": "*",
+    "@figmapress/token-pipeline": "*",
+    "@figmapress/wp-connector": "*"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "figmapress/card-grid",
+  "title": "FigmaPress Card Grid",
+  "category": "design",
+  "icon": "grid-view",
+  "description": "Feature card grid emitted by FigmaPress Builder.",
+  "supports": { "html": false },
+  "textdomain": "figmapress-connector",
+  "attributes": {
+    "headline": { "type": "string", "default": "" },
+    "items": { "type": "array", "default": [] }
+  },
+  "render": "file:./render.php"
+}

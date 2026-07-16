@@ -1,0 +1,39 @@
+{
+  "name": "figmapress-builder",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Figma → Site Blueprint → Gutenberg Block → WordPress Draft (MVP)",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace=@figmapress/web",
+    "build:web": "npm run build --workspace=@figmapress/web",
+    "start:web": "npm run start --workspace=@figmapress/web",
+    "lint": "npm run lint --workspace=@figmapress/web",
+    "test": "tsx --test tests/*.test.ts",
+    "generate:blueprint": "tsx scripts/generate-blueprint.ts",
+    "render:blocks": "tsx scripts/render-blocks.ts",
+    "generate:theme": "tsx scripts/generate-theme.ts",
+    "wp:create-draft": "tsx scripts/create-wp-draft.ts",
+    "mvp": "npm run generate:blueprint && npm run render:blocks && npm run generate:theme",
+    "typecheck": "npm run typecheck:core && npm run typecheck:web",
+    "typecheck:core": "tsc -p tsconfig.json --noEmit",
+    "typecheck:web": "tsc -p apps/web/tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "tsx": "^4.7.1",
+    "typescript": "^5.4.2"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "zod": "^3.22.4"
+  },
+  "overrides": {
+    "next@16.2.10": {
+      "postcss": "8.5.19"
+    }
+  }
+}

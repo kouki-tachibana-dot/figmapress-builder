@@ -1,0 +1,116 @@
+/* Shared base styles for figmapress/* blocks. Intentionally minimal —
+ * the block theme is responsible for typography and color via theme.json
+ * presets; this file only handles structural layout. */
+
+.wp-block-figmapress-hero,
+.wp-block-figmapress-service-list,
+.wp-block-figmapress-card-grid,
+.wp-block-figmapress-faq,
+.wp-block-figmapress-cta,
+.wp-block-figmapress-contact {
+    padding: 64px 24px;
+    box-sizing: border-box;
+}
+
+.wp-block-figmapress-hero {
+    display: grid;
+    gap: 32px;
+    grid-template-columns: 1fr;
+    background: var(--wp--preset--color--background, #f5f7ff);
+}
+
+@media (min-width: 768px) {
+    .wp-block-figmapress-hero[data-layout="text-left-image-right"] {
+        grid-template-columns: 1fr 1fr;
+        align-items: center;
+    }
+}
+
+.wp-block-figmapress-hero__headline {
+    font-size: clamp(28px, 4vw, 44px);
+    line-height: 1.25;
+    margin: 0 0 16px;
+}
+
+.wp-block-figmapress-hero__subtext {
+    font-size: 16px;
+    line-height: 1.7;
+    margin: 0 0 24px;
+}
+
+.wp-block-figmapress-hero__button,
+.wp-block-figmapress-cta__button,
+.wp-block-figmapress-contact__button {
+    display: inline-block;
+    padding: 12px 28px;
+    background: var(--wp--preset--color--primary, #2d5bff);
+    color: #fff;
+    border-radius: 999px;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.wp-block-figmapress-hero__image img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 12px;
+}
+
+.wp-block-figmapress-service-list__items,
+.wp-block-figmapress-card-grid__items {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 24px;
+    grid-template-columns: 1fr;
+}
+
+@media (min-width: 768px) {
+    .wp-block-figmapress-service-list__items,
+    .wp-block-figmapress-card-grid__items {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+.wp-block-figmapress-service-list__item,
+.wp-block-figmapress-card-grid__item {
+    padding: 24px;
+    border-radius: 12px;
+    background: rgba(45, 91, 255, 0.06);
+}
+
+.wp-block-figmapress-service-list__item h3,
+.wp-block-figmapress-card-grid__item h3 {
+    margin: 0 0 8px;
+    font-size: 18px;
+}
+
+.wp-block-figmapress-service-list__item p,
+.wp-block-figmapress-card-grid__item p {
+    margin: 0;
+    color: var(--wp--preset--color--muted, #6b7280);
+    line-height: 1.7;
+}
+
+.wp-block-figmapress-faq__items dt {
+    font-weight: 700;
+    margin-top: 24px;
+}
+
+.wp-block-figmapress-faq__items dd {
+    margin: 8px 0 0;
+    color: var(--wp--preset--color--muted, #6b7280);
+    line-height: 1.7;
+}
+
+.wp-block-figmapress-cta,
+.wp-block-figmapress-contact {
+    text-align: center;
+}
+
+.wp-block-figmapress-cta__headline,
+.wp-block-figmapress-contact__headline {
+    margin: 0 0 24px;
+    font-size: clamp(22px, 3vw, 32px);
+}

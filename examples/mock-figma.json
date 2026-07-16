@@ -1,0 +1,173 @@
+{
+  "document": {
+    "name": "Sample LP",
+    "type": "DOCUMENT",
+    "children": [
+      {
+        "id": "1:1",
+        "name": "Page 1",
+        "type": "CANVAS",
+        "children": [
+          {
+            "id": "2:1",
+            "name": "section/hero",
+            "type": "FRAME",
+            "fills": [{ "type": "SOLID", "color": { "r": 0.96, "g": 0.97, "b": 1 } }],
+            "children": [
+              { "id": "3:1", "name": "headline", "type": "TEXT", "characters": "Figma から始まる WordPress 制作" },
+              { "id": "3:2", "name": "subtext", "type": "TEXT", "characters": "FigmaPress Builder は、Figma デザインを WordPress 上で編集可能なページへ自動変換します。" },
+              { "id": "3:3", "name": "primaryButton", "type": "INSTANCE", "characters": "お問い合わせ" },
+              { "id": "3:4", "name": "primaryButtonUrl", "type": "TEXT", "characters": "/contact" },
+              { "id": "3:5", "name": "image/hero", "type": "RECTANGLE", "fills": [{ "type": "IMAGE", "imageRef": "hero-001" }] }
+            ]
+          },
+          {
+            "id": "2:2",
+            "name": "section/service",
+            "type": "FRAME",
+            "children": [
+              { "id": "4:0", "name": "headline", "type": "TEXT", "characters": "サービス一覧" },
+              {
+                "id": "4:1",
+                "name": "service/item",
+                "type": "FRAME",
+                "children": [
+                  { "id": "4:1:1", "name": "title", "type": "TEXT", "characters": "Webサイト制作" },
+                  { "id": "4:1:2", "name": "text", "type": "TEXT", "characters": "コーポレートサイト・LPの制作を承ります。" }
+                ]
+              },
+              {
+                "id": "4:2",
+                "name": "service/item",
+                "type": "FRAME",
+                "children": [
+                  { "id": "4:2:1", "name": "title", "type": "TEXT", "characters": "ブランディング" },
+                  { "id": "4:2:2", "name": "text", "type": "TEXT", "characters": "ロゴ・ビジュアルアイデンティティを設計します。" }
+                ]
+              },
+              {
+                "id": "4:3",
+                "name": "service/item",
+                "type": "FRAME",
+                "children": [
+                  { "id": "4:3:1", "name": "title", "type": "TEXT", "characters": "WordPress 開発" },
+                  { "id": "4:3:2", "name": "text", "type": "TEXT", "characters": "テーマ・プラグインのカスタム開発を行います。" }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "2:3",
+            "name": "section/features",
+            "type": "FRAME",
+            "children": [
+              { "id": "5:0", "name": "headline", "type": "TEXT", "characters": "選ばれる理由" },
+              {
+                "id": "5:1",
+                "name": "feature/card",
+                "type": "FRAME",
+                "children": [
+                  { "id": "5:1:1", "name": "title", "type": "TEXT", "characters": "高速納品" },
+                  { "id": "5:1:2", "name": "text", "type": "TEXT", "characters": "AI と自動化で従来の半分の納期を実現。" }
+                ]
+              },
+              {
+                "id": "5:2",
+                "name": "feature/card",
+                "type": "FRAME",
+                "children": [
+                  { "id": "5:2:1", "name": "title", "type": "TEXT", "characters": "編集可能" },
+                  { "id": "5:2:2", "name": "text", "type": "TEXT", "characters": "Gutenberg ブロックとして納品。納品後も自由に編集できます。" }
+                ]
+              },
+              {
+                "id": "5:3",
+                "name": "feature/card",
+                "type": "FRAME",
+                "children": [
+                  { "id": "5:3:1", "name": "title", "type": "TEXT", "characters": "デザイン忠実" },
+                  { "id": "5:3:2", "name": "text", "type": "TEXT", "characters": "Figma のトークンを theme.json として書き出し、デザインを再現。" }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "2:4",
+            "name": "section/faq",
+            "type": "FRAME",
+            "children": [
+              { "id": "6:0", "name": "headline", "type": "TEXT", "characters": "よくあるご質問" },
+              {
+                "id": "6:1",
+                "name": "faq/item",
+                "type": "FRAME",
+                "children": [
+                  { "id": "6:1:1", "name": "question", "type": "TEXT", "characters": "どのような Figma ファイルに対応していますか？" },
+                  { "id": "6:1:2", "name": "answer", "type": "TEXT", "characters": "section/* という命名規則で組まれた LP テンプレートに対応しています。" }
+                ]
+              },
+              {
+                "id": "6:2",
+                "name": "faq/item",
+                "type": "FRAME",
+                "children": [
+                  { "id": "6:2:1", "name": "question", "type": "TEXT", "characters": "出力されたページは編集できますか？" },
+                  { "id": "6:2:2", "name": "answer", "type": "TEXT", "characters": "はい、Gutenberg ブロックとして出力されるため WordPress 管理画面で自由に編集できます。" }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "2:5",
+            "name": "section/pricing",
+            "type": "FRAME",
+            "children": [
+              { "id": "7:0", "name": "headline", "type": "TEXT", "characters": "料金プラン（未対応）" }
+            ]
+          },
+          {
+            "id": "2:6",
+            "name": "section/cta",
+            "type": "FRAME",
+            "children": [
+              { "id": "8:0", "name": "headline", "type": "TEXT", "characters": "まずはご相談ください" },
+              { "id": "8:1", "name": "buttonText", "type": "TEXT", "characters": "お問い合わせ" },
+              { "id": "8:2", "name": "buttonUrl", "type": "TEXT", "characters": "/contact" }
+            ]
+          },
+          {
+            "id": "2:7",
+            "name": "section/contact",
+            "type": "FRAME",
+            "children": [
+              { "id": "9:0", "name": "headline", "type": "TEXT", "characters": "お問い合わせ" },
+              { "id": "9:1", "name": "text", "type": "TEXT", "characters": "ご相談・お見積もりはお気軽にどうぞ。" },
+              { "id": "9:2", "name": "buttonText", "type": "TEXT", "characters": "メールで問い合わせる" },
+              { "id": "9:3", "name": "buttonUrl", "type": "TEXT", "characters": "mailto:hello@example.com" }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "styles": {
+    "colors": [
+      { "name": "Primary", "value": "#2D5BFF" },
+      { "name": "Primary Dark", "value": "#1F3FB8" },
+      { "name": "Text", "value": "#1A1A1A" },
+      { "name": "Background", "value": "#F5F7FF" },
+      { "name": "Muted", "value": "#6B7280" }
+    ],
+    "typography": [
+      { "name": "Body", "fontFamily": "Noto Sans JP", "fontSize": "16px", "fontWeight": 400 },
+      { "name": "Heading", "fontFamily": "Noto Sans JP", "fontSize": "32px", "fontWeight": 700 }
+    ],
+    "spacing": [
+      { "name": "XS", "size": "8px" },
+      { "name": "S", "size": "16px" },
+      { "name": "M", "size": "24px" },
+      { "name": "L", "size": "40px" },
+      { "name": "XL", "size": "64px" }
+    ]
+  }
+}

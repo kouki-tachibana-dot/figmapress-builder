@@ -1,0 +1,20 @@
+{
+  "colors": [
+    { "name": "Primary", "slug": "primary", "value": "#2D5BFF" },
+    { "name": "Primary Dark", "slug": "primary-dark", "value": "#1F3FB8" },
+    { "name": "Text", "slug": "text", "value": "#1A1A1A" },
+    { "name": "Background", "slug": "background", "value": "#F5F7FF" },
+    { "name": "Muted", "slug": "muted", "value": "#6B7280" }
+  ],
+  "typography": [
+    { "name": "Body", "slug": "body", "fontFamily": "Noto Sans JP", "fontSize": "16px", "fontWeight": 400 },
+    { "name": "Heading", "slug": "heading", "fontFamily": "Noto Sans JP", "fontSize": "32px", "fontWeight": 700 }
+  ],
+  "spacing": [
+    { "name": "XS", "slug": "xs", "size": "8px" },
+    { "name": "S", "slug": "s", "size": "16px" },
+    { "name": "M", "slug": "m", "size": "24px" },
+    { "name": "L", "slug": "l", "size": "40px" },
+    { "name": "XL", "slug": "xl", "size": "64px" }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "figmapress/faq",
+  "title": "FigmaPress FAQ",
+  "category": "design",
+  "icon": "editor-help",
+  "description": "FAQ section emitted by FigmaPress Builder.",
+  "supports": { "html": false },
+  "textdomain": "figmapress-connector",
+  "attributes": {
+    "headline": { "type": "string", "default": "" },
+    "items": { "type": "array", "default": [] }
+  },
+  "render": "file:./render.php"
+}

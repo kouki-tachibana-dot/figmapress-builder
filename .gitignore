@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.next/
+.vercel/
+.env.local
+.env.*.local
+.env
+.DS_Store
+*.log
+*.tsbuildinfo
+apps/web/browser-*.png
+examples/output/*
+!examples/output/.gitkeep

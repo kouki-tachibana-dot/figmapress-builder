@@ -1,0 +1,30 @@
+{
+  "name": "@figmapress/web",
+  "version": "0.2.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@figmapress/block-renderer": "*",
+    "@figmapress/blueprint": "*",
+    "@figmapress/figma-parser": "*",
+    "@figmapress/token-pipeline": "*",
+    "@figmapress/wp-connector": "*",
+    "next": "16.2.10",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "eslint": "^9.39.0",
+    "eslint-config-next": "16.2.10",
+    "typescript": "^5.9.0"
+  }
+}

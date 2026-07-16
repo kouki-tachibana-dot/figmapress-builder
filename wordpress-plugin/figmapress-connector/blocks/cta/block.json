@@ -1,0 +1,17 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "figmapress/cta",
+  "title": "FigmaPress CTA",
+  "category": "design",
+  "icon": "megaphone",
+  "description": "Call-to-action section emitted by FigmaPress Builder.",
+  "supports": { "html": false },
+  "textdomain": "figmapress-connector",
+  "attributes": {
+    "headline": { "type": "string", "default": "" },
+    "buttonText": { "type": "string", "default": "" },
+    "buttonUrl": { "type": "string", "default": "" }
+  },
+  "render": "file:./render.php"
+}

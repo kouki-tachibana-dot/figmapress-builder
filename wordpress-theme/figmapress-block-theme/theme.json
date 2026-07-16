@@ -1,0 +1,84 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/theme.json",
+  "version": 2,
+  "settings": {
+    "color": {
+      "palette": [
+        {
+          "name": "Primary",
+          "slug": "primary",
+          "color": "#2D5BFF"
+        },
+        {
+          "name": "Primary Dark",
+          "slug": "primary-dark",
+          "color": "#1F3FB8"
+        },
+        {
+          "name": "Text",
+          "slug": "text",
+          "color": "#1A1A1A"
+        },
+        {
+          "name": "Background",
+          "slug": "background",
+          "color": "#F5F7FF"
+        },
+        {
+          "name": "Muted",
+          "slug": "muted",
+          "color": "#6B7280"
+        }
+      ]
+    },
+    "typography": {
+      "fontFamilies": [
+        {
+          "name": "Body",
+          "slug": "body",
+          "fontFamily": "Noto Sans JP"
+        },
+        {
+          "name": "Heading",
+          "slug": "heading",
+          "fontFamily": "Noto Sans JP"
+        }
+      ]
+    },
+    "spacing": {
+      "spacingSizes": [
+        {
+          "name": "XS",
+          "slug": "xs",
+          "size": "8px"
+        },
+        {
+          "name": "S",
+          "slug": "s",
+          "size": "16px"
+        },
+        {
+          "name": "M",
+          "slug": "m",
+          "size": "24px"
+        },
+        {
+          "name": "L",
+          "slug": "l",
+          "size": "40px"
+        },
+        {
+          "name": "XL",
+          "slug": "xl",
+          "size": "64px"
+        }
+      ]
+    }
+  },
+  "styles": {
+    "typography": {
+      "fontFamily": "var(--wp--preset--font-family--body)",
+      "fontSize": "16px"
+    }
+  }
+}

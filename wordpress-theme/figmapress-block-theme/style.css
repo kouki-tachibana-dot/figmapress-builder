@@ -1,0 +1,34 @@
+/*
+Theme Name: FigmaPress Block Theme
+Theme URI: https://github.com/kouki-tachibana-dot/figmapress-builder
+Author: FigmaPress
+Description: Block theme companion for FigmaPress Builder generated pages.
+Version: 0.2.0
+Requires at least: 6.4
+Requires PHP: 7.4
+License: GNU General Public License v2 or later
+Text Domain: figmapress-block-theme
+*/
+
+body {
+    margin: 0;
+    font-family: var(--wp--preset--font-family--body, system-ui, sans-serif);
+    color: var(--wp--preset--color--text, #1a1a1a);
+    background: #ffffff;
+    line-height: 1.6;
+}
+
+.site-header,
+.site-footer {
+    padding: 24px;
+    background: #ffffff;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.site-footer {
+    border-top: 1px solid rgba(0, 0, 0, 0.06);
+    border-bottom: none;
+    text-align: center;
+    font-size: 14px;
+    color: var(--wp--preset--color--muted, #6b7280);
+}

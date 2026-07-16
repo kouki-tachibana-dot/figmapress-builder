@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "figmapress/hero",
+  "title": "FigmaPress Hero",
+  "category": "design",
+  "icon": "format-image",
+  "description": "Hero section emitted by FigmaPress Builder.",
+  "supports": { "html": false },
+  "textdomain": "figmapress-connector",
+  "attributes": {
+    "headline": { "type": "string", "default": "" },
+    "subtext": { "type": "string", "default": "" },
+    "primaryButtonText": { "type": "string", "default": "" },
+    "primaryButtonUrl": { "type": "string", "default": "" },
+    "imageUrl": { "type": "string", "default": "" },
+    "imageId": { "type": "number", "default": 0 },
+    "layoutVariant": { "type": "string", "default": "stacked" }
+  },
+  "render": "file:./render.php"
+}
