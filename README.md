@@ -5,6 +5,8 @@ Figma の構造を、WordPress で扱える Gutenberg ブロックへ変換す�
 
 ## Public Beta v0.2
 
+**Web版:** [https://figmapress-builder.vercel.app](https://figmapress-builder.vercel.app)
+
 ブラウザ版では次の操作を登録不要で行えます。
 
 - Figma URL／ファイルキーと Personal Access Token から直接変換
@@ -14,12 +16,8 @@ Figma の構造を、WordPress で扱える Gutenberg ブロックへ変換す�
 - HTTPSのWordPressサイトへ下書き固定ページを作成
 - WordPress Plugin／Theme ZIPのダウンロード
 
-```bash
-npm install
-npm run dev:web
-```
-
-`http://localhost:3000` を開くとWebアプリを利用できます。
+ローカルで実行する場合は `npm install`、`npm run dev:web` の順に実行し、
+`http://localhost:3000` を開いてください。
 
 ### 認証情報の扱い
 
