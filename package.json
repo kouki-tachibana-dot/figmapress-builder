@@ -1,8 +1,8 @@
 {
   "name": "figmapress-builder",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
-  "description": "Figma → Site Blueprint → Gutenberg Block → WordPress Draft (MVP)",
+  "description": "Figma → Site Blueprint → Gutenberg/Elementor → WordPress Draft",
   "workspaces": [
     "packages/*",
     "apps/*"
@@ -17,6 +17,7 @@
     "render:blocks": "tsx scripts/render-blocks.ts",
     "generate:theme": "tsx scripts/generate-theme.ts",
     "wp:create-draft": "tsx scripts/create-wp-draft.ts",
+    "test:wordpress": "tsx scripts/e2e-wordpress.ts",
     "mvp": "npm run generate:blueprint && npm run render:blocks && npm run generate:theme",
     "typecheck": "npm run typecheck:core && npm run typecheck:web",
     "typecheck:core": "tsc -p tsconfig.json --noEmit",

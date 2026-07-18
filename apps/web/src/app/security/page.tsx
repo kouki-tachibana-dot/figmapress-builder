@@ -16,7 +16,11 @@ export default function SecurityPage() {
       </section>
       <section>
         <h2>WordPress接続</h2>
-        <p>HTTPSの公開ホストだけを許可します。localhost、プライベートIP、リンクローカル、予約済みIP、外部リダイレクトを拒否します。作成する固定ページは常に <code>status: draft</code> です。</p>
+        <p>HTTPSの公開ホストだけを許可します。localhost、プライベートIP、リンクローカル、予約済みIP、外部リダイレクトを拒否します。作成する固定ページは常に <code>status: draft</code> です。Elementor作成はConnectorプラグインで <code>edit_pages</code> 権限、Widget許可リスト、再帰サニタイズを検査します。</p>
+      </section>
+      <section>
+        <h2>画像の永続化</h2>
+        <p>Elementor作成時はFigmaの期限付き画像URLをWordPressメディアライブラリへ取り込みます。公開HTTPS画像だけを許可し、最大12件、1件10MBまでに制限します。</p>
       </section>
       <section>
         <h2>アプリケーション防御</h2>

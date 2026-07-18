@@ -3,12 +3,22 @@
 import { useState, type ChangeEvent, type FormEvent } from "react";
 
 type SourceMode = "figma" | "json";
+type OutputTarget = "gutenberg" | "elementor";
+
+interface ElementorTemplate {
+  title: string;
+  type: "page";
+  version: "0.4";
+  page_settings: Record<string, unknown>;
+  content: unknown[];
+}
 
 interface ConversionResult {
   blueprint: {
     pages: Array<{ title: string; slug: string }>;
   };
   pageContent: string;
+  elementorTemplate: ElementorTemplate;
   previewHtml: string;
   themeJson: unknown;
   warnings: string[];
@@ -25,6 +35,19 @@ interface WordPressResult {
   status: string;
   editLink?: string;
   previewLink?: string;
+  target?: OutputTarget;
+  importedMedia?: number;
+  warnings?: string[];
+}
+
+interface WordPressStatus {
+  authenticated: true;
+  user: { id: number; name: string };
+  connectorInstalled: boolean;
+  connectorVersion?: string;
+  wordpressVersion?: string;
+  elementor: { active: boolean; version?: string };
+  canEditPages: boolean;
 }
 
 const sectionLabels: Record<string, string> = {
@@ -75,8 +98,11 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const [converting, setConverting] = useState(false);
   const [error, setError] = useState("");
   const [wpBusy, setWpBusy] = useState(false);
+  const [wpChecking, setWpChecking] = useState(false);
   const [wpError, setWpError] = useState("");
   const [wpResult, setWpResult] = useState<WordPressResult | null>(null);
+  const [wpStatus, setWpStatus] = useState<WordPressStatus | null>(null);
+  const [wpTarget, setWpTarget] = useState<OutputTarget>("gutenberg");
   const [baseUrl, setBaseUrl] = useState("");
   const [username, setUsername] = useState("");
   const [applicationPassword, setApplicationPassword] = useState("");
@@ -112,13 +138,13 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       });
       const data = await readApi<{ ok: true } & ConversionResult>(response);
       setOutput(data);
-      if (mode === "figma") setFigmaToken("");
       requestAnimationFrame(() => {
         document.getElementById("result")?.scrollIntoView({ behavior: "smooth" });
       });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "変換に失敗しました。");
     } finally {
+      if (mode === "figma") setFigmaToken("");
       setConverting(false);
     }
   }
@@ -145,17 +171,30 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
 
     try {
       const page = output.blueprint.pages[0];
+      const payload = wpTarget === "elementor"
+        ? {
+            target: wpTarget,
+            baseUrl,
+            username,
+            applicationPassword,
+            title: page?.title || output.summary.pageTitle,
+            slug: page?.slug || "/",
+            template: output.elementorTemplate,
+            pageTemplate: "elementor_canvas",
+          }
+        : {
+            target: wpTarget,
+            baseUrl,
+            username,
+            applicationPassword,
+            title: page?.title || output.summary.pageTitle,
+            slug: page?.slug || "/",
+            content: output.pageContent,
+          };
       const response = await fetch("/api/wordpress", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          baseUrl,
-          username,
-          applicationPassword,
-          title: page?.title || output.summary.pageTitle,
-          slug: page?.slug || "/",
-          content: output.pageContent,
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await readApi<{ ok: true; result: WordPressResult }>(response);
       setWpResult(data.result);
@@ -164,6 +203,25 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       setWpError(caught instanceof Error ? caught.message : "下書きを作成できませんでした。");
     } finally {
       setWpBusy(false);
+    }
+  }
+
+  async function checkWordPressConnection() {
+    setWpChecking(true);
+    setWpError("");
+    setWpStatus(null);
+    try {
+      const response = await fetch("/api/wordpress/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baseUrl, username, applicationPassword }),
+      });
+      const data = await readApi<{ ok: true; status: WordPressStatus }>(response);
+      setWpStatus(data.status);
+    } catch (caught) {
+      setWpError(caught instanceof Error ? caught.message : "接続診断に失敗しました。");
+    } finally {
+      setWpChecking(false);
     }
   }
 
@@ -177,7 +235,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> Public beta</span>
+          <span className="status-pill"><i /> v0.3 live</span>
         </nav>
       </header>
 
@@ -186,7 +244,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
           <span className="eyebrow">Design → editable blocks</span>
           <h1>デザインを、<br /><em>編集できる</em>サイトに。</h1>
           <p>
-            Figmaの構造を読み取り、WordPressで扱えるGutenbergブロックへ変換。
+            Figmaの構造を読み取り、WordPressで扱えるGutenbergブロックまたはElementorページへ変換。
             コードを書かずに、下書きページまで作成できます。
           </p>
           <div className="hero__actions">
@@ -225,7 +283,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
             <span className="flow-card__icon">W</span>
             <div><small>OUTPUT</small><strong>WordPress draft</strong></div>
           </div>
-          <div className="visual-note">6 editable sections <b>ready</b></div>
+          <div className="visual-note">2 editable targets <b>ready</b></div>
         </div>
       </section>
 
@@ -312,9 +370,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
             <details className="naming-guide">
               <summary>対応するFigmaレイヤー名を確認</summary>
               <p>
-                最初のページ直下に <code>section/hero</code>、<code>section/service</code>、
-                <code>section/features</code>、<code>section/faq</code>、<code>section/cta</code>、
-                <code>section/contact</code> を配置してください。
+                <code>section/hero</code> などの接頭辞付きレイヤーを推奨します。
+                Hero、Services、Features、FAQ、CTA、Contactのような意味が分かる名前も認識します。
+                特定フレームだけ変換する場合は、Figmaの「選択範囲へのリンク」を貼り付けてください。
               </p>
             </details>
 
@@ -350,7 +408,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
             </div>
             <aside className="output-card">
               <span className="eyebrow">Generated</span>
-              <h3>{output.summary.sectionCount} blocks</h3>
+              <h3>{output.summary.sectionCount} sections</h3>
               <div className="section-tags">
                 {output.summary.sectionTypes.map((type) => (
                   <span key={type}>{sectionLabels[type] || type}</span>
@@ -369,6 +427,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                 <button onClick={() => downloadText("page-content.html", output.pageContent, "text/html")} type="button">
                   <span>Gutenberg Blocks</span><b>HTML ↓</b>
                 </button>
+                <button onClick={() => downloadText("elementor-template.json", JSON.stringify(output.elementorTemplate, null, 2), "application/json")} type="button">
+                  <span>Elementor Template</span><b>JSON ↓</b>
+                </button>
                 <button onClick={() => downloadText("theme.json", JSON.stringify(output.themeJson, null, 2), "application/json")} type="button">
                   <span>WordPress Theme</span><b>JSON ↓</b>
                 </button>
@@ -382,24 +443,54 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
               <div>
                 <span className="eyebrow">Publish to WordPress</span>
                 <h3>下書きページを作成</h3>
-                <p>接続先のWordPressに、公開せず下書きとして送信します。</p>
+                <p>GutenbergまたはElementorを選び、公開せず下書きとして送信します。</p>
               </div>
             </div>
             <form onSubmit={createWordPressDraft}>
+              <fieldset className="target-picker">
+                <legend>編集方式</legend>
+                <label className={wpTarget === "gutenberg" ? "is-active" : ""}>
+                  <input checked={wpTarget === "gutenberg"} name="target" onChange={() => setWpTarget("gutenberg")} type="radio" />
+                  <span><strong>Gutenberg</strong><small>専用ブロックとして編集</small></span>
+                </label>
+                <label className={wpTarget === "elementor" ? "is-active" : ""}>
+                  <input checked={wpTarget === "elementor"} name="target" onChange={() => setWpTarget("elementor")} type="radio" />
+                  <span><strong>Elementor</strong><small>ネイティブWidgetとして編集</small></span>
+                </label>
+              </fieldset>
               <div className="form-grid form-grid--three">
                 <label className="field">
                   <span>WordPress URL</span>
-                  <input onChange={(event) => setBaseUrl(event.target.value)} placeholder="https://example.com" required type="url" value={baseUrl} />
+                  <input onChange={(event) => { setBaseUrl(event.target.value); setWpStatus(null); }} placeholder="https://example.com" required type="url" value={baseUrl} />
                 </label>
                 <label className="field">
                   <span>ユーザー名</span>
-                  <input autoComplete="username" onChange={(event) => setUsername(event.target.value)} required value={username} />
+                  <input autoComplete="username" onChange={(event) => { setUsername(event.target.value); setWpStatus(null); }} required value={username} />
                 </label>
                 <label className="field">
                   <span>Application Password</span>
-                  <input autoComplete="off" onChange={(event) => setApplicationPassword(event.target.value)} required type="password" value={applicationPassword} />
+                  <input autoComplete="off" onChange={(event) => { setApplicationPassword(event.target.value); setWpStatus(null); }} required type="password" value={applicationPassword} />
                 </label>
               </div>
+              <div className="connection-row">
+                <button className="connection-button" disabled={wpChecking || !baseUrl || !username || applicationPassword.length < 8} onClick={checkWordPressConnection} type="button">
+                  {wpChecking ? "診断中…" : "接続を診断"}
+                </button>
+                {wpStatus && (
+                  <div className="connection-status" role="status">
+                    <strong>✓ {wpStatus.user.name} として認証</strong>
+                    <span>WP {wpStatus.wordpressVersion || "確認済み"}</span>
+                    <span>Connector {wpStatus.connectorInstalled ? `v${wpStatus.connectorVersion || "installed"}` : "未導入"}</span>
+                    <span>Elementor {wpStatus.elementor.active ? `v${wpStatus.elementor.version || "active"}` : "未導入"}</span>
+                  </div>
+                )}
+              </div>
+              {wpStatus && !wpStatus.connectorInstalled && (
+                <div className="alert alert--error" role="alert">Connectorプラグインをインストールしてから再診断してください。</div>
+              )}
+              {wpStatus && wpTarget === "elementor" && !wpStatus.elementor.active && (
+                <div className="alert alert--error" role="alert">このサイトではElementorが有効化されていません。</div>
+              )}
               <label className="consent">
                 <input checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} type="checkbox" />
                 <span>認証情報がこの処理のためだけに一時利用され、保存されないことを確認しました。</span>
@@ -409,12 +500,17 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                 <div className="alert alert--success" role="status">
                   下書き #{wpResult.id} を作成しました。
                   {wpResult.editLink && <a href={wpResult.editLink} rel="noreferrer" target="_blank"> WordPressで編集 ↗</a>}
+                  {typeof wpResult.importedMedia === "number" && <span>（画像 {wpResult.importedMedia}件を保存）</span>}
                 </div>
               )}
               <div className="wp-footer">
                 <span>常に <code>status: draft</code></span>
-                <button className="button button--dark" disabled={!confirmed || wpBusy} type="submit">
-                  {wpBusy ? "接続中…" : "下書きを作成 →"}
+                <button
+                  className="button button--dark"
+                  disabled={!confirmed || wpBusy || Boolean(wpStatus && (!wpStatus.connectorInstalled || !wpStatus.canEditPages || (wpTarget === "elementor" && !wpStatus.elementor.active)))}
+                  type="submit"
+                >
+                  {wpBusy ? "作成中…" : `${wpTarget === "elementor" ? "Elementor" : "Gutenberg"}下書きを作成 →`}
                 </button>
               </div>
             </form>
@@ -435,13 +531,13 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
           <article>
             <span className="setup-icon">01</span>
             <h3>Connectorを追加</h3>
-            <p>専用ブロック6種類をWordPressに登録します。</p>
+            <p>専用ブロックと安全なElementor接続REST APIを追加します。</p>
             <a href="/downloads/figmapress-connector.zip" download>Plugin ZIPをダウンロード ↓</a>
           </article>
           <article>
             <span className="setup-icon">02</span>
-            <h3>プラグインを有効化</h3>
-            <p>管理画面の「プラグインを追加」からZIPをアップロードします。</p>
+            <h3>必要機能を有効化</h3>
+            <p>Connectorを有効化。Elementor出力ではElementor本体も有効化します。</p>
           </article>
           <article>
             <span className="setup-icon">03</span>
@@ -453,15 +549,15 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       </section>
 
       <section className="scope-strip">
-        <div><span>NOW</span><strong>Gutenberg blocks</strong><p>編集可能な6セクション</p></div>
-        <div><span>NEXT</span><strong>Elementor export</strong><p>現在開発予定</p></div>
+        <div><span>READY</span><strong>Gutenberg blocks</strong><p>編集可能な6セクション</p></div>
+        <div><span>READY</span><strong>Elementor documents</strong><p>Widget化・画像永続化</p></div>
         <div><span>SECURITY</span><strong>No credential storage</strong><p>HTTPS・下書き限定</p></div>
       </section>
 
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>Beta v0.2</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.3</span></div>
       </footer>
     </main>
   );

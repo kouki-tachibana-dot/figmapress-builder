@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { normalizeSlug } from "@figmapress/wp-connector";
-import { extractFigmaFileKey } from "../apps/web/src/lib/figma-api.ts";
+import {
+  extractFigmaFileKey,
+  extractFigmaReference,
+} from "../apps/web/src/lib/figma-api.ts";
 import { isPrivateOrReservedIp } from "../apps/web/src/lib/request-security.ts";
 
 test("Figma file keys are parsed from supported URLs", () => {
@@ -11,6 +14,10 @@ test("Figma file keys are parsed from supported URLs", () => {
   );
   assert.equal(extractFigmaFileKey("AbCdEf123456"), "AbCdEf123456");
   assert.throws(() => extractFigmaFileKey("https://example.com/design/AbCdEf123456"));
+  assert.deepEqual(
+    extractFigmaReference("https://www.figma.com/design/AbCdEf123456/Sample?node-id=123-456"),
+    { fileKey: "AbCdEf123456", nodeId: "123:456" },
+  );
 });
 
 test("private and reserved network destinations are rejected", () => {

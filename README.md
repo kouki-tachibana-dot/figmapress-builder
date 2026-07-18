@@ -1,9 +1,9 @@
 # FigmaPress Builder
 
-Figma の構造を、WordPress で扱える Gutenberg ブロックへ変換する
+Figma の構造を、WordPress で扱える Gutenberg ブロックまたはElementorページへ変換する
 オープンソースの Web アプリ＋CLIです。
 
-## Public Beta v0.2
+## v0.3 — 実運用接続
 
 **Web版:** [https://figmapress-builder.vercel.app](https://figmapress-builder.vercel.app)
 
@@ -11,9 +11,11 @@ Figma の構造を、WordPress で扱える Gutenberg ブロックへ変換す�
 
 - Figma URL／ファイルキーと Personal Access Token から直接変換
 - Figma JSONを貼り付け、またはファイルとして読み込んで変換
-- Site Blueprint、Gutenberg HTML、`theme.json` のダウンロード
+- Site Blueprint、Gutenberg HTML、Elementor Template JSON、`theme.json` のダウンロード
 - 生成ページの安全なサンドボックスプレビュー
-- HTTPSのWordPressサイトへ下書き固定ページを作成
+- WordPress接続診断（認証、権限、Connector、Elementor）
+- HTTPSのWordPressサイトへGutenberg／Elementor下書き固定ページを作成
+- Figma画像をWordPressメディアライブラリへ取り込み、期限切れを防止
 - WordPress Plugin／Theme ZIPのダウンロード
 
 ローカルで実行する場合は `npm install`、`npm run dev:web` の順に実行し、
@@ -27,49 +29,51 @@ Figma TokenとWordPress Application Passwordは対象APIへのリクエスト中
 リダイレクトを拒否します。詳細は [SECURITY.md](./SECURITY.md) と
 [PRIVACY.md](./PRIVACY.md) を参照してください。
 
-### Public Betaの制約
+### 制約
 
 - Figma OAuthは未実装で、現時点では利用者自身のPersonal Access Tokenが必要
-- Figmaレイヤーは所定の `section/*` 命名規則に従う必要がある
+- Figmaレイヤーは `section/*` または Hero / Services / Features / FAQ / CTA / Contact の意味が分かる名前を推奨
 - WordPressへの送信は固定ページの `draft` 作成だけ
-- Elementor Exporterは未実装（Future Phase）
+- Elementor Pro専用Widget、Theme Builder、WooCommerce、Popupは対象外
 
 ---
 
-# CLI MVP
+# CLI / ローカル運用
 
 Figma デザイン（または mock Figma JSON）から、**WordPress 上で編集可能な
-Gutenberg ブロックページ** を自動生成する MVP です。
+Gutenberg ブロックページまたはElementorページ** を自動生成します。
 
 ```
-Figma → Site Blueprint → Gutenberg Block HTML → WordPress Draft Page
+Figma → Site Blueprint → Gutenberg / Elementor → WordPress Draft Page
 ```
 
 > このリポジトリの最重要方針:
 > **Figma の見た目を absolute 配置 HTML にしてそのまま貼り付けない。**
-> Figma を中立的な Site Blueprint へ変換し、編集可能な Gutenberg ブロックとして出力します。
+> Figma を中立的な Site Blueprint へ変換し、編集可能なWordPress要素として出力します。
 
 ---
 
-## MVP の範囲
+## 実装範囲
 
 このリポジトリで動くもの:
 
-- mock Figma JSON から LP 構造を読み取る
+- 実Figma REST APIまたはFigma JSONからLP構造を読み取る
 - Site Blueprint JSON を生成する
 - Site Blueprint から Gutenberg ブロック HTML を生成する
+- Site Blueprint からElementor 0.4形式のContainer／Widget JSONを生成する
 - tokens → `theme.json` を生成する
 - WordPress REST API で **下書き** 固定ページを作成する
+- Connector REST APIでElementor post meta、Canvasテンプレート、CSSキャッシュを設定する
+- Figmaの外部画像をWordPressメディアライブラリへ安全に取り込む
 - `figmapress/*` カスタムブロックを WordPress 側で登録・最低限表示する
 
 ## 今回やらないこと
 
 - Figma Plugin / SaaS 管理画面 / 複数ユーザー管理 / 課金
-- Elementor 出力の実装（**設計だけ拡張可能にしてある — 後述**）
 - Bricks 対応 / Next.js 出力
 - カスタム投稿タイプ / マルチページ生成
-- 高度な React 編集 UI / Visual QA / Responsive UI
-- Figma Webhook / 本番公開（`status: draft` のみ）
+- Figma OAuth / Webhook / 複数ユーザー管理 / 課金
+- WordPressでの自動公開（安全のため `status: draft` のみ）
 
 ---
 
@@ -77,12 +81,13 @@ Figma → Site Blueprint → Gutenberg Block HTML → WordPress Draft Page
 
 ```
 figmapress-builder/
-├── apps/api/                    (将来用 — MVP では未使用)
+├── apps/web/                    Next.js Web UI・変換／WordPress API
 ├── packages/
 │   ├── blueprint/               Site Blueprint 型・zod schema・validator
 │   ├── figma-parser/            mock Figma JSON → Site Blueprint
 │   ├── exporter/                Exporter インターフェース（中立）
 │   ├── block-renderer/          GutenbergExporter 実装
+│   ├── elementor-renderer/      Elementor 0.4 JSON Exporter
 │   ├── token-pipeline/          tokens → theme.json
 │   └── wp-connector/            WordPress REST クライアント
 ├── wordpress-plugin/
@@ -122,12 +127,12 @@ npm install
 cp .env.example .env
 ```
 
-| 環境変数 | 用途 | MVP で必須? |
+| 環境変数 | 用途 | 必須? |
 | --- | --- | --- |
 | `WORDPRESS_BASE_URL` | 例: `https://example.com` | `wp:create-draft` で必須 |
 | `WORDPRESS_USERNAME` | WordPress ユーザー名 | 同上 |
 | `WORDPRESS_APPLICATION_PASSWORD` | Application Password | 同上 |
-| `FIGMA_ACCESS_TOKEN` | 実 Figma API 接続（Priority B） | 不要 |
+| `FIGMA_ACCESS_TOKEN` | 実 Figma API 接続 | 不要 |
 | `FIGMA_FILE_KEY` | 同上 | 不要 |
 
 Application Password は WordPress 管理画面の **ユーザー → プロフィール →
@@ -202,8 +207,8 @@ npm run wp:create-draft
    `wp-content/themes/figmapress-block-theme/` にコピー
 2. 外観 → テーマ → **FigmaPress Block Theme** を有効化
 
-> Plugin と Theme の役割は **完全に分離** されています。Plugin はブロック
-> 登録のみ、Theme は `theme.json`・テンプレート・スタイルのみ担当します。
+> Plugin と Theme の役割は **分離** されています。Plugin はブロック登録と
+> 認証付きElementor接続、Theme は `theme.json`・テンプレート・スタイルを担当します。
 
 ---
 
@@ -238,7 +243,7 @@ npm run wp:create-draft
 直下に `figmapress-connector.php` があるかを確認してください。
 
 **`section/pricing is unsupported` 等の warning**
-→ 仕様通りの挙動です（MVP は hero / service / features / faq / cta /
+→ 仕様通りの挙動です（対応範囲は hero / service / features / faq / cta /
 contact のみ対応）。Blueprint への影響はありません。
 
 ---
@@ -256,56 +261,27 @@ export interface SiteExporter {
 }
 ```
 
-今回は `GutenbergExporter` だけを実装しています。
+`GutenbergExporter` と `ElementorExporter` を同じBlueprintから実行します。
 
 ---
 
-## Future Phase: Elementor Exporter
+## Elementor接続
 
-将来 Elementor 対応を追加する場合は、下記の段階で進めます。
-**MVP では実装しません。** 設計だけ準備しています。
+Web画面から `elementor-template.json` をダウンロードしてElementorへ手動importできるほか、
+FigmaPress Connector v0.3以上を有効化したWordPressへ直接下書きを作成できます。
+ConnectorはApplication Passwordで認証された `edit_pages` 権限ユーザーだけを許可し、
+Elementorの非公開post metaへJSONを保存します。
 
-### Phase E1 — Elementor JSON 出力 MVP
-
-```
-Site Blueprint → elementor-template.json
-```
-
-WordPress への自動 import は行わず、Elementor に **手動 import 可能**
-な JSON を生成することをゴールにします。
-
-### Phase E2 — Elementor インポート自動化
-
-```
-elementor-template.json → wp elementor library import → Elementor Library
-```
-
-### Phase E3 — Elementor ページ自動作成
-
-```
-Elementor JSON → Library import → 固定ページ作成 → Canvas/Full Width 指定 → Preview URL 返却
-```
-
-### 想定パッケージ
-
-```
-packages/elementor-renderer/
-  src/
-    ElementorExporter.ts
-    widgets/
-    template-json.ts
-```
-
-### Figma section → Elementor ウィジェットの対応（予定）
+### Figma section → Elementor ウィジェット
 
 | section | Elementor 出力 |
 | --- | --- |
 | `section/hero` | Container + Heading + Text Editor + Button + Image |
-| `section/service` | Container + Heading + Icon Box / Text Editor |
+| `section/service` | Container + Heading + Card containers |
 | `section/features` | Container + Card 風 inner container |
-| `section/faq` | Accordion |
+| `section/faq` | Container + Heading + Q&A containers |
 | `section/cta` | Container + Heading + Button |
-| `section/contact` | Shortcode Widget (Contact Form 7 など) |
+| `section/contact` | Container + Heading + Text Editor + Button |
 
 ### 最初は対応しないもの
 
@@ -314,7 +290,7 @@ packages/elementor-renderer/
 - WooCommerce / Popup Builder
 - 高度な Motion Effects / 独自 Widget 開発
 
-> Elementor 対応は Gutenberg 版 MVP の **完成後** に着手します。
+外部画像は下書き作成時に最大12件・各10MBまでメディアライブラリへ保存します。
 
 ---
 

@@ -9,8 +9,8 @@ import type { SectionType, WpBlockName } from "./types";
  * Single source of truth used by both Blueprint generation (for the
  * convenience `wpBlock` hint) and the Gutenberg Exporter.
  *
- * Extending to Elementor later: add a parallel map (e.g. `sectionToElementor`)
- * in a sibling Exporter — do NOT couple it to this file.
+ * Elementor mapping lives in its sibling renderer and does not couple its
+ * document structure to this Gutenberg hint.
  */
 export const SECTION_TO_WP_BLOCK: Record<SectionType, WpBlockName | null> = {
   "section/hero": "figmapress/hero",

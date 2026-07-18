@@ -1,6 +1,6 @@
 /**
  * Site Blueprint — Exporter-agnostic intermediate representation.
- * Must NOT contain Gutenberg-specific data. Each Exporter (Gutenberg / future Elementor)
+ * Must NOT contain target-specific data. Each Exporter (Gutenberg / Elementor)
  * consumes this same shape and produces target-specific output.
  */
 

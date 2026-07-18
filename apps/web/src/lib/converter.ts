@@ -12,11 +12,16 @@ import {
   type MapOptions,
   type MockFigmaFile,
 } from "@figmapress/figma-parser";
+import {
+  ElementorExporter,
+  type ElementorTemplate,
+} from "@figmapress/elementor-renderer";
 import { tokensToThemeJson } from "@figmapress/token-pipeline";
 
 export interface ConversionOutput {
   blueprint: SiteBlueprint;
   pageContent: string;
+  elementorTemplate: ElementorTemplate;
   previewHtml: string;
   themeJson: ReturnType<typeof tokensToThemeJson>;
   warnings: string[];
@@ -37,12 +42,14 @@ export async function convertFile(
   resolveImageUrls(mapped.blueprint, imageUrls);
   const blueprint = assertBlueprint(mapped.blueprint);
   const exported = await new GutenbergExporter().export(blueprint);
+  const elementorTemplate = new ElementorExporter().toTemplate(blueprint);
   const page = blueprint.pages[0];
   const warnings = [...new Set([...initialWarnings, ...mapped.warnings, ...exported.warnings])];
 
   return {
     blueprint,
     pageContent: exported.pageContent ?? "",
+    elementorTemplate,
     previewHtml: page ? renderPreviewPage(page) : "",
     themeJson: tokensToThemeJson(blueprint.tokens),
     warnings,

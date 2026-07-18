@@ -1,5 +1,5 @@
 {
-  "name": "@figmapress/block-renderer",
+  "name": "@figmapress/elementor-renderer",
   "version": "0.3.0",
   "private": true,
   "main": "src/index.ts",

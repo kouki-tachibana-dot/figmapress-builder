@@ -8,7 +8,7 @@ export default function PrivacyPage() {
     <LegalLayout
       eyebrow="Privacy notice"
       title="プライバシー"
-      summary="FigmaPress Public Betaは、アカウント登録・広告トラッカー・アプリケーションCookieを使用しません。"
+      summary="FigmaPress公開版は、アカウント登録・広告トラッカー・アプリケーションCookieを使用しません。"
     >
       <section>
         <h2>処理するデータ</h2>
@@ -22,7 +22,7 @@ export default function PrivacyPage() {
         <h2>ホスティングと外部サービス</h2>
         <p>ホスティング基盤は、IPアドレス、時刻、User Agent、応答状態などの標準的なリクエスト情報を運用・セキュリティ目的で処理する場合があります。Figma APIと利用者自身のWordPressサイトには、処理に必要なデータが送信され、それぞれのプライバシーポリシーが適用されます。</p>
       </section>
-      <p className="legal-page__date">最終更新：2026年7月16日</p>
+      <p className="legal-page__date">最終更新：2026年7月18日</p>
     </LegalLayout>
   );
 }

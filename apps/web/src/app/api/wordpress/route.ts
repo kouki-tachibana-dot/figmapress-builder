@@ -3,6 +3,7 @@ import {
   WpAuthError,
   WpRequestError,
   createDraftPage,
+  createElementorDraftPage,
 } from "@figmapress/wp-connector";
 import {
   RequestError,
@@ -18,16 +19,33 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
-const RequestSchema = z
-  .object({
+const CommonSchema = z.object({
     baseUrl: z.string().trim().min(8).max(500),
     username: z.string().trim().min(1).max(160),
     applicationPassword: z.string().trim().min(8).max(500),
     title: z.string().trim().min(1).max(200),
     slug: z.string().trim().max(200),
+});
+
+const ElementorTemplateSchema = z.object({
+  title: z.string().max(200),
+  type: z.literal("page"),
+  version: z.literal("0.4"),
+  page_settings: z.record(z.unknown()),
+  content: z.array(z.unknown()).min(1).max(300),
+}).strict();
+
+const RequestSchema = z.discriminatedUnion("target", [
+  CommonSchema.extend({
+    target: z.literal("gutenberg"),
     content: z.string().min(1).max(900_000),
-  })
-  .strict();
+  }).strict(),
+  CommonSchema.extend({
+    target: z.literal("elementor"),
+    template: ElementorTemplateSchema,
+    pageTemplate: z.enum(["elementor_canvas", "elementor_header_footer", "default"]).default("elementor_canvas"),
+  }).strict(),
+]);
 
 function wordpressMessage(body: string): string {
   try {
@@ -50,25 +68,31 @@ export async function POST(request: Request): Promise<Response> {
 
     const baseUrl = await assertSafeWordPressUrl(parsed.data.baseUrl);
     try {
-      const result = await createDraftPage(
-        {
-          baseUrl,
-          username: parsed.data.username,
-          applicationPassword: parsed.data.applicationPassword,
-        },
-        {
-          title: parsed.data.title,
-          slug: parsed.data.slug,
-          content: parsed.data.content,
-        },
-      );
+      const config = {
+        baseUrl,
+        username: parsed.data.username,
+        applicationPassword: parsed.data.applicationPassword,
+      };
+      const result = parsed.data.target === "elementor"
+        ? await createElementorDraftPage(config, {
+            title: parsed.data.title,
+            slug: parsed.data.slug,
+            template: parsed.data.template,
+            pageTemplate: parsed.data.pageTemplate,
+          })
+        : await createDraftPage(config, {
+            title: parsed.data.title,
+            slug: parsed.data.slug,
+            content: parsed.data.content,
+          });
       return jsonResponse({ ok: true, result });
     } catch (error) {
       if (error instanceof WpAuthError) {
         throw new RequestError("WordPressのユーザー名またはアプリケーションパスワードが無効です。", 401);
       }
       if (error instanceof WpRequestError) {
-        throw new RequestError(wordpressMessage(error.body), 502);
+        const status = error.status >= 400 && error.status < 500 ? error.status : 502;
+        throw new RequestError(wordpressMessage(error.body), status);
       }
       throw new RequestError(
         "WordPressへ接続できませんでした。URLとREST APIの公開状態を確認してください。",
