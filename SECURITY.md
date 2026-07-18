@@ -20,6 +20,11 @@ tab. Include the affected route, reproduction steps, and expected impact.
 - External redirects are rejected to reduce SSRF risk.
 - WordPress output is always created with `status: draft`; publishing is not
   implemented.
+- Elementor creation is exposed only by FigmaPress Connector, requires an
+  authenticated user with `edit_pages`, validates an allowlist of core widget
+  types, and sanitizes all nested settings before writing private post meta.
+- Remote Elementor images are limited to public HTTPS URLs, 12 files, and
+  10 MB per file before they are added to the Media Library.
 - Request body limits, timeouts, same-origin checks, validation, and
   best-effort per-instance rate limits are enabled.
 - The preview runs in a sandboxed iframe with scripts disabled.

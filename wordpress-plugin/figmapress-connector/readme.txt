@@ -1,12 +1,12 @@
 === FigmaPress Connector ===
 Contributors: figmapress
-Tags: blocks, figma, gutenberg
+Tags: blocks, figma, gutenberg, elementor
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 0.2.0
+Stable tag: 0.3.0
 License: GPLv2 or later
 
-Registers figmapress/* Gutenberg blocks used by FigmaPress Builder output.
+Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
 
 == Installation ==
 1. Upload the figmapress-connector folder to /wp-content/plugins/.
@@ -15,10 +15,11 @@ Registers figmapress/* Gutenberg blocks used by FigmaPress Builder output.
    create a draft page containing figmapress/* blocks.
 
 == Changelog ==
+= 0.3.0 =
+* Adds authenticated connection diagnostics.
+* Adds native Elementor document creation and Media Library image imports.
+* Keeps all remote page creation draft-only.
+
 = 0.2.0 =
 * First public beta release.
 * Adds six server-rendered Gutenberg blocks.
-
-== Future Phase ==
-Elementor support is planned. See the FigmaPress Builder README, section
-"Future Phase: Elementor Exporter".

@@ -38,6 +38,7 @@ const nextConfig: NextConfig = {
   transpilePackages: [
     "@figmapress/block-renderer",
     "@figmapress/blueprint",
+    "@figmapress/elementor-renderer",
     "@figmapress/exporter",
     "@figmapress/figma-parser",
     "@figmapress/token-pipeline",

@@ -5,9 +5,9 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "FigmaPress — FigmaからWordPressへ",
   description:
-    "Figmaデザインを編集可能なGutenbergブロックへ変換し、WordPressの下書きページを作成します。",
+    "Figmaデザインを編集可能なGutenbergブロックまたはElementorページへ変換し、WordPressに下書きを作成します。",
   applicationName: "FigmaPress",
-  keywords: ["Figma", "WordPress", "Gutenberg", "サイト制作", "自動変換"],
+  keywords: ["Figma", "WordPress", "Gutenberg", "Elementor", "サイト制作", "自動変換"],
   openGraph: {
     title: "FigmaPress — FigmaからWordPressへ",
     description: "デザインを、編集できるWordPressページに。",

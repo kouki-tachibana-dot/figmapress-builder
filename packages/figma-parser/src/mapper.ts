@@ -13,7 +13,10 @@ import {
 import {
   findDirectChildrenByName,
   findFirstImageRef,
+  findItemGroups,
+  findTextByHints,
   findTextByName,
+  findTextNodes,
   parseFigmaFile,
 } from "./parser";
 import type { FigmaNode, FigmaStylesShape, MockFigmaFile } from "./types";
@@ -97,56 +100,63 @@ function buildSection(
   };
 
   switch (type) {
-    case "section/hero":
+    case "section/hero": {
       return {
         ...base,
         content: {
-          headline: findTextByName(node, "headline"),
-          subtext: findTextByName(node, "subtext"),
-          primaryButtonText: findTextByName(node, "primaryButton"),
-          primaryButtonUrl: findTextByName(node, "primaryButtonUrl"),
+          headline: findTextByName(node, "headline") || findTextByHints(node, ["headline", "heading", "title"], 0),
+          subtext: findTextByName(node, "subtext") || findTextByHints(node, ["subtext", "description", "body"], 1),
+          primaryButtonText: findTextByName(node, "primaryButton") || findTextByHints(node, ["button", "cta"], 2),
+          primaryButtonUrl: findTextByName(node, "primaryButtonUrl") || "#contact",
           image: findFirstImageRef(node),
         },
         layout: { desktop: "text-left-image-right", mobile: "stacked" },
       };
+    }
 
     case "section/service": {
-      const items = findDirectChildrenByName(node, "service/item").map((c) => ({
-        title: findTextByName(c, "title"),
-        text: findTextByName(c, "text"),
+      const exactItems = findDirectChildrenByName(node, "service/item");
+      const groups = exactItems.length ? exactItems : findItemGroups(node, ["service", "item", "card"]);
+      const items = groups.map((c) => ({
+        title: findTextByName(c, "title") || findTextByHints(c, ["title", "heading"], 0),
+        text: findTextByName(c, "text") || findTextByHints(c, ["text", "description", "body"], 1),
       }));
       return {
         ...base,
         content: {
-          headline: findTextByName(node, "headline"),
+          headline: findTextByName(node, "headline") || findTextByHints(node, ["headline", "heading", "title"], 0),
           items,
         },
       };
     }
 
     case "section/features": {
-      const items = findDirectChildrenByName(node, "feature/card").map((c) => ({
-        title: findTextByName(c, "title"),
-        text: findTextByName(c, "text"),
+      const exactItems = findDirectChildrenByName(node, "feature/card");
+      const groups = exactItems.length ? exactItems : findItemGroups(node, ["feature", "item", "card", "benefit"]);
+      const items = groups.map((c) => ({
+        title: findTextByName(c, "title") || findTextByHints(c, ["title", "heading"], 0),
+        text: findTextByName(c, "text") || findTextByHints(c, ["text", "description", "body"], 1),
       }));
       return {
         ...base,
         content: {
-          headline: findTextByName(node, "headline"),
+          headline: findTextByName(node, "headline") || findTextByHints(node, ["headline", "heading", "title"], 0),
           items,
         },
       };
     }
 
     case "section/faq": {
-      const items = findDirectChildrenByName(node, "faq/item").map((c) => ({
-        question: findTextByName(c, "question"),
-        answer: findTextByName(c, "answer"),
+      const exactItems = findDirectChildrenByName(node, "faq/item");
+      const groups = exactItems.length ? exactItems : findItemGroups(node, ["faq", "question", "item"]);
+      const items = groups.map((c) => ({
+        question: findTextByName(c, "question") || findTextByHints(c, ["question", "title"], 0),
+        answer: findTextByName(c, "answer") || findTextByHints(c, ["answer", "text"], 1),
       }));
       return {
         ...base,
         content: {
-          headline: findTextByName(node, "headline"),
+          headline: findTextByName(node, "headline") || findTextByHints(node, ["headline", "heading", "title"], 0),
           items,
         },
       };
@@ -156,8 +166,8 @@ function buildSection(
       return {
         ...base,
         content: {
-          headline: findTextByName(node, "headline"),
-          buttonText: findTextByName(node, "buttonText"),
+          headline: findTextByName(node, "headline") || findTextByHints(node, ["headline", "heading", "title"], 0),
+          buttonText: findTextByName(node, "buttonText") || findTextByHints(node, ["button", "cta"], 1),
           buttonUrl: findTextByName(node, "buttonUrl"),
         },
       };
@@ -166,9 +176,9 @@ function buildSection(
       return {
         ...base,
         content: {
-          headline: findTextByName(node, "headline"),
-          text: findTextByName(node, "text"),
-          buttonText: findTextByName(node, "buttonText"),
+          headline: findTextByName(node, "headline") || findTextByHints(node, ["headline", "heading", "title"], 0),
+          text: findTextByName(node, "text") || findTextByHints(node, ["text", "description", "body"], 1),
+          buttonText: findTextByName(node, "buttonText") || findTextByHints(node, ["button", "cta"], 2),
           buttonUrl: findTextByName(node, "buttonUrl"),
         },
       };
@@ -185,21 +195,24 @@ function friendlyId(rawId: string, type: SectionType): string {
 }
 
 function buildTokens(styles: FigmaStylesShape): Tokens {
-  const colors: ColorToken[] = (styles.colors ?? []).map((c) => ({
+  const colorSlugs = new Set<string>();
+  const typographySlugs = new Set<string>();
+  const spacingSlugs = new Set<string>();
+  const colors: ColorToken[] = (styles.colors ?? []).map((c, index) => ({
     name: c.name,
-    slug: slugify(c.name),
+    slug: uniqueSlug(c.name, `color-${index + 1}`, colorSlugs),
     value: c.value,
   }));
-  const typography: TypographyToken[] = (styles.typography ?? []).map((t) => ({
+  const typography: TypographyToken[] = (styles.typography ?? []).map((t, index) => ({
     name: t.name,
-    slug: slugify(t.name),
+    slug: uniqueSlug(t.name, `font-${index + 1}`, typographySlugs),
     fontFamily: t.fontFamily,
     fontSize: t.fontSize,
     fontWeight: t.fontWeight,
   }));
-  const spacing: SpacingToken[] = (styles.spacing ?? []).map((s) => ({
+  const spacing: SpacingToken[] = (styles.spacing ?? []).map((s, index) => ({
     name: s.name,
-    slug: slugify(s.name),
+    slug: uniqueSlug(s.name, `spacing-${index + 1}`, spacingSlugs),
     size: s.size,
   }));
   return { colors, typography, spacing };
@@ -210,4 +223,16 @@ function slugify(value: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
+}
+
+function uniqueSlug(name: string, fallback: string, seen: Set<string>): string {
+  const base = slugify(name) || fallback;
+  let value = base;
+  let suffix = 2;
+  while (seen.has(value)) {
+    value = `${base}-${suffix}`;
+    suffix += 1;
+  }
+  seen.add(value);
+  return value;
 }

@@ -1,10 +1,9 @@
 import type { SiteBlueprint } from "@figmapress/blueprint";
 
 /**
- * Exporter contract — implemented by Gutenberg today and Elementor in
- * Future Phase E. Site Blueprint MUST stay Exporter-agnostic; do not push
- * Gutenberg-specific fields into the Blueprint just because Gutenberg is
- * the only current consumer (spec §2-3, §8-1).
+ * Exporter contract shared by the Gutenberg and Elementor renderers.
+ * Site Blueprint stays Exporter-agnostic; target-specific fields belong in
+ * their renderer packages.
  */
 export type ExportTarget = "gutenberg" | "elementor";
 

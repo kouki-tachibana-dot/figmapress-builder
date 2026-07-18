@@ -1,6 +1,5 @@
 /**
- * Minimal WordPress REST client for the MVP path:
- *   POST /wp-json/wp/v2/pages  (status: draft)
+ * WordPress REST client for Gutenberg and Elementor draft creation.
  *
  * Auth: Application Passwords (Basic). Never `publish` — spec §5-4.
  * Slug normalization: Blueprint may use "/" for root; WordPress can't
@@ -29,6 +28,34 @@ export interface CreateDraftResult {
   editLink?: string;
   previewLink?: string;
   rawLink?: string;
+  target?: "gutenberg" | "elementor";
+  importedMedia?: number;
+  warnings?: string[];
+}
+
+export interface ElementorTemplateInput {
+  title: string;
+  type: "page";
+  version: "0.4";
+  page_settings: Record<string, unknown>;
+  content: unknown[];
+}
+
+export interface CreateElementorDraftInput {
+  title: string;
+  slug: string;
+  template: ElementorTemplateInput;
+  pageTemplate?: "elementor_canvas" | "elementor_header_footer" | "default";
+}
+
+export interface WordPressConnectionStatus {
+  authenticated: true;
+  user: { id: number; name: string };
+  connectorInstalled: boolean;
+  connectorVersion?: string;
+  wordpressVersion?: string;
+  elementor: { active: boolean; version?: string };
+  canEditPages: boolean;
 }
 
 export class WpAuthError extends Error {}
@@ -89,6 +116,65 @@ async function wpFetch(
     );
   }
   return res;
+}
+
+export async function probeWordPressConnection(
+  cfg: WpConfig,
+): Promise<WordPressConnectionStatus> {
+  const userResponse = await wpFetch(cfg, "/wp/v2/users/me?context=edit");
+  const userText = await userResponse.text();
+  if (!userResponse.ok) {
+    throw new WpRequestError(
+      `Failed to inspect WordPress user (HTTP ${userResponse.status})`,
+      userResponse.status,
+      userText,
+    );
+  }
+  const user = JSON.parse(userText) as { id?: unknown; name?: unknown; capabilities?: Record<string, boolean> };
+
+  const statusResponse = await wpFetch(cfg, "/figmapress/v1/status");
+  if (statusResponse.status === 404) {
+    return {
+      authenticated: true,
+      user: {
+        id: typeof user.id === "number" ? user.id : 0,
+        name: typeof user.name === "string" ? user.name : cfg.username,
+      },
+      connectorInstalled: false,
+      elementor: { active: false },
+      canEditPages: Boolean(user.capabilities?.edit_pages),
+    };
+  }
+
+  const statusText = await statusResponse.text();
+  if (!statusResponse.ok) {
+    throw new WpRequestError(
+      `Failed to inspect FigmaPress Connector (HTTP ${statusResponse.status})`,
+      statusResponse.status,
+      statusText,
+    );
+  }
+  const status = JSON.parse(statusText) as {
+    connectorVersion?: unknown;
+    wordpressVersion?: unknown;
+    canEditPages?: unknown;
+    elementor?: { active?: unknown; version?: unknown };
+  };
+  return {
+    authenticated: true,
+    user: {
+      id: typeof user.id === "number" ? user.id : 0,
+      name: typeof user.name === "string" ? user.name : cfg.username,
+    },
+    connectorInstalled: true,
+    connectorVersion: typeof status.connectorVersion === "string" ? status.connectorVersion : undefined,
+    wordpressVersion: typeof status.wordpressVersion === "string" ? status.wordpressVersion : undefined,
+    elementor: {
+      active: status.elementor?.active === true,
+      version: typeof status.elementor?.version === "string" ? status.elementor.version : undefined,
+    },
+    canEditPages: status.canEditPages === true,
+  };
 }
 
 async function slugExists(cfg: WpConfig, slug: string): Promise<boolean> {
@@ -158,5 +244,41 @@ export async function createDraftPage(
     editLink,
     previewLink,
     rawLink: data.link,
+    target: "gutenberg",
   };
+}
+
+export async function createElementorDraftPage(
+  cfg: WpConfig,
+  input: CreateElementorDraftInput,
+): Promise<CreateDraftResult> {
+  const desiredSlug = normalizeSlug(input.slug);
+  const slug = await pickAvailableSlug(cfg, desiredSlug);
+  const res = await wpFetch(cfg, "/figmapress/v1/elementor/pages", {
+    method: "POST",
+    body: JSON.stringify({
+      title: input.title,
+      slug,
+      status: "draft",
+      pageTemplate: input.pageTemplate ?? "elementor_canvas",
+      template: input.template,
+    }),
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    throw new WpRequestError(
+      `Failed to create Elementor draft (HTTP ${res.status})`,
+      res.status,
+      text,
+    );
+  }
+  const data = JSON.parse(text) as CreateDraftResult;
+  if (data.status !== "draft") {
+    throw new WpRequestError(
+      `WordPress returned an unexpected page status: ${data.status}`,
+      502,
+      text,
+    );
+  }
+  return { ...data, target: "elementor" };
 }

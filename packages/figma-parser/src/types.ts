@@ -13,7 +13,21 @@ export interface FigmaNodeBase {
     type: string;
     color?: { r: number; g: number; b: number; a?: number };
     imageRef?: string;
+    visible?: boolean;
   }>;
+  style?: {
+    fontFamily?: string;
+    fontSize?: number;
+    fontWeight?: number;
+    lineHeightPx?: number;
+  };
+  styles?: Record<string, string>;
+  layoutMode?: "HORIZONTAL" | "VERTICAL" | "NONE";
+  itemSpacing?: number;
+  paddingTop?: number;
+  paddingRight?: number;
+  paddingBottom?: number;
+  paddingLeft?: number;
   children?: FigmaNode[];
 }
 

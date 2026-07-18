@@ -1,6 +1,6 @@
 {
   "name": "@figmapress/web",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -11,6 +11,7 @@
   "dependencies": {
     "@figmapress/block-renderer": "*",
     "@figmapress/blueprint": "*",
+    "@figmapress/elementor-renderer": "*",
     "@figmapress/figma-parser": "*",
     "@figmapress/token-pipeline": "*",
     "@figmapress/wp-connector": "*",

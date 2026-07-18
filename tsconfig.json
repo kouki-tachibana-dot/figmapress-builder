@@ -18,6 +18,7 @@
       "@figmapress/figma-parser": ["packages/figma-parser/src/index.ts"],
       "@figmapress/exporter": ["packages/exporter/src/index.ts"],
       "@figmapress/block-renderer": ["packages/block-renderer/src/index.ts"],
+      "@figmapress/elementor-renderer": ["packages/elementor-renderer/src/index.ts"],
       "@figmapress/token-pipeline": ["packages/token-pipeline/src/index.ts"],
       "@figmapress/wp-connector": ["packages/wp-connector/src/index.ts"]
     }

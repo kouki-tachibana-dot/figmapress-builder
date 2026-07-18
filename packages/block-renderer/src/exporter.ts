@@ -25,8 +25,8 @@ import {
 
 /**
  * GutenbergExporter — turns a Site Blueprint into Gutenberg block-comment
- * HTML. Single Exporter implementation today; matches the SiteExporter
- * contract so the future ElementorExporter can drop in alongside.
+ * HTML. It shares the target-neutral SiteExporter contract with the
+ * Elementor renderer.
  */
 export class GutenbergExporter implements SiteExporter {
   readonly target = "gutenberg" as const;

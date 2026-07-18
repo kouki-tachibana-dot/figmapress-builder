@@ -1,4 +1,8 @@
-import type { MockFigmaFile } from "@figmapress/figma-parser";
+import type {
+  FigmaNode,
+  FigmaStylesShape,
+  MockFigmaFile,
+} from "@figmapress/figma-parser";
 import { RequestError } from "./request-security";
 
 const FIGMA_FILE_KEY = /^[A-Za-z0-9_-]{6,160}$/;
@@ -11,9 +15,24 @@ export interface FigmaFetchResult {
   warnings: string[];
 }
 
-export function extractFigmaFileKey(input: string): string {
+export interface FigmaReference {
+  fileKey: string;
+  nodeId?: string;
+}
+
+interface FigmaStyleMeta {
+  name?: unknown;
+  styleType?: unknown;
+}
+
+interface RawFigmaFile extends Record<string, unknown> {
+  document: FigmaNode;
+  styles?: Record<string, FigmaStyleMeta>;
+}
+
+export function extractFigmaReference(input: string): FigmaReference {
   const value = input.trim();
-  if (FIGMA_FILE_KEY.test(value)) return value;
+  if (FIGMA_FILE_KEY.test(value)) return { fileKey: value };
 
   let url: URL;
   try {
@@ -29,11 +48,20 @@ export function extractFigmaFileKey(input: string): string {
   const typeIndex = parts.findIndex((part) =>
     ["design", "file", "proto", "board"].includes(part),
   );
-  const key = typeIndex >= 0 ? parts[typeIndex + 1] : undefined;
-  if (!key || !FIGMA_FILE_KEY.test(key)) {
+  const fileKey = typeIndex >= 0 ? parts[typeIndex + 1] : undefined;
+  if (!fileKey || !FIGMA_FILE_KEY.test(fileKey)) {
     throw new RequestError("Figma URLからファイルキーを取得できませんでした。");
   }
-  return key;
+
+  const rawNodeId = url.searchParams.get("node-id")?.trim();
+  const nodeId = rawNodeId && /^[0-9]+(?::|-)[0-9]+$/.test(rawNodeId)
+    ? rawNodeId.replace("-", ":")
+    : undefined;
+  return { fileKey, nodeId };
+}
+
+export function extractFigmaFileKey(input: string): string {
+  return extractFigmaReference(input).fileKey;
 }
 
 async function readLimitedJson(response: Response): Promise<unknown> {
@@ -70,11 +98,74 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function colorToHex(color: { r: number; g: number; b: number }): string {
+  const byte = (value: number) => Math.max(0, Math.min(255, Math.round(value * 255)))
+    .toString(16)
+    .padStart(2, "0");
+  return `#${byte(color.r)}${byte(color.g)}${byte(color.b)}`.toUpperCase();
+}
+
+function normalizeFigmaFile(data: RawFigmaFile): MockFigmaFile {
+  const styleMeta = isRecord(data.styles) ? data.styles : {};
+  const colors = new Map<string, { name: string; value: string }>();
+  const typography = new Map<string, NonNullable<FigmaStylesShape["typography"]>[number]>();
+  const spacing = new Map<number, { name: string; size: string }>();
+
+  const visit = (node: FigmaNode): void => {
+    for (const fill of node.fills ?? []) {
+      if (fill.type !== "SOLID" || !fill.color || fill.visible === false) continue;
+      const value = colorToHex(fill.color);
+      const styleId = node.styles?.fill;
+      const meta = styleId && isRecord(styleMeta[styleId]) ? styleMeta[styleId] : undefined;
+      const name = typeof meta?.name === "string" ? meta.name : node.name || value;
+      colors.set(value, { name, value });
+    }
+
+    if (node.type === "TEXT" && node.style?.fontFamily) {
+      const fontSize = node.style.fontSize;
+      const fontWeight = node.style.fontWeight;
+      const key = `${node.style.fontFamily}:${fontSize ?? ""}:${fontWeight ?? ""}`;
+      const styleId = node.styles?.text;
+      const meta = styleId && isRecord(styleMeta[styleId]) ? styleMeta[styleId] : undefined;
+      typography.set(key, {
+        name: typeof meta?.name === "string" ? meta.name : node.name || "Text",
+        fontFamily: node.style.fontFamily,
+        fontSize: fontSize ? `${fontSize}px` : undefined,
+        fontWeight,
+      });
+    }
+
+    for (const value of [
+      node.itemSpacing,
+      node.paddingTop,
+      node.paddingRight,
+      node.paddingBottom,
+      node.paddingLeft,
+    ]) {
+      if (typeof value === "number" && value > 0 && value <= 512) {
+        spacing.set(value, { name: `Spacing ${value}`, size: `${value}px` });
+      }
+    }
+    for (const child of node.children ?? []) visit(child);
+  };
+  visit(data.document);
+
+  return {
+    document: data.document,
+    styles: {
+      colors: [...colors.values()],
+      typography: [...typography.values()],
+      spacing: [...spacing.values()].sort((a, b) => parseFloat(a.size) - parseFloat(b.size)),
+    },
+  };
+}
+
 export async function fetchFigmaFile(
   fileKeyOrUrl: string,
   token: string,
 ): Promise<FigmaFetchResult> {
-  const key = extractFigmaFileKey(fileKeyOrUrl);
+  const reference = extractFigmaReference(fileKeyOrUrl);
+  const key = reference.fileKey;
   const headers = { "X-Figma-Token": token.trim(), Accept: "application/json" };
   const init: RequestInit = {
     headers,
@@ -85,8 +176,10 @@ export async function fetchFigmaFile(
 
   let fileResponse: Response;
   try {
+    const query = new URLSearchParams({ depth: "12" });
+    if (reference.nodeId) query.set("ids", reference.nodeId);
     fileResponse = await fetch(
-      `https://api.figma.com/v1/files/${encodeURIComponent(key)}?depth=8`,
+      `https://api.figma.com/v1/files/${encodeURIComponent(key)}?${query.toString()}`,
       init,
     );
   } catch {
@@ -99,7 +192,9 @@ export async function fetchFigmaFile(
     throw new RequestError("Figmaファイルにdocumentデータがありません。", 422);
   }
 
-  const warnings: string[] = [];
+  const warnings: string[] = reference.nodeId
+    ? [`Figmaノード ${reference.nodeId} を変換対象として読み込みました。`]
+    : [];
   let imageUrls: Record<string, string> = {};
   try {
     const imageResponse = await fetch(
@@ -123,7 +218,7 @@ export async function fetchFigmaFile(
   }
 
   return {
-    file: data as unknown as MockFigmaFile,
+    file: normalizeFigmaFile(data as RawFigmaFile),
     fileName: typeof data.name === "string" ? data.name : "FigmaPress Page",
     imageUrls,
     warnings,
