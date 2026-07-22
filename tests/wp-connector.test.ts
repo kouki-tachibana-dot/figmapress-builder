@@ -18,9 +18,6 @@ test("WordPress connection probe reports Connector and Elementor versions", asyn
   context.mock.method(globalThis, "fetch", async (input) => {
     const url = String(input);
     requests.push(url);
-    if (url.includes("/wp/v2/users/me")) {
-      return Response.json({ id: 7, name: "Editor", capabilities: { edit_pages: true } });
-    }
     return Response.json({
       connectorVersion: "0.4.0",
       wordpressVersion: "7.0.1",
@@ -33,7 +30,32 @@ test("WordPress connection probe reports Connector and Elementor versions", asyn
   assert.equal(status.authenticated, true);
   assert.equal(status.connectorInstalled, true);
   assert.equal(status.elementor.active, true);
+  assert.equal(status.user.name, "editor");
+  assert.equal(requests.length, 1);
+  assert.match(requests[0] ?? "", /figmapress\/v1\/status/);
+});
+
+test("WordPress connection probe falls back to the core user endpoint when Connector is missing", async (context) => {
+  const requests: string[] = [];
+  context.mock.method(globalThis, "fetch", async (input) => {
+    const url = String(input);
+    requests.push(url);
+    if (url.includes("/figmapress/v1/status")) {
+      return Response.json(
+        { code: "rest_no_route", message: "No route." },
+        { status: 404 },
+      );
+    }
+    return Response.json({ id: 7, name: "Editor" });
+  });
+
+  const status = await probeWordPressConnection(config);
+  assert.equal(status.authenticated, true);
+  assert.equal(status.connectorInstalled, false);
+  assert.equal(status.user.name, "Editor");
+  assert.equal(status.canEditPages, false);
   assert.equal(requests.length, 2);
+  assert.match(requests[1] ?? "", /wp\/v2\/users\/me$/);
 });
 
 test("Elementor draft creation uses the Connector endpoint and remains draft", async (context) => {
