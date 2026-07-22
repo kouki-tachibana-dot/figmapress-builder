@@ -49,6 +49,33 @@ test("browser connection keeps authentication failures out of the server fallbac
   );
 });
 
+test("browser connection retries with the Connector header when a host strips Authorization", async (context) => {
+  const requests: Array<{ authorization: string | null; fallback: string | null }> = [];
+  context.mock.method(globalThis, "fetch", async (_input, init) => {
+    const headers = new Headers(init?.headers);
+    requests.push({
+      authorization: headers.get("Authorization"),
+      fallback: headers.get("X-FigmaPress-Authorization"),
+    });
+    if (requests.length === 1) {
+      return Response.json({ code: "rest_not_logged_in" }, { status: 401 });
+    }
+    return Response.json({
+      connectorVersion: "0.4.2",
+      wordpressVersion: "7.0.2",
+      canEditPages: true,
+      elementor: { active: true, version: "3.30.0" },
+    });
+  });
+
+  const status = await probeWordPressDirect(config);
+  assert.equal(status.authenticated, true);
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0]?.fallback, null);
+  assert.match(requests[1]?.fallback ?? "", /^Basic /);
+  assert.equal(requests[1]?.fallback, requests[1]?.authorization);
+});
+
 test("browser network failures are logged without WordPress credentials", async (context) => {
   const logs: unknown[][] = [];
   context.mock.method(globalThis, "fetch", async () => {

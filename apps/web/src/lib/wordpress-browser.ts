@@ -89,20 +89,36 @@ async function directFetch(
 ): Promise<Response> {
   const headers = new Headers(init.headers);
   headers.set("Accept", "application/json");
-  headers.set("Authorization", basicAuthorization(config.username, config.applicationPassword));
+  const authorization = basicAuthorization(config.username, config.applicationPassword);
+  headers.set("Authorization", authorization);
   if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
 
   try {
     // `cache: "no-store"` makes Chrome add Cache-Control and Pragma to the
     // CORS preflight, which WordPress does not allow by default.
-    return await fetch(`${normalizedBaseUrl(config.baseUrl)}/wp-json${path}`, {
+    const url = `${normalizedBaseUrl(config.baseUrl)}/wp-json${path}`;
+    const requestInit: RequestInit = {
       ...init,
       credentials: "omit",
       headers,
       mode: "cors",
       redirect: "error",
       signal: init.signal ?? AbortSignal.timeout(20_000),
-    });
+    };
+    const response = await fetch(url, requestInit);
+    if (response.status !== 401) return response;
+
+    // Some shared hosts remove the standard Authorization header before PHP.
+    // Connector 0.4.2+ accepts the same Basic value in a namespaced fallback
+    // header. If an older Connector rejects the CORS preflight, preserve the
+    // original 401 so the user still gets the correct authentication error.
+    const fallbackHeaders = new Headers(headers);
+    fallbackHeaders.set("X-FigmaPress-Authorization", authorization);
+    try {
+      return await fetch(url, { ...requestInit, headers: fallbackHeaders });
+    } catch {
+      return response;
+    }
   } catch (error) {
     const errorName = error instanceof Error ? error.name : "UnknownError";
     const errorMessage = error instanceof Error ? error.message : String(error);

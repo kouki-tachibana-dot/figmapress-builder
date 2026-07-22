@@ -98,17 +98,24 @@ async function wpFetch(
 ): Promise<Response> {
   const url = `${cfg.baseUrl}/wp-json${path}`;
   const headers = new Headers(init.headers);
-  headers.set("Authorization", authHeader(cfg));
+  const authorization = authHeader(cfg);
+  headers.set("Authorization", authorization);
   headers.set("Accept", "application/json");
   if (init.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  const res = await fetch(url, {
+  const requestInit: RequestInit = {
     ...init,
     headers,
     redirect: "error",
     signal: init.signal ?? AbortSignal.timeout(15_000),
-  });
+  };
+  let res = await fetch(url, requestInit);
+  if (res.status === 401) {
+    const fallbackHeaders = new Headers(headers);
+    fallbackHeaders.set("X-FigmaPress-Authorization", authorization);
+    res = await fetch(url, { ...requestInit, headers: fallbackHeaders });
+  }
   if (res.status === 401) {
     const body = await res.text();
     throw new WpAuthError(
