@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useSyncExternalStore, type ChangeEvent, type FormEvent } from "react";
+import { useState, useSyncExternalStore, type ChangeEvent, type FormEvent, type MouseEvent } from "react";
 import {
   WordPressDirectError,
   createWordPressDraftDirect,
   probeWordPressDirect,
 } from "@/lib/wordpress-browser";
+import { readWordPressCredentials } from "@/lib/wordpress-form";
 
 type SourceMode = "figma" | "json";
 type OutputTarget = "gutenberg" | "elementor";
@@ -206,6 +207,11 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   async function createWordPressDraft(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!output || !confirmed) return;
+    const credentials = readWordPressCredentials(new FormData(event.currentTarget), {
+      baseUrl,
+      username,
+      applicationPassword,
+    });
     setWpBusy(true);
     setWpError("");
     setWpResult(null);
@@ -215,9 +221,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       const payload = wpTarget === "elementor"
         ? {
             target: wpTarget,
-            baseUrl,
-            username,
-            applicationPassword,
+            ...credentials,
             title: page?.title || output.summary.pageTitle,
             slug: page?.slug || "/",
             template: output.elementorTemplate,
@@ -225,16 +229,14 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
           }
         : {
             target: wpTarget,
-            baseUrl,
-            username,
-            applicationPassword,
+            ...credentials,
             title: page?.title || output.summary.pageTitle,
             slug: page?.slug || "/",
             content: output.pageContent,
           };
       if (wpTransport === "direct") {
         const result = await createWordPressDraftDirect(
-          { baseUrl, username, applicationPassword },
+          credentials,
           wpTarget === "elementor"
             ? {
                 target: "elementor",
@@ -268,14 +270,25 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     }
   }
 
-  async function checkWordPressConnection() {
+  async function checkWordPressConnection(event: MouseEvent<HTMLButtonElement>) {
+    const credentials = readWordPressCredentials(
+      event.currentTarget.form ? new FormData(event.currentTarget.form) : null,
+      {
+        baseUrl,
+        username,
+        applicationPassword,
+      },
+    );
+    setBaseUrl(credentials.baseUrl);
+    setUsername(credentials.username);
+    setApplicationPassword(credentials.applicationPassword);
     setWpChecking(true);
     setWpError("");
     setWpStatus(null);
     setWpTransport(null);
     try {
       try {
-        const status = await probeWordPressDirect({ baseUrl, username, applicationPassword });
+        const status = await probeWordPressDirect(credentials);
         setWpStatus(status);
         setWpTransport("direct");
       } catch (directError) {
@@ -285,7 +298,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         const response = await fetch("/api/wordpress/status", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ baseUrl, username, applicationPassword }),
+          body: JSON.stringify(credentials),
         });
         const data = await readApi<{ ok: true; status: WordPressStatus }>(response);
         setWpStatus(data.status);
@@ -539,15 +552,15 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
               <div className="form-grid form-grid--three">
                 <label className="field">
                   <span>WordPress URL</span>
-                  <input onChange={(event) => { setBaseUrl(event.target.value); setWpStatus(null); setWpTransport(null); }} placeholder="https://example.com" required type="url" value={baseUrl} />
+                  <input name="baseUrl" onChange={(event) => { setBaseUrl(event.target.value); setWpStatus(null); setWpTransport(null); }} placeholder="https://example.com" required type="url" value={baseUrl} />
                 </label>
                 <label className="field">
                   <span>ユーザー名</span>
-                  <input autoComplete="username" onChange={(event) => { setUsername(event.target.value); setWpStatus(null); setWpTransport(null); }} required value={username} />
+                  <input autoComplete="username" name="username" onChange={(event) => { setUsername(event.target.value); setWpStatus(null); setWpTransport(null); }} required value={username} />
                 </label>
                 <label className="field">
                   <span>Application Password</span>
-                  <input autoComplete="off" onChange={(event) => { setApplicationPassword(event.target.value); setWpStatus(null); setWpTransport(null); }} required type="password" value={applicationPassword} />
+                  <input autoComplete="off" name="applicationPassword" onChange={(event) => { setApplicationPassword(event.target.value); setWpStatus(null); setWpTransport(null); }} required type="password" value={applicationPassword} />
                 </label>
               </div>
               <div className="connection-row">

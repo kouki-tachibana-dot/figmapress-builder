@@ -106,7 +106,17 @@ async function directFetch(
       signal: init.signal ?? AbortSignal.timeout(20_000),
     };
     const response = await fetch(url, requestInit);
-    if (response.status !== 401) return response;
+    if (response.status !== 401) {
+      if (!response.ok) {
+        console.warn("[wordpress-direct] WordPress request rejected", {
+          path,
+          method: init.method ?? "GET",
+          status: response.status,
+          fallbackAuth: false,
+        });
+      }
+      return response;
+    }
 
     // Some shared hosts remove the standard Authorization header before PHP.
     // Connector 0.4.2+ accepts the same Basic value in a namespaced fallback
@@ -115,8 +125,21 @@ async function directFetch(
     const fallbackHeaders = new Headers(headers);
     fallbackHeaders.set("X-FigmaPress-Authorization", authorization);
     try {
-      return await fetch(url, { ...requestInit, headers: fallbackHeaders });
+      const fallbackResponse = await fetch(url, { ...requestInit, headers: fallbackHeaders });
+      if (!fallbackResponse.ok) {
+        console.warn("[wordpress-direct] WordPress request rejected", {
+          path,
+          method: init.method ?? "GET",
+          status: fallbackResponse.status,
+          fallbackAuth: true,
+        });
+      }
+      return fallbackResponse;
     } catch {
+      console.warn("[wordpress-direct] Fallback authentication request failed", {
+        path,
+        method: init.method ?? "GET",
+      });
       return response;
     }
   } catch (error) {
