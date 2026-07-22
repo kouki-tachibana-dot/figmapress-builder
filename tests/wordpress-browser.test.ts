@@ -57,12 +57,13 @@ test("browser connection keeps authentication failures out of the server fallbac
 });
 
 test("browser connection retries with the Connector header when a host strips Authorization", async (context) => {
-  const requests: Array<{ authorization: string | null; fallback: string | null }> = [];
+  const requests: Array<{ authorization: string | null; fallback: string | null; signal?: AbortSignal | null }> = [];
   context.mock.method(globalThis, "fetch", async (_input, init) => {
     const headers = new Headers(init?.headers);
     requests.push({
       authorization: headers.get("Authorization"),
       fallback: headers.get("X-FigmaPress-Authorization"),
+      signal: init?.signal,
     });
     if (requests.length === 1) {
       return Response.json({ code: "rest_not_logged_in" }, { status: 401 });
@@ -81,6 +82,46 @@ test("browser connection retries with the Connector header when a host strips Au
   assert.equal(requests[0]?.fallback, null);
   assert.match(requests[1]?.fallback ?? "", /^Basic /);
   assert.equal(requests[1]?.fallback, requests[1]?.authorization);
+  assert.notEqual(requests[0]?.signal, requests[1]?.signal);
+});
+
+test("browser fallback transport failures are not mislabeled as invalid credentials", async (context) => {
+  let requestCount = 0;
+  const warnings: unknown[][] = [];
+  const errors: unknown[][] = [];
+  context.mock.method(globalThis, "fetch", async () => {
+    requestCount += 1;
+    if (requestCount === 1) {
+      return Response.json({ code: "rest_not_logged_in" }, { status: 401 });
+    }
+    throw new DOMException("The operation timed out", "TimeoutError");
+  });
+  context.mock.method(console, "warn", (...args: unknown[]) => warnings.push(args));
+  context.mock.method(console, "error", (...args: unknown[]) => errors.push(args));
+
+  await assert.rejects(
+    createWordPressDraftDirect(config, {
+      target: "elementor",
+      title: "ホーム",
+      slug: "/",
+      pageTemplate: "elementor_canvas",
+      template: {
+        title: "ホーム",
+        type: "page",
+        version: "0.4",
+        page_settings: {},
+        content: [{ id: "1234abcd" }],
+      },
+    }),
+    (error: unknown) =>
+      error instanceof WordPressDirectError &&
+      error.kind === "network" &&
+      error.message.includes("タイムアウト"),
+  );
+  assert.equal(requestCount, 2);
+  assert.match(JSON.stringify(warnings), /TimeoutError/);
+  assert.match(JSON.stringify(errors), /TimeoutError/);
+  assert.doesNotMatch(JSON.stringify([warnings, errors]), /test application password/);
 });
 
 test("browser network failures are logged without WordPress credentials", async (context) => {

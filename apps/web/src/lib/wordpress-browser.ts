@@ -87,6 +87,8 @@ async function directFetch(
   path: string,
   init: RequestInit = {},
 ): Promise<Response> {
+  const method = (init.method ?? "GET").toUpperCase();
+  const timeoutMs = method === "GET" || method === "HEAD" ? 20_000 : 120_000;
   const headers = new Headers(init.headers);
   headers.set("Accept", "application/json");
   const authorization = basicAuthorization(config.username, config.applicationPassword);
@@ -103,14 +105,14 @@ async function directFetch(
       headers,
       mode: "cors",
       redirect: "error",
-      signal: init.signal ?? AbortSignal.timeout(20_000),
+      signal: init.signal ?? AbortSignal.timeout(timeoutMs),
     };
     const response = await fetch(url, requestInit);
     if (response.status !== 401) {
       if (!response.ok) {
         console.warn("[wordpress-direct] WordPress request rejected", {
           path,
-          method: init.method ?? "GET",
+          method,
           status: response.status,
           fallbackAuth: false,
         });
@@ -119,35 +121,43 @@ async function directFetch(
     }
 
     // Some shared hosts remove the standard Authorization header before PHP.
-    // Connector 0.4.2+ accepts the same Basic value in a namespaced fallback
-    // header. If an older Connector rejects the CORS preflight, preserve the
-    // original 401 so the user still gets the correct authentication error.
+    // The Connector accepts the same Basic value in a namespaced fallback
+    // header. Give the retry a fresh timeout: the authenticated POST can spend
+    // considerably longer importing media than the rejected first attempt.
     const fallbackHeaders = new Headers(headers);
     fallbackHeaders.set("X-FigmaPress-Authorization", authorization);
     try {
-      const fallbackResponse = await fetch(url, { ...requestInit, headers: fallbackHeaders });
+      const fallbackResponse = await fetch(url, {
+        ...requestInit,
+        headers: fallbackHeaders,
+        signal: init.signal ?? AbortSignal.timeout(timeoutMs),
+      });
       if (!fallbackResponse.ok) {
         console.warn("[wordpress-direct] WordPress request rejected", {
           path,
-          method: init.method ?? "GET",
+          method,
           status: fallbackResponse.status,
           fallbackAuth: true,
         });
       }
       return fallbackResponse;
-    } catch {
+    } catch (error) {
+      const errorName = error instanceof Error ? error.name : "UnknownError";
       console.warn("[wordpress-direct] Fallback authentication request failed", {
         path,
-        method: init.method ?? "GET",
+        method,
+        errorName,
       });
-      return response;
+      throw error;
     }
   } catch (error) {
     const errorName = error instanceof Error ? error.name : "UnknownError";
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error(`[wordpress-direct] Browser request failed: ${errorName}: ${errorMessage}`);
     throw new WordPressDirectError(
-      "ブラウザからWordPressへ直接接続できませんでした。",
+      errorName === "TimeoutError" && method !== "GET" && method !== "HEAD"
+        ? "WordPressの下書き作成がタイムアウトしました。処理が継続している場合があるため、WordPressの下書き一覧を確認してください。"
+        : "ブラウザからWordPressへ直接接続できませんでした。",
       "network",
     );
   }
