@@ -64,8 +64,7 @@ test("browser network failures are logged without WordPress credentials", async 
   );
 
   assert.deepEqual(logs, [[
-    "[wordpress-direct] Browser request failed",
-    { name: "TypeError", message: "Failed to fetch" },
+    "[wordpress-direct] Browser request failed: TypeError: Failed to fetch",
   ]]);
   assert.doesNotMatch(JSON.stringify(logs), /test application password/);
 });

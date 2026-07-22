@@ -104,10 +104,9 @@ async function directFetch(
       signal: init.signal ?? AbortSignal.timeout(20_000),
     });
   } catch (error) {
-    console.error("[wordpress-direct] Browser request failed", {
-      name: error instanceof Error ? error.name : "UnknownError",
-      message: error instanceof Error ? error.message : String(error),
-    });
+    const errorName = error instanceof Error ? error.name : "UnknownError";
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`[wordpress-direct] Browser request failed: ${errorName}: ${errorMessage}`);
     throw new WordPressDirectError(
       "ブラウザからWordPressへ直接接続できませんでした。",
       "network",
