@@ -165,9 +165,47 @@ test("real Figma bounds produce a high-fidelity editable Elementor document", as
                   name: "Main heading",
                   type: "TEXT",
                   characters: "明石をずーっと元気なまちに！",
+                  textAutoResize: "WIDTH_AND_HEIGHT",
                   absoluteBoundingBox: { x: 180, y: 220, width: 850, height: 90 },
                   style: { fontFamily: "Noto Sans JP", fontSize: 64, fontWeight: 800, lineHeightPx: 86 },
                   fills: [{ type: "SOLID", color: { r: 0.82, g: 0.04, b: 0.17 } }],
+                },
+                {
+                  id: "3:2",
+                  name: "Rotated punctuation",
+                  type: "TEXT",
+                  characters: "！",
+                  rotation: 7.54,
+                  textAutoResize: "WIDTH_AND_HEIGHT",
+                  absoluteBoundingBox: { x: 1030, y: 220, width: 90, height: 100 },
+                  style: { fontFamily: "Noto Sans JP", fontSize: 84, fontWeight: 800, lineHeightPx: 100 },
+                },
+                {
+                  id: "3:3",
+                  name: "Mixed-size heading",
+                  type: "TEXT",
+                  characters: "明石を元気",
+                  textAutoResize: "WIDTH_AND_HEIGHT",
+                  absoluteBoundingBox: { x: 180, y: 340, width: 480, height: 100 },
+                  style: { fontFamily: "Noto Sans JP", fontSize: 0, fontWeight: 800 },
+                  characterStyleOverrides: [1, 1, 1, 2, 2],
+                  styleOverrideTable: {
+                    "1": { fontSize: 72, lineHeightPx: 90 },
+                    "2": {
+                      fontSize: 84,
+                      lineHeightPx: 100,
+                      fills: [{ type: "SOLID", color: { r: 0.95, g: 0, b: 0.11 } }],
+                    },
+                  },
+                },
+                {
+                  id: "3:4",
+                  name: "Fixed paragraph",
+                  type: "TEXT",
+                  characters: "固定幅の文章はFigmaと同じ幅で折り返します。",
+                  textAutoResize: "NONE",
+                  absoluteBoundingBox: { x: 180, y: 470, width: 420, height: 100 },
+                  style: { fontFamily: "Noto Sans JP", fontSize: 24, lineHeightPx: 38 },
                 },
                 {
                   id: "3:1",
@@ -205,7 +243,7 @@ test("real Figma bounds produce a high-fidelity editable Elementor document", as
   assert.equal(result.elementorTemplate.content.length, 1);
   const root = result.elementorTemplate.content[0];
   assert.equal(root?.elType, "container");
-  assert.equal((root?.settings.min_height as { size?: number })?.size, 1600);
+  assert.deepEqual(root?.settings.min_height, { unit: "vw", size: 83.333, sizes: [] });
 
   const elements: typeof result.elementorTemplate.content = [];
   const visit = (items: typeof result.elementorTemplate.content): void => {
@@ -215,11 +253,25 @@ test("real Figma bounds produce a high-fidelity editable Elementor document", as
     }
   };
   visit(result.elementorTemplate.content);
-  const heading = elements.find((element) => element.widgetType === "heading");
+  const heading = elements.find((element) =>
+    element.widgetType === "text-editor" && String(element.settings.editor).includes("明石をずーっと"),
+  );
+  const punctuation = elements.find((element) => element.settings._transform_rotateZ_effect);
+  const mixedHeading = elements.find((element) =>
+    String(element.settings.editor).includes("font-size:3.75vw"),
+  );
+  const fixedParagraph = elements.find((element) => String(element.settings.editor).includes("固定幅の文章"));
   const portrait = elements.find((element) => element.widgetType === "image");
-  assert.equal(heading?.settings.title, "明石をずーっと元気なまちに！");
-  assert.equal(heading?.settings.typography_font_size && (heading.settings.typography_font_size as { size: number }).size, 64);
+  assert.match(String(heading?.settings.editor), /white-space:pre/);
+  assert.deepEqual(heading?.settings.typography_font_size, { unit: "vw", size: 3.333, sizes: [] });
+  assert.deepEqual(punctuation?.settings._transform_rotateZ_effect, { unit: "deg", size: 7.54, sizes: [] });
+  assert.deepEqual(mixedHeading?.settings.typography_font_size, { unit: "vw", size: 4.375, sizes: [] });
+  assert.match(String(mixedHeading?.settings.editor), /<span style="display:block"><span/);
+  assert.match(String(mixedHeading?.settings.editor), /font-size:3\.75vw/);
+  assert.match(String(mixedHeading?.settings.editor), /font-size:4\.375vw/);
+  assert.match(String(fixedParagraph?.settings.editor), /white-space:pre-wrap/);
   assert.equal((portrait?.settings.image as { url?: string })?.url, "https://images.example/portrait-rendered.png");
+  assert.deepEqual(portrait?.settings.height, { unit: "vw", size: 36.458, sizes: [] });
   assert.equal(portrait?.settings._position, "absolute");
   assert.match(result.previewHtml, /明石をずーっと元気なまちに/);
   assert.match(result.previewHtml, /portrait-rendered\.png/);

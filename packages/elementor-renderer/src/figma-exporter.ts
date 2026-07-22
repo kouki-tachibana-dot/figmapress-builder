@@ -21,8 +21,6 @@ interface RenderContext {
   ids: ElementIdFactory;
   root: FigmaNode;
   rootBounds: FigmaBounds;
-  tabletScale: number;
-  mobileScale: number;
   assets: FigmaRenderAssets;
 }
 
@@ -94,8 +92,6 @@ export class FigmaElementorExporter {
       ids: new ElementIdFactory(),
       root,
       rootBounds,
-      tabletScale: Math.min(1, 1024 / rootBounds.width),
-      mobileScale: Math.min(1, 390 / rootBounds.width),
       assets,
     };
     const children = (root.children ?? [])
@@ -119,9 +115,7 @@ export class FigmaElementorExporter {
           ...baseContainerSettings(root, context),
           content_width: "full",
           width: size(100, "%"),
-          min_height: size(rootBounds.height),
-          min_height_tablet: size(rootBounds.height * context.tabletScale),
-          min_height_mobile: size(rootBounds.height * context.mobileScale),
+          min_height: canvasSize(rootBounds.height, context),
           html_tag: "main",
           overflow: root.clipsContent === false ? "" : "hidden",
         },
@@ -142,8 +136,6 @@ export function renderFigmaPreview(
     ids: new ElementIdFactory(),
     root,
     rootBounds,
-    tabletScale: Math.min(1, 1024 / rootBounds.width),
-    mobileScale: Math.min(1, 390 / rootBounds.width),
     assets,
   };
   const background = solidColor(root.fills) ?? "#FFFFFF";
@@ -190,35 +182,28 @@ function textElement(
   context: RenderContext,
 ): ElementorElement {
   const style = node.style ?? {};
-  const fontSize = style.fontSize ?? Math.max(12, bounds.height * 0.72);
+  const richRuns = textRuns(node);
+  const fontSize = textFontSize(style, richRuns, bounds);
+  const lineHeight = textLineHeight(style, richRuns, fontSize);
   const settings: ElementorSettings = {
     ...widgetPosition(bounds, parentBounds),
     text_color: solidColor(style.fills ?? node.fills) ?? "#111111",
     typography_typography: "custom",
     typography_font_family: style.fontFamily ?? "Arial",
-    typography_font_size: size(fontSize),
-    typography_font_size_tablet: size(Math.max(8, fontSize * context.tabletScale)),
-    typography_font_size_mobile: size(Math.max(6, fontSize * context.mobileScale)),
+    typography_font_size: canvasSize(fontSize, context),
     typography_font_weight: String(style.fontWeight ?? 400),
-    typography_line_height: size(style.lineHeightPx ?? fontSize * 1.25),
-    typography_line_height_tablet: size((style.lineHeightPx ?? fontSize * 1.25) * context.tabletScale),
-    typography_line_height_mobile: size((style.lineHeightPx ?? fontSize * 1.25) * context.mobileScale),
-    typography_letter_spacing: size(style.letterSpacing ?? 0),
+    typography_line_height: size(lineHeight / fontSize, "em"),
+    typography_letter_spacing: canvasSize(style.letterSpacing ?? 0, context),
     align: textAlign(style.textAlignHorizontal),
   };
   applyTypographyFlags(settings, style);
+  applyRotation(settings, node);
 
-  const richRuns = textRuns(node);
-  if (richRuns.length > 1) {
-    settings.editor = `<div>${richRuns.map(runHtml).join("").replace(/\n/g, "<br>")}</div>`;
-    return widget(context.ids, node.id, "text-editor", settings);
-  }
-
-  settings.title = node.characters ?? "";
-  settings.header_size = headingTag(node, fontSize);
-  settings.title_color = settings.text_color;
-  delete settings.text_color;
-  return widget(context.ids, node.id, "heading", settings);
+  const content = richRuns.map((run) => runHtml(run, context)).join("").replace(/\n/g, "<br>");
+  const whiteSpace = textWhiteSpace(node);
+  const verticalAlign = textVerticalAlign(style.textAlignVertical);
+  settings.editor = `<div style="display:flex;flex-direction:column;justify-content:${verticalAlign};margin:0;min-height:${canvasCss(bounds.height, context)};overflow:visible;overflow-wrap:normal;white-space:${whiteSpace};word-break:${whiteSpace === "pre" ? "keep-all" : "normal"}"><span style="display:block">${content}</span></div>`;
+  return widget(context.ids, node.id, "text-editor", settings);
 }
 
 function imageElement(
@@ -233,15 +218,14 @@ function imageElement(
     image: { url, id: "", alt: node.name, source: "library" },
     image_size: "full",
     space: size(100, "%"),
-    height: size(bounds.height),
-    height_tablet: size(bounds.height * context.tabletScale),
-    height_mobile: size(bounds.height * context.mobileScale),
+    height: canvasSize(bounds.height, context),
     "object-fit": "fill",
-    image_border_radius: radiusDimensions(node),
+    image_border_radius: radiusDimensions(node, context),
   };
   if (typeof node.opacity === "number" && node.opacity < 1) {
     settings.opacity = size(node.opacity);
   }
+  applyRotation(settings, node);
   return widget(context.ids, node.id, "image", settings);
 }
 
@@ -276,11 +260,14 @@ function baseContainerSettings(node: FigmaNode, context: RenderContext): Element
       node.strokeWeight ?? 1,
       node.strokeWeight ?? 1,
       node.strokeWeight ?? 1,
+      "vw",
+      context.rootBounds.width,
     );
   }
-  settings.border_radius = radiusDimensions(node);
+  settings.border_radius = radiusDimensions(node, context);
   applyShadow(settings, node);
-  if (bounds && node === context.root) settings.min_height = size(bounds.height);
+  applyRotation(settings, node);
+  if (bounds && node === context.root) settings.min_height = canvasSize(bounds.height, context);
   return settings;
 }
 
@@ -296,9 +283,7 @@ function containerPosition(
     _offset_orientation_v: "start",
     _offset_y: size(percent(bounds.y - parent.y, parent.height), "%"),
     width: size(percent(bounds.width, parent.width), "%"),
-    min_height: size(bounds.height),
-    min_height_tablet: size(bounds.height * context.tabletScale),
-    min_height_mobile: size(bounds.height * context.mobileScale),
+    min_height: canvasSize(bounds.height, context),
   };
 }
 
@@ -357,12 +342,12 @@ function previewNode(
 
   if (node.type === "TEXT") {
     const style = node.style ?? {};
-    const fontSize = style.fontSize ?? Math.max(12, bounds.height * 0.72);
     const runs = textRuns(node);
+    const fontSize = textFontSize(style, runs, bounds);
     const content = runs.length > 1
-      ? runs.map(runHtml).join("").replace(/\n/g, "<br>")
+      ? runs.map((run) => runHtml(run, context)).join("").replace(/\n/g, "<br>")
       : escapeHtml(node.characters ?? "").replace(/\n/g, "<br>");
-    return `<div style="${position};color:${escapeAttribute(solidColor(style.fills ?? node.fills) ?? "#111111")};font-family:${escapeAttribute(cssFont(style.fontFamily))};font-size:calc(var(--figma-unit) * ${round(fontSize)});font-style:${style.italic ? "italic" : "normal"};font-weight:${round(style.fontWeight ?? 400)};letter-spacing:calc(var(--figma-unit) * ${round(style.letterSpacing ?? 0)});line-height:${round((style.lineHeightPx ?? fontSize * 1.25) / fontSize)};text-align:${textAlign(style.textAlignHorizontal)};text-decoration:${textDecoration(style.textDecoration)};text-transform:${textTransform(style.textCase)};white-space:pre-wrap;${opacity}">${content}</div>`;
+    return `<div style="${position};color:${escapeAttribute(solidColor(style.fills ?? node.fills) ?? "#111111")};display:flex;flex-direction:column;font-family:${escapeAttribute(cssFont(style.fontFamily))};font-size:calc(var(--figma-unit) * ${round(fontSize)});font-style:${style.italic ? "italic" : "normal"};font-weight:${round(style.fontWeight ?? 400)};justify-content:${textVerticalAlign(style.textAlignVertical)};letter-spacing:calc(var(--figma-unit) * ${round(style.letterSpacing ?? 0)});line-height:${round(textLineHeight(style, runs, fontSize) / fontSize)};overflow:visible;overflow-wrap:normal;text-align:${textAlign(style.textAlignHorizontal)};text-decoration:${textDecoration(style.textDecoration)};text-transform:${textTransform(style.textCase)};white-space:${textWhiteSpace(node)};word-break:${textWhiteSpace(node) === "pre" ? "keep-all" : "normal"};${previewRotation(node)}${opacity}"><span style="display:block">${content}</span></div>`;
   }
 
   const children = (node.children ?? []).map((child) => previewNode(child, bounds, context)).join("");
@@ -396,12 +381,20 @@ function textRuns(node: FigmaNode): RichRun[] {
   return runs.length ? runs : [{ text: value, style: node.style ?? {} }];
 }
 
-function runHtml(run: RichRun): string {
+function runHtml(run: RichRun, context: RenderContext): string {
   const color = solidColor(run.style.fills);
   const styles = [
     color ? `color:${color}` : "",
+    run.style.fontFamily ? `font-family:${cssFont(run.style.fontFamily)}` : "",
+    positive(run.style.fontSize) ? `font-size:${canvasCss(run.style.fontSize, context)}` : "",
     run.style.fontWeight ? `font-weight:${run.style.fontWeight}` : "",
     run.style.italic ? "font-style:italic" : "",
+    finite(run.style.letterSpacing) && run.style.letterSpacing !== 0
+      ? `letter-spacing:${canvasCss(run.style.letterSpacing, context)}`
+      : "",
+    positive(run.style.lineHeightPx) && positive(run.style.fontSize)
+      ? `line-height:${round(run.style.lineHeightPx / run.style.fontSize)}`
+      : "",
     run.style.textDecoration && run.style.textDecoration !== "NONE"
       ? `text-decoration:${textDecoration(run.style.textDecoration)}`
       : "",
@@ -453,6 +446,12 @@ function applyTypographyFlags(settings: ElementorSettings, style: FigmaTypeStyle
   if (decoration !== "none") settings.typography_text_decoration = decoration;
 }
 
+function applyRotation(settings: ElementorSettings, node: FigmaNode): void {
+  if (!node.rotation || Math.abs(node.rotation) < 0.001) return;
+  settings._transform_rotate_popover = "yes";
+  settings._transform_rotateZ_effect = size(node.rotation, "deg");
+}
+
 function applyShadow(settings: ElementorSettings, node: FigmaNode): void {
   const shadow = node.effects?.find((effect) => effect.visible !== false && effect.type === "DROP_SHADOW");
   if (!shadow) return;
@@ -483,13 +482,13 @@ function htmlTag(node: FigmaNode): string {
   return "div";
 }
 
-function radiusDimensions(node: FigmaNode): Record<string, unknown> {
+function radiusDimensions(node: FigmaNode, context: RenderContext): Record<string, unknown> {
   const corners = node.rectangleCornerRadii;
-  if (corners) return dimensions(corners[0], corners[1], corners[2], corners[3]);
+  if (corners) return dimensions(corners[0], corners[1], corners[2], corners[3], "vw", context.rootBounds.width);
   const radius = node.type === "ELLIPSE"
     ? Math.max(node.absoluteBoundingBox?.width ?? 0, node.absoluteBoundingBox?.height ?? 0)
     : node.cornerRadius ?? 0;
-  return dimensions(radius, radius, radius, radius);
+  return dimensions(radius, radius, radius, radius, "vw", context.rootBounds.width);
 }
 
 function previewRadius(node: FigmaNode): string {
@@ -508,6 +507,29 @@ function textAlign(value: FigmaTypeStyle["textAlignHorizontal"]): string {
   if (value === "RIGHT") return "right";
   if (value === "JUSTIFIED") return "justify";
   return "left";
+}
+
+function textVerticalAlign(value: FigmaTypeStyle["textAlignVertical"]): string {
+  if (value === "CENTER") return "center";
+  if (value === "BOTTOM") return "flex-end";
+  return "flex-start";
+}
+
+function textWhiteSpace(node: FigmaNode): "pre" | "pre-wrap" {
+  if (node.textAutoResize === "HEIGHT" || node.textAutoResize === "NONE") return "pre-wrap";
+  return "pre";
+}
+
+function textFontSize(style: FigmaTypeStyle, runs: RichRun[], bounds: FigmaBounds): number {
+  if (positive(style.fontSize)) return style.fontSize;
+  const runSize = Math.max(0, ...runs.map((run) => positive(run.style.fontSize) ? run.style.fontSize : 0));
+  return runSize || Math.max(12, bounds.height * 0.72);
+}
+
+function textLineHeight(style: FigmaTypeStyle, runs: RichRun[], fontSize: number): number {
+  if (positive(style.lineHeightPx)) return style.lineHeightPx;
+  const runHeight = Math.max(0, ...runs.map((run) => positive(run.style.lineHeightPx) ? run.style.lineHeightPx : 0));
+  return runHeight || fontSize * 1.25;
 }
 
 function textTransform(value: FigmaTypeStyle["textCase"]): string {
@@ -532,19 +554,47 @@ function size(value: number, unit = "px"): Record<string, unknown> {
   return { unit, size: round(value), sizes: [] };
 }
 
+function canvasSize(value: number, context: RenderContext): Record<string, unknown> {
+  return size(percent(value, context.rootBounds.width), "vw");
+}
+
+function canvasCss(value: number, context: RenderContext): string {
+  return `${round(percent(value, context.rootBounds.width))}vw`;
+}
+
 function gap(value: number): Record<string, unknown> {
   return { column: String(value), row: String(value), isLinked: true, unit: "px", size: value };
 }
 
-function dimensions(top: number, right: number, bottom: number, left: number): Record<string, unknown> {
+function dimensions(
+  top: number,
+  right: number,
+  bottom: number,
+  left: number,
+  unit = "px",
+  scaleBase?: number,
+): Record<string, unknown> {
+  const convert = (value: number): number => scaleBase ? percent(value, scaleBase) : value;
   return {
-    unit: "px",
-    top: String(round(top)),
-    right: String(round(right)),
-    bottom: String(round(bottom)),
-    left: String(round(left)),
+    unit,
+    top: String(round(convert(top))),
+    right: String(round(convert(right))),
+    bottom: String(round(convert(bottom))),
+    left: String(round(convert(left))),
     isLinked: top === right && right === bottom && bottom === left,
   };
+}
+
+function previewRotation(node: FigmaNode): string {
+  return node.rotation ? `transform:rotate(${round(node.rotation)}deg);transform-origin:center;` : "";
+}
+
+function positive(value: number | undefined): value is number {
+  return finite(value) && value > 0;
+}
+
+function finite(value: number | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 function percent(value: number, total: number): number {

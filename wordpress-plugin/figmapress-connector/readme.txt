@@ -3,7 +3,7 @@ Contributors: figmapress
 Tags: blocks, figma, gutenberg, elementor
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 0.4.0
+Stable tag: 0.4.1
 License: GPLv2 or later
 
 Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
@@ -15,6 +15,10 @@ Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
    create a draft page containing figmapress/* blocks.
 
 == Changelog ==
+= 0.4.1 =
+* Preserve responsive Figma typography, explicit line wrapping, mixed text sizes, and rotations in Elementor pages.
+* Keep the inline layout styles required by editable Figma text during REST sanitization.
+
 = 0.4.0 =
 * Adds high-fidelity Figma layout conversion for Elementor.
 * Keeps text editable while localizing rendered vectors, masks, and images.

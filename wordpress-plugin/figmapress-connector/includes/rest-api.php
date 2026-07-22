@@ -200,12 +200,37 @@ function figmapress_connector_sanitize_elementor_value( $value, $key = '', $dept
         return '';
     }
     if ( 'editor' === $key ) {
-        return wp_kses_post( $value );
+        add_filter( 'safe_style_css', 'figmapress_connector_allow_layout_css' );
+        try {
+            return wp_kses_post( $value );
+        } finally {
+            remove_filter( 'safe_style_css', 'figmapress_connector_allow_layout_css' );
+        }
     }
     if ( 'url' === $key ) {
         return esc_url_raw( $value, array( 'http', 'https', 'mailto', 'tel' ) );
     }
     return sanitize_text_field( $value );
+}
+
+function figmapress_connector_allow_layout_css( $properties ) {
+    return array_values(
+        array_unique(
+            array_merge(
+                $properties,
+                array(
+                    'display',
+                    'flex-direction',
+                    'justify-content',
+                    'min-height',
+                    'overflow',
+                    'overflow-wrap',
+                    'white-space',
+                    'word-break',
+                )
+            )
+        )
+    );
 }
 
 function figmapress_connector_localize_elementor_images( &$elements, $post_id, &$warnings, &$imported_media ) {
