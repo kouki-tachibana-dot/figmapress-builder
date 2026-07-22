@@ -12,7 +12,7 @@ export default function SecurityPage() {
     >
       <section>
         <h2>認証情報</h2>
-        <p>Figma Tokenは同じタブのセッションストレージだけに保持し、サーバーでは1回のリクエスト中だけ利用します。WordPress Application Passwordはブラウザにも保持しません。どちらも応答には含めません。Figma Tokenには、短い有効期限と <code>file_content:read</code> だけを設定することを推奨します。</p>
+        <p>Figma Tokenは同じタブのセッションストレージだけに保持し、サーバーでは1回のリクエスト中だけ利用します。WordPress Application Passwordは保存せず、ブラウザから対象サイトへの直接接続を優先します。CORSで接続できない場合だけサーバーで1回のリクエスト中に利用し、応答には含めません。Figma Tokenには、短い有効期限と <code>file_content:read</code> だけを設定することを推奨します。</p>
       </section>
       <section>
         <h2>WordPress接続</h2>

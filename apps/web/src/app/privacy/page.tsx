@@ -12,7 +12,7 @@ export default function PrivacyPage() {
     >
       <section>
         <h2>処理するデータ</h2>
-        <p>変換時にFigma URL／ファイルキー、Figma JSON、Personal Access Tokenを処理します。WordPress下書き作成時には、サイトURL、ユーザー名、Application Password、生成ページを処理します。</p>
+        <p>変換時にFigma URL／ファイルキー、Figma JSON、Personal Access Tokenを処理します。WordPress接続ではブラウザから対象サイトへの直接接続を優先し、CORSで接続できない場合だけ、サイトURL、ユーザー名、Application Password、生成ページを当サービスのサーバーで一時処理します。</p>
       </section>
       <section>
         <h2>保存と利用</h2>

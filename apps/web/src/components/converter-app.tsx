@@ -1,6 +1,11 @@
 "use client";
 
 import { useState, useSyncExternalStore, type ChangeEvent, type FormEvent } from "react";
+import {
+  WordPressDirectError,
+  createWordPressDraftDirect,
+  probeWordPressDirect,
+} from "@/lib/wordpress-browser";
 
 type SourceMode = "figma" | "json";
 type OutputTarget = "gutenberg" | "elementor";
@@ -134,6 +139,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const [wpError, setWpError] = useState("");
   const [wpResult, setWpResult] = useState<WordPressResult | null>(null);
   const [wpStatus, setWpStatus] = useState<WordPressStatus | null>(null);
+  const [wpTransport, setWpTransport] = useState<"direct" | "proxy" | null>(null);
   const [wpTarget, setWpTarget] = useState<OutputTarget>("elementor");
   const [baseUrl, setBaseUrl] = useState("");
   const [username, setUsername] = useState("");
@@ -226,13 +232,34 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
             slug: page?.slug || "/",
             content: output.pageContent,
           };
-      const response = await fetch("/api/wordpress", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await readApi<{ ok: true; result: WordPressResult }>(response);
-      setWpResult(data.result);
+      if (wpTransport === "direct") {
+        const result = await createWordPressDraftDirect(
+          { baseUrl, username, applicationPassword },
+          wpTarget === "elementor"
+            ? {
+                target: "elementor",
+                title: payload.title,
+                slug: payload.slug,
+                template: output.elementorTemplate,
+                pageTemplate: "elementor_canvas",
+              }
+            : {
+                target: "gutenberg",
+                title: payload.title,
+                slug: payload.slug,
+                content: output.pageContent,
+              },
+        );
+        setWpResult(result);
+      } else {
+        const response = await fetch("/api/wordpress", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await readApi<{ ok: true; result: WordPressResult }>(response);
+        setWpResult(data.result);
+      }
       setApplicationPassword("");
     } catch (caught) {
       setWpError(caught instanceof Error ? caught.message : "下書きを作成できませんでした。");
@@ -245,14 +272,25 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     setWpChecking(true);
     setWpError("");
     setWpStatus(null);
+    setWpTransport(null);
     try {
-      const response = await fetch("/api/wordpress/status", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ baseUrl, username, applicationPassword }),
-      });
-      const data = await readApi<{ ok: true; status: WordPressStatus }>(response);
-      setWpStatus(data.status);
+      try {
+        const status = await probeWordPressDirect({ baseUrl, username, applicationPassword });
+        setWpStatus(status);
+        setWpTransport("direct");
+      } catch (directError) {
+        if (!(directError instanceof WordPressDirectError) || directError.kind !== "network") {
+          throw directError;
+        }
+        const response = await fetch("/api/wordpress/status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ baseUrl, username, applicationPassword }),
+        });
+        const data = await readApi<{ ok: true; status: WordPressStatus }>(response);
+        setWpStatus(data.status);
+        setWpTransport("proxy");
+      }
     } catch (caught) {
       setWpError(caught instanceof Error ? caught.message : "接続診断に失敗しました。");
     } finally {
@@ -501,15 +539,15 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
               <div className="form-grid form-grid--three">
                 <label className="field">
                   <span>WordPress URL</span>
-                  <input onChange={(event) => { setBaseUrl(event.target.value); setWpStatus(null); }} placeholder="https://example.com" required type="url" value={baseUrl} />
+                  <input onChange={(event) => { setBaseUrl(event.target.value); setWpStatus(null); setWpTransport(null); }} placeholder="https://example.com" required type="url" value={baseUrl} />
                 </label>
                 <label className="field">
                   <span>ユーザー名</span>
-                  <input autoComplete="username" onChange={(event) => { setUsername(event.target.value); setWpStatus(null); }} required value={username} />
+                  <input autoComplete="username" onChange={(event) => { setUsername(event.target.value); setWpStatus(null); setWpTransport(null); }} required value={username} />
                 </label>
                 <label className="field">
                   <span>Application Password</span>
-                  <input autoComplete="off" onChange={(event) => { setApplicationPassword(event.target.value); setWpStatus(null); }} required type="password" value={applicationPassword} />
+                  <input autoComplete="off" onChange={(event) => { setApplicationPassword(event.target.value); setWpStatus(null); setWpTransport(null); }} required type="password" value={applicationPassword} />
                 </label>
               </div>
               <div className="connection-row">
@@ -522,6 +560,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                     <span>WP {wpStatus.wordpressVersion || "確認済み"}</span>
                     <span>Connector {wpStatus.connectorInstalled ? `v${wpStatus.connectorVersion || "installed"}` : "未導入"}</span>
                     <span>Elementor {wpStatus.elementor.active ? `v${wpStatus.elementor.version || "active"}` : "未導入"}</span>
+                    <span>{wpTransport === "direct" ? "ブラウザ直結" : "サーバー経由"}</span>
                   </div>
                 )}
               </div>
@@ -547,7 +586,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                 <span>常に <code>status: draft</code></span>
                 <button
                   className="button button--dark"
-                  disabled={!confirmed || wpBusy || Boolean(wpStatus && (!wpStatus.connectorInstalled || !wpStatus.canEditPages || (wpTarget === "elementor" && !wpStatus.elementor.active)))}
+                  disabled={!confirmed || wpBusy || !wpStatus || !wpStatus.connectorInstalled || !wpStatus.canEditPages || (wpTarget === "elementor" && !wpStatus.elementor.active)}
                   type="submit"
                 >
                   {wpBusy ? "作成中…" : `${wpTarget === "elementor" ? "Elementor" : "Gutenberg"}下書きを作成 →`}
