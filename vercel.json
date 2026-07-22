@@ -1,7 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
-  "regions": ["hnd1"],
   "installCommand": "npx --yes npm@10.9.4 ci",
   "buildCommand": "npm run build:web",
   "outputDirectory": "apps/web/.next"
