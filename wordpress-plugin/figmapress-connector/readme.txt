@@ -3,7 +3,7 @@ Contributors: figmapress
 Tags: blocks, figma, gutenberg, elementor
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 0.4.2
+Stable tag: 0.4.3
 License: GPLv2 or later
 
 Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
@@ -15,6 +15,10 @@ Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
    create a draft page containing figmapress/* blocks.
 
 == Changelog ==
+= 0.4.3 =
+* Save Elementor content before downloading images so interrupted imports never leave an empty page.
+* Limit synchronous Media Library imports to a safe time budget and preserve remote images that cannot be localized in time.
+
 = 0.4.2 =
 * Retry Application Password authentication through a namespaced HTTPS header when a host strips standard HTTP Basic Authorization.
 * Add a credential-free diagnostic endpoint that reports whether authentication headers reach WordPress.
