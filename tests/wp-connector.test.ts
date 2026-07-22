@@ -81,12 +81,11 @@ test("server connection retries with the Connector header after HTTP 401", async
   assert.match(fallbackHeaders[1] ?? "", /^Basic /);
 });
 
-test("Elementor draft creation uses the Connector endpoint and remains draft", async (context) => {
+test("Elementor draft creation uses one Connector request and remains draft", async (context) => {
   const requests: Array<{ url: string; method?: string; body?: string }> = [];
   context.mock.method(globalThis, "fetch", async (input, init) => {
     const url = String(input);
     requests.push({ url, method: init?.method, body: String(init?.body ?? "") });
-    if (url.includes("/wp/v2/pages?")) return Response.json([]);
     return Response.json({
       id: 91,
       slug: "home",
@@ -111,10 +110,9 @@ test("Elementor draft creation uses the Connector endpoint and remains draft", a
   assert.equal(result.status, "draft");
   assert.equal(result.target, "elementor");
   assert.equal(result.importedMedia, 1);
-  assert.doesNotMatch(requests[0]?.url ?? "", /status=any/);
-  assert.match(requests[0]?.url ?? "", /status=publish%2Cfuture%2Cdraft%2Cpending%2Cprivate/);
-  assert.match(requests[1]?.url ?? "", /figmapress\/v1\/elementor\/pages/);
-  assert.match(requests[1]?.body ?? "", /"status":"draft"/);
+  assert.equal(requests.length, 1);
+  assert.match(requests[0]?.url ?? "", /figmapress\/v1\/elementor\/pages/);
+  assert.match(requests[0]?.body ?? "", /"status":"draft"/);
 });
 
 test("permission errors are not mislabeled as invalid credentials", async (context) => {
