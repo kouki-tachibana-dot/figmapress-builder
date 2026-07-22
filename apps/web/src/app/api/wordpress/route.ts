@@ -61,7 +61,7 @@ export async function POST(request: Request): Promise<Response> {
   try {
     enforceSameOrigin(request);
     enforceRateLimit("wordpress", clientIp(request), 6, 10 * 60 * 1_000);
-    const parsed = RequestSchema.safeParse(await readJsonBody(request, 1_000_000));
+    const parsed = RequestSchema.safeParse(await readJsonBody(request, 4_000_000));
     if (!parsed.success) {
       throw new RequestError("WordPress接続情報を確認してください。", 422);
     }

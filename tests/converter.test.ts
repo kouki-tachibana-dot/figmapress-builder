@@ -134,3 +134,94 @@ test("explicit and Japanese semantic sections can be mixed with safe token slugs
   assert.equal(result.blueprint.tokens.typography[0]?.slug, "font-1");
   assert.equal(result.blueprint.tokens.spacing[0]?.slug, "spacing-1");
 });
+
+test("real Figma bounds produce a high-fidelity editable Elementor document", async () => {
+  const file: MockFigmaFile = {
+    document: {
+      id: "0:0",
+      name: "Campaign",
+      type: "DOCUMENT",
+      children: [{
+        id: "1:0",
+        name: "Page",
+        type: "CANVAS",
+        children: [{
+          id: "46:12",
+          name: "PC-page",
+          type: "FRAME",
+          absoluteBoundingBox: { x: 0, y: 0, width: 1920, height: 1600 },
+          fills: [{ type: "SOLID", color: { r: 1, g: 1, b: 1 } }],
+          clipsContent: true,
+          children: [
+            {
+              id: "2:0",
+              name: "FV/Hero Sec",
+              type: "FRAME",
+              absoluteBoundingBox: { x: 0, y: 0, width: 1920, height: 900 },
+              fills: [{ type: "SOLID", color: { r: 0.99, g: 0.96, b: 0.97 } }],
+              children: [
+                {
+                  id: "3:0",
+                  name: "Main heading",
+                  type: "TEXT",
+                  characters: "明石をずーっと元気なまちに！",
+                  absoluteBoundingBox: { x: 180, y: 220, width: 850, height: 90 },
+                  style: { fontFamily: "Noto Sans JP", fontSize: 64, fontWeight: 800, lineHeightPx: 86 },
+                  fills: [{ type: "SOLID", color: { r: 0.82, g: 0.04, b: 0.17 } }],
+                },
+                {
+                  id: "3:1",
+                  name: "Portrait",
+                  type: "RECTANGLE",
+                  absoluteBoundingBox: { x: 1160, y: 120, width: 560, height: 700 },
+                  fills: [{ type: "IMAGE", imageRef: "portrait-ref" }],
+                  cornerRadius: 24,
+                },
+              ],
+            },
+            {
+              id: "2:1",
+              name: "Footer/Footer Sec",
+              type: "FRAME",
+              absoluteBoundingBox: { x: 0, y: 1300, width: 1920, height: 300 },
+              fills: [{ type: "SOLID", color: { r: 0.82, g: 0.04, b: 0.17 } }],
+            },
+          ],
+        }],
+      }],
+    },
+  };
+
+  const result = await convertFile(
+    file,
+    { pageTitle: "竹内きよ子様" },
+    { "portrait-ref": "https://images.example/portrait-original.png" },
+    [],
+    { "3:1": "https://images.example/portrait-rendered.png" },
+  );
+
+  assert.equal(result.summary.sectionCount, 2);
+  assert.deepEqual(result.summary.sectionTypes, ["figma/FV/Hero Sec", "figma/Footer/Footer Sec"]);
+  assert.equal(result.elementorTemplate.content.length, 1);
+  const root = result.elementorTemplate.content[0];
+  assert.equal(root?.elType, "container");
+  assert.equal((root?.settings.min_height as { size?: number })?.size, 1600);
+
+  const elements: typeof result.elementorTemplate.content = [];
+  const visit = (items: typeof result.elementorTemplate.content): void => {
+    for (const item of items) {
+      elements.push(item);
+      visit(item.elements);
+    }
+  };
+  visit(result.elementorTemplate.content);
+  const heading = elements.find((element) => element.widgetType === "heading");
+  const portrait = elements.find((element) => element.widgetType === "image");
+  assert.equal(heading?.settings.title, "明石をずーっと元気なまちに！");
+  assert.equal(heading?.settings.typography_font_size && (heading.settings.typography_font_size as { size: number }).size, 64);
+  assert.equal((portrait?.settings.image as { url?: string })?.url, "https://images.example/portrait-rendered.png");
+  assert.equal(portrait?.settings._position, "absolute");
+  assert.match(result.previewHtml, /明石をずーっと元気なまちに/);
+  assert.match(result.previewHtml, /portrait-rendered\.png/);
+  assert.ok(result.warnings.some((warning) => warning.includes("高忠実度モード")));
+});

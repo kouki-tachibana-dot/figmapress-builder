@@ -3,7 +3,7 @@
 Figma の構造を、WordPress で扱える Gutenberg ブロックまたはElementorページへ変換する
 オープンソースの Web アプリ＋CLIです。
 
-## v0.3 — 実運用接続
+## v0.4 — Figma高忠実度Elementor変換
 
 **Web版:** [https://figmapress-builder.vercel.app](https://figmapress-builder.vercel.app)
 
@@ -16,6 +16,8 @@ Figma の構造を、WordPress で扱える Gutenberg ブロックまたはEleme
 - WordPress接続診断（認証、権限、Connector、Elementor）
 - HTTPSのWordPressサイトへGutenberg／Elementor下書き固定ページを作成
 - Figma画像をWordPressメディアライブラリへ取り込み、期限切れを防止
+- Figmaの座標・サイズ・文字スタイルをElementorへ直接反映
+- 写真・マスク・ベクターをFigmaレンダーAPIから取得し、文字は編集可能なWidgetとして保持
 - WordPress Plugin／Theme ZIPのダウンロード
 
 ローカルで実行する場合は `npm install`、`npm run dev:web` の順に実行し、
@@ -23,8 +25,9 @@ Figma の構造を、WordPress で扱える Gutenberg ブロックまたはEleme
 
 ### 認証情報の扱い
 
-Figma TokenとWordPress Application Passwordは対象APIへのリクエスト中だけ
-メモリ上で使用し、データベース・ファイル・Cookieへ保存しません。APIレスポンスは
+Figma Tokenは再入力を省くため同じタブの `sessionStorage` だけに保持し、タブを閉じるか
+画面の「消去」で削除します。WordPress Application Passwordは保持しません。どちらも
+サーバー側のデータベース・ファイル・Cookieへ保存しません。APIレスポンスは
 `no-store` です。WordPress接続はHTTPS公開ホストだけを許可し、内部IP、localhost、
 リダイレクトを拒否します。詳細は [SECURITY.md](./SECURITY.md) と
 [PRIVACY.md](./PRIVACY.md) を参照してください。
@@ -32,7 +35,8 @@ Figma TokenとWordPress Application Passwordは対象APIへのリクエスト中
 ### 制約
 
 - Figma OAuthは未実装で、現時点では利用者自身のPersonal Access Tokenが必要
-- Figmaレイヤーは `section/*` または Hero / Services / Features / FAQ / CTA / Contact の意味が分かる名前を推奨
+- Elementor高忠実度変換は任意のレイヤー名に対応。Gutenberg変換では `section/*` または Hero / Services / Features / FAQ / CTA / Contact の意味が分かる名前を推奨
+- PCフレームだけを選択した場合、Elementor出力もPCデザインを基準に縮小する。独立したモバイル構成の自動統合は対象外
 - WordPressへの送信は固定ページの `draft` 作成だけ
 - Elementor Pro専用Widget、Theme Builder、WooCommerce、Popupは対象外
 
@@ -48,8 +52,8 @@ Figma → Site Blueprint → Gutenberg / Elementor → WordPress Draft Page
 ```
 
 > このリポジトリの最重要方針:
-> **Figma の見た目を absolute 配置 HTML にしてそのまま貼り付けない。**
-> Figma を中立的な Site Blueprint へ変換し、編集可能なWordPress要素として出力します。
+> **Figma の見た目を単一画像やHTMLとして貼り付けない。**
+> 文字は編集可能なWidgetにし、複雑なビジュアルだけを画像化してWordPress要素として出力します。
 
 ---
 
@@ -60,7 +64,7 @@ Figma → Site Blueprint → Gutenberg / Elementor → WordPress Draft Page
 - 実Figma REST APIまたはFigma JSONからLP構造を読み取る
 - Site Blueprint JSON を生成する
 - Site Blueprint から Gutenberg ブロック HTML を生成する
-- Site Blueprint からElementor 0.4形式のContainer／Widget JSONを生成する
+- FigmaレイアウトまたはSite BlueprintからElementor 0.4形式のContainer／Widget JSONを生成する
 - tokens → `theme.json` を生成する
 - WordPress REST API で **下書き** 固定ページを作成する
 - Connector REST APIでElementor post meta、Canvasテンプレート、CSSキャッシュを設定する
@@ -268,11 +272,14 @@ export interface SiteExporter {
 ## Elementor接続
 
 Web画面から `elementor-template.json` をダウンロードしてElementorへ手動importできるほか、
-FigmaPress Connector v0.3以上を有効化したWordPressへ直接下書きを作成できます。
+FigmaPress Connector v0.4以上を有効化したWordPressへ直接下書きを作成できます。
 ConnectorはApplication Passwordで認証された `edit_pages` 権限ユーザーだけを許可し、
 Elementorの非公開post metaへJSONを保存します。
 
 ### Figma section → Elementor ウィジェット
+
+Figma URLからの変換では、選択フレームの任意レイヤーをContainer／Heading／Text Editor／Imageへ
+直接変換します。下表はGutenberg互換の意味セクションを入力した場合のフォールバックです。
 
 | section | Elementor 出力 |
 | --- | --- |
@@ -290,7 +297,7 @@ Elementorの非公開post metaへJSONを保存します。
 - WooCommerce / Popup Builder
 - 高度な Motion Effects / 独自 Widget 開発
 
-外部画像は下書き作成時に最大12件・各10MBまでメディアライブラリへ保存します。
+外部画像は下書き作成時に最大60件・各10MBまでメディアライブラリへ保存します。
 
 ---
 

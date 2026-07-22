@@ -14,8 +14,10 @@ advertising trackers, or application cookies in the public beta.
 
 Inputs and credentials are used only to complete the requested conversion or
 WordPress draft creation. The application has no database and does not write
-these values to files, logs, cookies, or browser storage. Credentials are not
-returned in responses. Hosting-provider infrastructure may retain standard
+these values to server files, logs, or cookies. The Figma token is retained
+only in the current tab's session storage to avoid repeated entry; closing the
+tab or using the clear button removes it. WordPress credentials are not kept in
+browser storage. Credentials are not returned in responses. Hosting-provider infrastructure may retain standard
 request metadata under its own operational and security policies.
 
 The Figma API and the user's WordPress site receive the data required for the

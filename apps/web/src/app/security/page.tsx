@@ -8,11 +8,11 @@ export default function SecurityPage() {
     <LegalLayout
       eyebrow="Security"
       title="セキュリティ"
-      summary="認証情報を保存せず、WordPressへの操作をHTTPSの下書き作成だけに限定しています。"
+      summary="認証情報をサーバー保存せず、WordPressへの操作をHTTPSの下書き作成だけに限定しています。"
     >
       <section>
         <h2>認証情報</h2>
-        <p>Figma TokenとWordPress Application Passwordは1回のリクエスト中だけ利用し、応答には含めません。Figma Tokenには、短い有効期限と <code>file_content:read</code> だけを設定することを推奨します。</p>
+        <p>Figma Tokenは同じタブのセッションストレージだけに保持し、サーバーでは1回のリクエスト中だけ利用します。WordPress Application Passwordはブラウザにも保持しません。どちらも応答には含めません。Figma Tokenには、短い有効期限と <code>file_content:read</code> だけを設定することを推奨します。</p>
       </section>
       <section>
         <h2>WordPress接続</h2>
@@ -20,7 +20,7 @@ export default function SecurityPage() {
       </section>
       <section>
         <h2>画像の永続化</h2>
-        <p>Elementor作成時はFigmaの期限付き画像URLをWordPressメディアライブラリへ取り込みます。公開HTTPS画像だけを許可し、最大12件、1件10MBまでに制限します。</p>
+        <p>Elementor作成時はFigmaの期限付き画像URLをWordPressメディアライブラリへ取り込みます。公開HTTPS画像だけを許可し、最大60件、1件10MBまでに制限します。</p>
       </section>
       <section>
         <h2>アプリケーション防御</h2>

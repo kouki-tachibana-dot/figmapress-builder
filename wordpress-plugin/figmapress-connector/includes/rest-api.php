@@ -12,7 +12,7 @@ function figmapress_connector_register_rest_routes() {
         array(
             'methods'             => WP_REST_Server::READABLE,
             'callback'            => 'figmapress_connector_rest_status',
-            'permission_callback' => 'figmapress_connector_rest_can_edit_pages',
+            'permission_callback' => 'figmapress_connector_rest_is_authenticated',
         )
     );
     register_rest_route(
@@ -29,6 +29,13 @@ add_action( 'rest_api_init', 'figmapress_connector_register_rest_routes' );
 
 function figmapress_connector_rest_can_edit_pages() {
     return current_user_can( 'edit_pages' );
+}
+
+function figmapress_connector_rest_is_authenticated() {
+    if ( is_user_logged_in() ) {
+        return true;
+    }
+    return new WP_Error( 'figmapress_auth_required', 'Authentication is required.', array( 'status' => 401 ) );
 }
 
 function figmapress_connector_rest_status() {
@@ -128,7 +135,7 @@ function figmapress_connector_sanitize_elementor_elements( $elements, &$count ) 
     $result          = array();
     $allowed_widgets = array( 'heading', 'text-editor', 'button', 'image' );
     foreach ( $elements as $element ) {
-        if ( ! is_array( $element ) || $count >= 300 ) {
+        if ( ! is_array( $element ) || $count >= 1200 ) {
             continue;
         }
         $el_type = isset( $element['elType'] ) ? $element['elType'] : '';
@@ -168,7 +175,7 @@ function figmapress_connector_sanitize_elementor_elements( $elements, &$count ) 
 }
 
 function figmapress_connector_sanitize_elementor_value( $value, $key = '', $depth = 0 ) {
-    if ( $depth > 12 ) {
+    if ( $depth > 24 ) {
         return null;
     }
     if ( is_array( $value ) ) {
@@ -203,25 +210,35 @@ function figmapress_connector_sanitize_elementor_value( $value, $key = '', $dept
 
 function figmapress_connector_localize_elementor_images( &$elements, $post_id, &$warnings, &$imported_media ) {
     foreach ( $elements as &$element ) {
-        if ( 'widget' === $element['elType'] && 'image' === ( isset( $element['widgetType'] ) ? $element['widgetType'] : '' ) ) {
-            $image = isset( $element['settings']['image'] ) && is_array( $element['settings']['image'] ) ? $element['settings']['image'] : array();
-            $url   = isset( $image['url'] ) ? $image['url'] : '';
-            if ( $url && $imported_media < 12 ) {
-                $attachment = figmapress_connector_sideload_image( $url, $post_id, isset( $image['alt'] ) ? $image['alt'] : '' );
-                if ( is_wp_error( $attachment ) ) {
-                    $warnings[] = '画像をメディアライブラリへ保存できませんでした: ' . $attachment->get_error_message();
-                } else {
-                    $element['settings']['image']['id']     = $attachment['id'];
-                    $element['settings']['image']['url']    = $attachment['url'];
-                    $element['settings']['image']['source'] = 'library';
-                    ++$imported_media;
-                }
-            }
+        if ( 'widget' === $element['elType'] && 'image' === ( isset( $element['widgetType'] ) ? $element['widgetType'] : '' ) && isset( $element['settings']['image'] ) ) {
+            figmapress_connector_localize_image_setting( $element['settings']['image'], $post_id, $warnings, $imported_media );
+        }
+        if ( 'container' === $element['elType'] && isset( $element['settings']['background_image'] ) ) {
+            figmapress_connector_localize_image_setting( $element['settings']['background_image'], $post_id, $warnings, $imported_media );
         }
         if ( ! empty( $element['elements'] ) ) {
             figmapress_connector_localize_elementor_images( $element['elements'], $post_id, $warnings, $imported_media );
         }
     }
+}
+
+function figmapress_connector_localize_image_setting( &$image, $post_id, &$warnings, &$imported_media ) {
+    if ( ! is_array( $image ) || $imported_media >= 60 ) {
+        return;
+    }
+    $url = isset( $image['url'] ) ? $image['url'] : '';
+    if ( ! $url ) {
+        return;
+    }
+    $attachment = figmapress_connector_sideload_image( $url, $post_id, isset( $image['alt'] ) ? $image['alt'] : '' );
+    if ( is_wp_error( $attachment ) ) {
+        $warnings[] = '画像をメディアライブラリへ保存できませんでした: ' . $attachment->get_error_message();
+        return;
+    }
+    $image['id']     = $attachment['id'];
+    $image['url']    = $attachment['url'];
+    $image['source'] = 'library';
+    ++$imported_media;
 }
 
 function figmapress_connector_sideload_image( $url, $post_id, $alt ) {

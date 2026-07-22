@@ -1,9 +1,36 @@
 "use client";
 
-import { useState, type ChangeEvent, type FormEvent } from "react";
+import { useState, useSyncExternalStore, type ChangeEvent, type FormEvent } from "react";
 
 type SourceMode = "figma" | "json";
 type OutputTarget = "gutenberg" | "elementor";
+
+const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
+
+function readSessionFigmaToken(): string {
+  if (typeof window === "undefined") return "";
+  return window.sessionStorage.getItem(FIGMA_TOKEN_SESSION_KEY) ?? "";
+}
+
+const tokenListeners = new Set<() => void>();
+
+function subscribeSessionFigmaToken(listener: () => void): () => void {
+  tokenListeners.add(listener);
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === FIGMA_TOKEN_SESSION_KEY) listener();
+  };
+  window.addEventListener("storage", onStorage);
+  return () => {
+    tokenListeners.delete(listener);
+    window.removeEventListener("storage", onStorage);
+  };
+}
+
+function writeSessionFigmaToken(value: string): void {
+  if (value) window.sessionStorage.setItem(FIGMA_TOKEN_SESSION_KEY, value);
+  else window.sessionStorage.removeItem(FIGMA_TOKEN_SESSION_KEY);
+  for (const listener of tokenListeners) listener();
+}
 
 interface ElementorTemplate {
   title: string;
@@ -85,6 +112,7 @@ function previewDocument(content: string): string {
 *{box-sizing:border-box}body{margin:0;background:#f5f3ed;color:#13212a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.65}
 section{padding:64px clamp(24px,7vw,88px);max-width:1100px;margin:0 auto}h1,h2,h3{line-height:1.13;letter-spacing:-.035em}h1{font-size:clamp(36px,7vw,72px);margin:0 0 20px}h2{font-size:clamp(28px,5vw,48px);margin:0 0 28px}h3{font-size:20px}p{color:#53636c}a{display:inline-block;background:#c8ff61;color:#102029;text-decoration:none;font-weight:750;padding:13px 20px;border-radius:999px}
 .wp-block-figmapress-hero{display:grid;grid-template-columns:1fr;align-items:center;gap:48px;min-height:520px}.wp-block-figmapress-hero[data-layout="text-left-image-right"]{grid-template-columns:1.15fr .85fr}.wp-block-figmapress-hero__image img{width:100%;border-radius:24px}.wp-block-figmapress-service-list,.wp-block-figmapress-faq{background:#fff}.wp-block-figmapress-card-grid__items,.wp-block-figmapress-service-list__items{list-style:none;padding:0;display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.wp-block-figmapress-card-grid__item,.wp-block-figmapress-service-list__item{padding:24px;background:#fff;border:1px solid #dbe1df;border-radius:18px}.wp-block-figmapress-faq__items dt{font-weight:750;margin-top:20px}.wp-block-figmapress-faq__items dd{margin:6px 0 0;color:#53636c}.wp-block-figmapress-cta{text-align:center;background:#112832;color:#fff;border-radius:28px}.wp-block-figmapress-cta h2{color:#fff}.wp-block-figmapress-contact{text-align:center}
+.figmapress-figma-preview{container-type:inline-size;overflow:hidden;position:relative;width:100%}.figmapress-figma-preview *{box-sizing:border-box;margin:0;max-width:none}.figmapress-figma-preview img{display:block}
 @media(max-width:720px){section{padding:44px 22px}.wp-block-figmapress-hero{grid-template-columns:1fr;min-height:auto}.wp-block-figmapress-card-grid__items,.wp-block-figmapress-service-list__items{grid-template-columns:1fr}}
 </style></head><body>${content}</body></html>`;
 }
@@ -92,7 +120,11 @@ section{padding:64px clamp(24px,7vw,88px);max-width:1100px;margin:0 auto}h1,h2,h
 export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const [mode, setMode] = useState<SourceMode>("figma");
   const [fileKeyOrUrl, setFileKeyOrUrl] = useState("");
-  const [figmaToken, setFigmaToken] = useState("");
+  const figmaToken = useSyncExternalStore(
+    subscribeSessionFigmaToken,
+    readSessionFigmaToken,
+    () => "",
+  );
   const [jsonText, setJsonText] = useState(sampleJson);
   const [output, setOutput] = useState<ConversionResult | null>(null);
   const [converting, setConverting] = useState(false);
@@ -102,13 +134,17 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const [wpError, setWpError] = useState("");
   const [wpResult, setWpResult] = useState<WordPressResult | null>(null);
   const [wpStatus, setWpStatus] = useState<WordPressStatus | null>(null);
-  const [wpTarget, setWpTarget] = useState<OutputTarget>("gutenberg");
+  const [wpTarget, setWpTarget] = useState<OutputTarget>("elementor");
   const [baseUrl, setBaseUrl] = useState("");
   const [username, setUsername] = useState("");
   const [applicationPassword, setApplicationPassword] = useState("");
   const [confirmed, setConfirmed] = useState(false);
 
   const srcDoc = output ? previewDocument(output.previewHtml) : "";
+
+  function updateFigmaToken(value: string) {
+    writeSessionFigmaToken(value);
+  }
 
   async function convert(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -144,7 +180,6 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "変換に失敗しました。");
     } finally {
-      if (mode === "figma") setFigmaToken("");
       setConverting(false);
     }
   }
@@ -235,7 +270,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.3 live</span>
+          <span className="status-pill"><i /> v0.4 live</span>
         </nav>
       </header>
 
@@ -261,7 +296,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
             </button>
           </div>
           <div className="trust-row">
-            <span>✓ 認証情報を保存しない</span>
+            <span>✓ サーバーに認証情報を保存しない</span>
             <span>✓ 下書きのみ作成</span>
             <span>✓ 無料・登録不要</span>
           </div>
@@ -336,16 +371,21 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                 </label>
                 <label className="field field--wide">
                   <span>Figma Personal Access Token</span>
-                  <input
-                    autoComplete="off"
-                    onChange={(event) => setFigmaToken(event.target.value)}
-                    placeholder="figd_…"
-                    required
-                    type="password"
-                    value={figmaToken}
-                  />
+                  <div className="token-input-row">
+                    <input
+                      autoComplete="off"
+                      onChange={(event) => updateFigmaToken(event.target.value)}
+                      placeholder="figd_…"
+                      required
+                      type="password"
+                      value={figmaToken}
+                    />
+                    {figmaToken && (
+                      <button onClick={() => updateFigmaToken("")} type="button">消去</button>
+                    )}
+                  </div>
                   <small>
-                    file_content:read 権限が必要です。トークンは変換後すぐ画面から消去されます。
+                    file_content:read 権限が必要です。このタブ内だけに保持し、タブを閉じるか「消去」で削除されます。
                   </small>
                 </label>
               </div>
@@ -370,15 +410,15 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
             <details className="naming-guide">
               <summary>対応するFigmaレイヤー名を確認</summary>
               <p>
-                <code>section/hero</code> などの接頭辞付きレイヤーを推奨します。
-                Hero、Services、Features、FAQ、CTA、Contactのような意味が分かる名前も認識します。
-                特定フレームだけ変換する場合は、Figmaの「選択範囲へのリンク」を貼り付けてください。
+                Elementor高忠実度変換ではレイヤー名の変更は不要です。
+                特定フレームの「選択範囲へのリンク」を貼り付けてください。
+                Gutenberg専用ブロックでは <code>section/hero</code> などの意味レイヤー名を利用します。
               </p>
             </details>
 
             {error && <div className="alert alert--error" role="alert">{error}</div>}
             <div className="form-footer">
-              <p><span className="lock">⌁</span> 入力データと認証情報は保存・学習利用されません。</p>
+              <p><span className="lock">⌁</span> サーバー保存なし。Figmaトークンはこのタブだけに保持されます。</p>
               <button className="button button--primary button--submit" disabled={converting} type="submit">
                 {converting ? <><span className="spinner" /> 変換中…</> : <>WordPress用に変換 <span>→</span></>}
               </button>
@@ -451,11 +491,11 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                 <legend>編集方式</legend>
                 <label className={wpTarget === "gutenberg" ? "is-active" : ""}>
                   <input checked={wpTarget === "gutenberg"} name="target" onChange={() => setWpTarget("gutenberg")} type="radio" />
-                  <span><strong>Gutenberg</strong><small>専用ブロックとして編集</small></span>
+                  <span><strong>Gutenberg</strong><small>6種の意味ブロックへ簡易変換</small></span>
                 </label>
                 <label className={wpTarget === "elementor" ? "is-active" : ""}>
                   <input checked={wpTarget === "elementor"} name="target" onChange={() => setWpTarget("elementor")} type="radio" />
-                  <span><strong>Elementor</strong><small>ネイティブWidgetとして編集</small></span>
+                  <span><strong>Elementor（推奨）</strong><small>Figmaレイアウト・文字・画像を保持</small></span>
                 </label>
               </fieldset>
               <div className="form-grid form-grid--three">
@@ -551,13 +591,13 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <section className="scope-strip">
         <div><span>READY</span><strong>Gutenberg blocks</strong><p>編集可能な6セクション</p></div>
         <div><span>READY</span><strong>Elementor documents</strong><p>Widget化・画像永続化</p></div>
-        <div><span>SECURITY</span><strong>No credential storage</strong><p>HTTPS・下書き限定</p></div>
+        <div><span>SECURITY</span><strong>Tab-only token</strong><p>サーバー保存なし・下書き限定</p></div>
       </section>
 
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.3</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.4</span></div>
       </footer>
     </main>
   );

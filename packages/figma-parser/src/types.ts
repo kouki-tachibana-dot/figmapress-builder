@@ -1,28 +1,79 @@
-/**
- * Minimal Figma-shaped types used by the mock parser.
- * Real Figma API responses are far richer; we only consume what the LP
- * template convention requires (section/* frames with named children).
- */
+/** Figma REST fields consumed by both the semantic and high-fidelity paths. */
+
+export interface FigmaBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface FigmaColor {
+  r: number;
+  g: number;
+  b: number;
+  a?: number;
+}
+
+export interface FigmaPaint {
+  type: string;
+  color?: FigmaColor;
+  opacity?: number;
+  imageRef?: string;
+  scaleMode?: string;
+  visible?: boolean;
+}
+
+export interface FigmaTypeStyle {
+  fontFamily?: string;
+  fontSize?: number;
+  fontWeight?: number;
+  italic?: boolean;
+  letterSpacing?: number;
+  lineHeightPx?: number;
+  textAlignHorizontal?: "LEFT" | "CENTER" | "RIGHT" | "JUSTIFIED";
+  textAlignVertical?: "TOP" | "CENTER" | "BOTTOM";
+  textCase?: "ORIGINAL" | "UPPER" | "LOWER" | "TITLE" | "SMALL_CAPS" | "SMALL_CAPS_FORCED";
+  textDecoration?: "NONE" | "UNDERLINE" | "STRIKETHROUGH";
+  fills?: FigmaPaint[];
+}
+
+export interface FigmaEffect {
+  type: string;
+  visible?: boolean;
+  color?: FigmaColor;
+  offset?: { x: number; y: number };
+  radius?: number;
+  spread?: number;
+}
 
 export interface FigmaNodeBase {
   id: string;
   name: string;
   type: string;
   characters?: string;
-  fills?: Array<{
-    type: string;
-    color?: { r: number; g: number; b: number; a?: number };
-    imageRef?: string;
-    visible?: boolean;
-  }>;
-  style?: {
-    fontFamily?: string;
-    fontSize?: number;
-    fontWeight?: number;
-    lineHeightPx?: number;
-  };
+  visible?: boolean;
+  opacity?: number;
+  rotation?: number;
+  absoluteBoundingBox?: FigmaBounds;
+  absoluteRenderBounds?: FigmaBounds | null;
+  fills?: FigmaPaint[];
+  strokes?: FigmaPaint[];
+  strokeWeight?: number;
+  cornerRadius?: number;
+  rectangleCornerRadii?: [number, number, number, number];
+  effects?: FigmaEffect[];
+  clipsContent?: boolean;
+  style?: FigmaTypeStyle;
+  characterStyleOverrides?: number[];
+  styleOverrideTable?: Record<string, FigmaTypeStyle>;
   styles?: Record<string, string>;
   layoutMode?: "HORIZONTAL" | "VERTICAL" | "NONE";
+  primaryAxisAlignItems?: string;
+  counterAxisAlignItems?: string;
+  primaryAxisSizingMode?: string;
+  counterAxisSizingMode?: string;
+  layoutAlign?: string;
+  layoutGrow?: number;
   itemSpacing?: number;
   paddingTop?: number;
   paddingRight?: number;

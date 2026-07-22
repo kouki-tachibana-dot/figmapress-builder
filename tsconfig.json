@@ -12,6 +12,7 @@
     "allowSyntheticDefaultImports": true,
     "isolatedModules": true,
     "declaration": true,
+    "types": ["node"],
     "baseUrl": ".",
     "paths": {
       "@figmapress/blueprint": ["packages/blueprint/src/index.ts"],

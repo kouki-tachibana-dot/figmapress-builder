@@ -12,8 +12,9 @@ tab. Include the affected route, reproduction steps, and expected impact.
 
 ## Security model
 
-- Figma and WordPress credentials are processed in memory for one request and
-  are never written to application storage.
+- Credentials are never written to server-side application storage. The Figma
+  token can be retained only in the current tab's session storage; WordPress
+  credentials are processed in memory for one request.
 - Conversion and WordPress responses use `Cache-Control: no-store`.
 - WordPress requests require HTTPS and reject loopback, private, link-local,
   multicast, and reserved network destinations.
@@ -23,7 +24,7 @@ tab. Include the affected route, reproduction steps, and expected impact.
 - Elementor creation is exposed only by FigmaPress Connector, requires an
   authenticated user with `edit_pages`, validates an allowlist of core widget
   types, and sanitizes all nested settings before writing private post meta.
-- Remote Elementor images are limited to public HTTPS URLs, 12 files, and
+- Remote Elementor images are limited to public HTTPS URLs, 60 files, and
   10 MB per file before they are added to the Media Library.
 - Request body limits, timeouts, same-origin checks, validation, and
   best-effort per-instance rate limits are enabled.

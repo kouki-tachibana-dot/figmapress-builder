@@ -218,6 +218,10 @@ a { color: inherit; }
   transition: border .15s ease, box-shadow .15s ease, background .15s ease;
 }
 .field input { height: 53px; padding: 0 16px; }
+.token-input-row { align-items: stretch; display: flex; gap: 8px; }
+.token-input-row input { flex: 1 1 auto; min-width: 0; }
+.token-input-row button { background: #eef1ed; border: 1px solid #cfd6d2; border-radius: 12px; color: #52636a; cursor: pointer; font-size: 10px; font-weight: 800; padding: 0 15px; }
+.token-input-row button:hover { background: #e3e8e4; color: var(--ink); }
 .field input:focus, .json-field textarea:focus { background: #fff; border-color: #7da63d; box-shadow: 0 0 0 4px rgba(185,231,89,.18); }
 .field small { color: #7b878b; font-size: 10px; }
 
