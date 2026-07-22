@@ -49,6 +49,27 @@ test("browser connection keeps authentication failures out of the server fallbac
   );
 });
 
+test("browser network failures are logged without WordPress credentials", async (context) => {
+  const logs: unknown[][] = [];
+  context.mock.method(globalThis, "fetch", async () => {
+    throw new TypeError("Failed to fetch");
+  });
+  context.mock.method(console, "error", (...args: unknown[]) => {
+    logs.push(args);
+  });
+
+  await assert.rejects(
+    probeWordPressDirect(config),
+    (error: unknown) => error instanceof WordPressDirectError && error.kind === "network",
+  );
+
+  assert.deepEqual(logs, [[
+    "[wordpress-direct] Browser request failed",
+    { name: "TypeError", message: "Failed to fetch" },
+  ]]);
+  assert.doesNotMatch(JSON.stringify(logs), /test application password/);
+});
+
 test("browser Elementor creation checks the slug and creates only a draft", async (context) => {
   const requests: Array<{ url: string; body?: string }> = [];
   context.mock.method(globalThis, "fetch", async (input, init) => {
