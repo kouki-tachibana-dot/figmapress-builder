@@ -121,6 +121,8 @@ test("browser Elementor creation checks the slug and creates only a draft", asyn
 
   assert.equal(result.status, "draft");
   assert.equal(result.target, "elementor");
+  assert.doesNotMatch(requests[0]?.url ?? "", /status=any/);
+  assert.match(requests[0]?.url ?? "", /status=publish%2Cfuture%2Cdraft%2Cpending%2Cprivate/);
   assert.match(requests[1]?.url ?? "", /figmapress\/v1\/elementor\/pages$/);
   assert.match(requests[1]?.body ?? "", /"status":"draft"/);
 });

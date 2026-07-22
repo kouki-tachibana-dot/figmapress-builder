@@ -111,6 +111,8 @@ test("Elementor draft creation uses the Connector endpoint and remains draft", a
   assert.equal(result.status, "draft");
   assert.equal(result.target, "elementor");
   assert.equal(result.importedMedia, 1);
+  assert.doesNotMatch(requests[0]?.url ?? "", /status=any/);
+  assert.match(requests[0]?.url ?? "", /status=publish%2Cfuture%2Cdraft%2Cpending%2Cprivate/);
   assert.match(requests[1]?.url ?? "", /figmapress\/v1\/elementor\/pages/);
   assert.match(requests[1]?.body ?? "", /"status":"draft"/);
 });
