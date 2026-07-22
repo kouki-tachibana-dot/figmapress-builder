@@ -86,6 +86,8 @@ export function normalizeSlug(blueprintSlug: string): string {
   return blueprintSlug.replace(/^\/+|\/+$/g, "").replace(/\//g, "-") || "home";
 }
 
+const PAGE_STATUS_FILTER = "publish,future,draft,pending,private";
+
 function authHeader(cfg: WpConfig): string {
   const raw = `${cfg.username}:${cfg.applicationPassword}`;
   return `Basic ${Buffer.from(raw, "utf-8").toString("base64")}`;
@@ -191,7 +193,7 @@ export async function probeWordPressConnection(
 async function slugExists(cfg: WpConfig, slug: string): Promise<boolean> {
   const res = await wpFetch(
     cfg,
-    `/wp/v2/pages?slug=${encodeURIComponent(slug)}&status=any&per_page=1&context=edit`,
+    `/wp/v2/pages?slug=${encodeURIComponent(slug)}&status=${encodeURIComponent(PAGE_STATUS_FILTER)}&per_page=1&context=edit`,
   );
   if (!res.ok) return false;
   const data = (await res.json()) as unknown[];

@@ -203,10 +203,12 @@ function normalizeSlug(value: string): string {
   return value.replace(/^\/+|\/+$/g, "").replace(/\//g, "-") || "home";
 }
 
+const PAGE_STATUS_FILTER = "publish,future,draft,pending,private";
+
 async function slugExists(config: BrowserWordPressConfig, slug: string): Promise<boolean> {
   const response = await directFetch(
     config,
-    `/wp/v2/pages?slug=${encodeURIComponent(slug)}&status=any&per_page=1&context=edit`,
+    `/wp/v2/pages?slug=${encodeURIComponent(slug)}&status=${encodeURIComponent(PAGE_STATUS_FILTER)}&per_page=1&context=edit`,
   );
   const pages = await responseJson<unknown[]>(response);
   return Array.isArray(pages) && pages.length > 0;
