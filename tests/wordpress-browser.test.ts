@@ -38,15 +38,22 @@ test("browser connection probes the Connector directly with Basic auth", async (
 });
 
 test("browser connection keeps authentication failures out of the server fallback", async (context) => {
+  const warnings: unknown[][] = [];
   context.mock.method(globalThis, "fetch", async () =>
     Response.json({ code: "rest_not_logged_in" }, { status: 401 }),
   );
+  context.mock.method(console, "warn", (...args: unknown[]) => {
+    warnings.push(args);
+  });
 
   await assert.rejects(
     probeWordPressDirect(config),
     (error: unknown) =>
       error instanceof WordPressDirectError && error.kind === "auth" && error.status === 401,
   );
+  assert.equal(warnings.length, 1);
+  assert.match(JSON.stringify(warnings), /"status":401/);
+  assert.doesNotMatch(JSON.stringify(warnings), /test application password/);
 });
 
 test("browser connection retries with the Connector header when a host strips Authorization", async (context) => {
