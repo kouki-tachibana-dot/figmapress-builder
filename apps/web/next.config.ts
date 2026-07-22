@@ -21,7 +21,8 @@ const securityHeaders = [
       `script-src 'self' 'unsafe-inline'${isDevelopment ? " 'unsafe-eval'" : ""}`,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: https:",
-      "connect-src 'self'",
+      // Users connect directly from this page to their own HTTPS WordPress site.
+      "connect-src 'self' https:",
       "frame-src 'self' blob:",
       "upgrade-insecure-requests",
     ].join("; "),
