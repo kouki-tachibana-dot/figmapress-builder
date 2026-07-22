@@ -201,19 +201,19 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
         return $post_id;
     }
 
-    $warnings       = array();
-    $imported_media = 0;
-    figmapress_connector_localize_elementor_images( $content, $post_id, $warnings, $imported_media );
     $page_settings = isset( $template['page_settings'] ) && is_array( $template['page_settings'] )
         ? figmapress_connector_sanitize_elementor_value( $template['page_settings'] )
         : array();
 
-    update_post_meta( $post_id, '_elementor_edit_mode', 'builder' );
-    update_post_meta( $post_id, '_elementor_template_type', 'wp-page' );
-    update_post_meta( $post_id, '_elementor_version', defined( 'ELEMENTOR_VERSION' ) ? ELEMENTOR_VERSION : '' );
-    update_post_meta( $post_id, '_elementor_data', wp_slash( wp_json_encode( $content ) ) );
-    update_post_meta( $post_id, '_elementor_page_settings', $page_settings );
-    update_post_meta( $post_id, '_wp_page_template', $page_template );
+    // Persist the complete editable document before any remote image work.
+    // Hosts can terminate slow downloads; the page must never be left empty.
+    figmapress_connector_store_elementor_document( $post_id, $content, $page_settings, $page_template );
+
+    $warnings       = array();
+    $imported_media = 0;
+    $media_deadline = microtime( true ) + 12;
+    figmapress_connector_localize_elementor_images( $content, $post_id, $warnings, $imported_media, $media_deadline );
+    figmapress_connector_store_elementor_document( $post_id, $content, $page_settings, $page_template );
     figmapress_connector_clear_elementor_cache( $post_id );
 
     return rest_ensure_response(
@@ -229,6 +229,15 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
             'warnings'      => $warnings,
         )
     );
+}
+
+function figmapress_connector_store_elementor_document( $post_id, $content, $page_settings, $page_template ) {
+    update_post_meta( $post_id, '_elementor_edit_mode', 'builder' );
+    update_post_meta( $post_id, '_elementor_template_type', 'wp-page' );
+    update_post_meta( $post_id, '_elementor_version', defined( 'ELEMENTOR_VERSION' ) ? ELEMENTOR_VERSION : '' );
+    update_post_meta( $post_id, '_elementor_data', wp_slash( wp_json_encode( $content ) ) );
+    update_post_meta( $post_id, '_elementor_page_settings', $page_settings );
+    update_post_meta( $post_id, '_wp_page_template', $page_template );
 }
 
 function figmapress_connector_sanitize_elementor_elements( $elements, &$count ) {
@@ -337,21 +346,32 @@ function figmapress_connector_allow_layout_css( $properties ) {
     );
 }
 
-function figmapress_connector_localize_elementor_images( &$elements, $post_id, &$warnings, &$imported_media ) {
+function figmapress_connector_localize_elementor_images( &$elements, $post_id, &$warnings, &$imported_media, $deadline ) {
     foreach ( $elements as &$element ) {
+        if ( microtime( true ) >= $deadline ) {
+            figmapress_connector_add_media_budget_warning( $warnings );
+            return;
+        }
         if ( 'widget' === $element['elType'] && 'image' === ( isset( $element['widgetType'] ) ? $element['widgetType'] : '' ) && isset( $element['settings']['image'] ) ) {
-            figmapress_connector_localize_image_setting( $element['settings']['image'], $post_id, $warnings, $imported_media );
+            figmapress_connector_localize_image_setting( $element['settings']['image'], $post_id, $warnings, $imported_media, $deadline );
         }
         if ( 'container' === $element['elType'] && isset( $element['settings']['background_image'] ) ) {
-            figmapress_connector_localize_image_setting( $element['settings']['background_image'], $post_id, $warnings, $imported_media );
+            figmapress_connector_localize_image_setting( $element['settings']['background_image'], $post_id, $warnings, $imported_media, $deadline );
         }
         if ( ! empty( $element['elements'] ) ) {
-            figmapress_connector_localize_elementor_images( $element['elements'], $post_id, $warnings, $imported_media );
+            figmapress_connector_localize_elementor_images( $element['elements'], $post_id, $warnings, $imported_media, $deadline );
         }
     }
 }
 
-function figmapress_connector_localize_image_setting( &$image, $post_id, &$warnings, &$imported_media ) {
+function figmapress_connector_add_media_budget_warning( &$warnings ) {
+    $message = '画像の保存は時間上限に達したため一部を元URLのまま保持しました。';
+    if ( ! in_array( $message, $warnings, true ) ) {
+        $warnings[] = $message;
+    }
+}
+
+function figmapress_connector_localize_image_setting( &$image, $post_id, &$warnings, &$imported_media, $deadline ) {
     if ( ! is_array( $image ) || $imported_media >= 60 ) {
         return;
     }
@@ -359,7 +379,17 @@ function figmapress_connector_localize_image_setting( &$image, $post_id, &$warni
     if ( ! $url ) {
         return;
     }
-    $attachment = figmapress_connector_sideload_image( $url, $post_id, isset( $image['alt'] ) ? $image['alt'] : '' );
+    $remaining = (int) floor( $deadline - microtime( true ) );
+    if ( $remaining < 1 ) {
+        figmapress_connector_add_media_budget_warning( $warnings );
+        return;
+    }
+    $attachment = figmapress_connector_sideload_image(
+        $url,
+        $post_id,
+        isset( $image['alt'] ) ? $image['alt'] : '',
+        min( 6, $remaining )
+    );
     if ( is_wp_error( $attachment ) ) {
         $warnings[] = '画像をメディアライブラリへ保存できませんでした: ' . $attachment->get_error_message();
         return;
@@ -370,7 +400,7 @@ function figmapress_connector_localize_image_setting( &$image, $post_id, &$warni
     ++$imported_media;
 }
 
-function figmapress_connector_sideload_image( $url, $post_id, $alt ) {
+function figmapress_connector_sideload_image( $url, $post_id, $alt, $download_timeout = 6 ) {
     if ( 0 !== strpos( $url, 'https://' ) || ! wp_http_validate_url( $url ) ) {
         return new WP_Error( 'figmapress_invalid_image_url', 'The image URL is not a public HTTPS URL.' );
     }
@@ -378,7 +408,7 @@ function figmapress_connector_sideload_image( $url, $post_id, $alt ) {
     require_once ABSPATH . 'wp-admin/includes/image.php';
     require_once ABSPATH . 'wp-admin/includes/media.php';
 
-    $tmp = download_url( $url, 20 );
+    $tmp = download_url( $url, max( 1, (int) $download_timeout ) );
     if ( is_wp_error( $tmp ) ) {
         return $tmp;
     }
