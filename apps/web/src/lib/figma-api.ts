@@ -12,6 +12,7 @@ export interface FigmaFetchResult {
   file: MockFigmaFile;
   fileName: string;
   imageUrls: Record<string, string>;
+  renderedNodeUrls: Record<string, string>;
   warnings: string[];
 }
 
@@ -160,6 +161,111 @@ function normalizeFigmaFile(data: RawFigmaFile): MockFigmaFile {
   };
 }
 
+const FIGMA_RENDERABLE_TYPES = new Set([
+  "BOOLEAN_OPERATION",
+  "ELLIPSE",
+  "LINE",
+  "POLYGON",
+  "STAR",
+  "VECTOR",
+]);
+const FIGMA_RENDER_GROUP_TYPES = new Set([
+  "COMPONENT",
+  "COMPONENT_SET",
+  "FRAME",
+  "GROUP",
+  "INSTANCE",
+]);
+const MAX_RENDERED_NODES = 120;
+
+function hasText(node: FigmaNode): boolean {
+  if (node.type === "TEXT" && node.characters?.trim()) return true;
+  return (node.children ?? []).some(hasText);
+}
+
+function hasOwnImageFill(node: FigmaNode): boolean {
+  return node.fills?.some((fill) => fill.visible !== false && fill.type === "IMAGE") === true;
+}
+
+function hasImageFill(node: FigmaNode): boolean {
+  if (hasOwnImageFill(node)) return true;
+  return (node.children ?? []).some(hasImageFill);
+}
+
+function hasComplexVisual(node: FigmaNode): boolean {
+  if (FIGMA_RENDERABLE_TYPES.has(node.type) || hasImageFill(node)) return true;
+  return (node.children ?? []).some(hasComplexVisual);
+}
+
+/**
+ * Export the highest text-free visual subtree as one image. Text stays as
+ * native Elementor widgets, while masks, vectors and Figma image crops keep
+ * their exact appearance without exploding the document into tiny paths.
+ */
+export function collectRenderedNodeIds(document: FigmaNode): string[] {
+  const ids: string[] = [];
+  const visit = (node: FigmaNode): void => {
+    if (node.visible === false || ids.length >= MAX_RENDERED_NODES) return;
+    const bounds = node.absoluteBoundingBox;
+    const renderGroup = FIGMA_RENDER_GROUP_TYPES.has(node.type)
+      && !hasText(node)
+      && hasComplexVisual(node);
+    const renderLeaf = FIGMA_RENDERABLE_TYPES.has(node.type) || hasOwnImageFill(node);
+    if (bounds && bounds.width > 0 && bounds.height > 0 && (renderGroup || renderLeaf)) {
+      ids.push(node.id);
+      return;
+    }
+    for (const child of node.children ?? []) visit(child);
+  };
+  visit(document);
+  return ids;
+}
+
+async function fetchRenderedNodeUrls(
+  key: string,
+  document: FigmaNode,
+  init: RequestInit,
+  warnings: string[],
+): Promise<Record<string, string>> {
+  const ids = collectRenderedNodeIds(document);
+  if (!ids.length) return {};
+  if (ids.length === MAX_RENDERED_NODES) {
+    warnings.push(`複雑な画像・ベクターは先頭${MAX_RENDERED_NODES}件まで取得しました。`);
+  }
+
+  const batches: string[][] = [];
+  for (let index = 0; index < ids.length; index += 35) {
+    batches.push(ids.slice(index, index + 35));
+  }
+
+  try {
+    const results = await Promise.all(batches.map(async (batch) => {
+      const query = new URLSearchParams({
+        ids: batch.join(","),
+        format: "png",
+        scale: "1",
+        use_absolute_bounds: "true",
+      });
+      const response = await fetch(
+        `https://api.figma.com/v1/images/${encodeURIComponent(key)}?${query.toString()}`,
+        init,
+      );
+      if (!response.ok) return {};
+      const data = await readLimitedJson(response);
+      if (!isRecord(data) || !isRecord(data.images)) return {};
+      return Object.fromEntries(
+        Object.entries(data.images).filter(
+          (entry): entry is [string, string] => typeof entry[1] === "string",
+        ),
+      );
+    }));
+    return Object.assign({}, ...results) as Record<string, string>;
+  } catch {
+    warnings.push("Figmaのベクター・マスク画像を取得できなかったため、一部を簡略化しました。");
+    return {};
+  }
+}
+
 export async function fetchFigmaFile(
   fileKeyOrUrl: string,
   token: string,
@@ -217,10 +323,18 @@ export async function fetchFigmaFile(
     warnings.push("Figma画像の取得がタイムアウトしたため、画像なしで続行しました。");
   }
 
+  const renderedNodeUrls = await fetchRenderedNodeUrls(
+    key,
+    (data as RawFigmaFile).document,
+    init,
+    warnings,
+  );
+
   return {
     file: normalizeFigmaFile(data as RawFigmaFile),
     fileName: typeof data.name === "string" ? data.name : "FigmaPress Page",
     imageUrls,
+    renderedNodeUrls,
     warnings,
   };
 }

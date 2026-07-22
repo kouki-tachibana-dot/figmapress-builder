@@ -14,6 +14,10 @@ import {
 } from "@figmapress/figma-parser";
 import {
   ElementorExporter,
+  FigmaElementorExporter,
+  figmaLayoutSectionNames,
+  hasFigmaLayout,
+  renderFigmaPreview,
   type ElementorTemplate,
 } from "@figmapress/elementor-renderer";
 import { tokensToThemeJson } from "@figmapress/token-pipeline";
@@ -37,26 +41,67 @@ export async function convertFile(
   options: MapOptions = {},
   imageUrls: Record<string, string> = {},
   initialWarnings: string[] = [],
+  renderedNodeUrls: Record<string, string> = {},
 ): Promise<ConversionOutput> {
-  const mapped = mapFigmaToBlueprint(file, options);
+  const fidelityLayout = hasFigmaLayout(file);
+  let mapped;
+  try {
+    mapped = mapFigmaToBlueprint(file, options);
+  } catch (error) {
+    if (!fidelityLayout) throw error;
+    const title = options.pageTitle ?? options.siteName ?? file.document.name ?? "FigmaPress Page";
+    mapped = {
+      blueprint: {
+        site: { name: options.siteName ?? title, type: "landing_page" as const, language: options.language ?? "ja" },
+        tokens: { colors: [], typography: [], spacing: [] },
+        pages: [{
+          title,
+          slug: options.pageSlug ?? "/",
+          template: "front-page",
+          sections: [],
+          seo: { title: options.seoTitle ?? title, description: options.seoDescription ?? "" },
+        }],
+        warnings: [],
+      },
+      warnings: ["Gutenberg用の意味セクションは見つかりませんでした。Elementor高忠実度変換は利用できます。"],
+    };
+  }
   resolveImageUrls(mapped.blueprint, imageUrls);
   const blueprint = assertBlueprint(mapped.blueprint);
   const exported = await new GutenbergExporter().export(blueprint);
-  const elementorTemplate = new ElementorExporter().toTemplate(blueprint);
   const page = blueprint.pages[0];
-  const warnings = [...new Set([...initialWarnings, ...mapped.warnings, ...exported.warnings])];
+  const fidelityAssets = { imageUrls, renderedNodeUrls };
+  const elementorTemplate = fidelityLayout
+    ? new FigmaElementorExporter().toTemplate(
+        file,
+        page?.title ?? blueprint.site.name,
+        fidelityAssets,
+      )
+    : new ElementorExporter().toTemplate(blueprint);
+  const fidelityPreview = fidelityLayout ? renderFigmaPreview(file, fidelityAssets) : null;
+  const warnings = [...new Set([
+    ...initialWarnings,
+    ...mapped.warnings,
+    ...exported.warnings,
+    ...(fidelityLayout
+      ? ["Elementor出力はFigmaの座標・文字スタイル・画像を直接保持する高忠実度モードです。"]
+      : []),
+  ])];
+  const layoutSections = fidelityLayout ? figmaLayoutSectionNames(file) : [];
 
   return {
     blueprint,
     pageContent: exported.pageContent ?? "",
     elementorTemplate,
-    previewHtml: page ? renderPreviewPage(page) : "",
+    previewHtml: fidelityPreview ?? (page ? renderPreviewPage(page) : ""),
     themeJson: tokensToThemeJson(blueprint.tokens),
     warnings,
     summary: {
       pageTitle: page?.title ?? "無題",
-      sectionCount: page?.sections.length ?? 0,
-      sectionTypes: page?.sections.map((section) => section.type) ?? [],
+      sectionCount: layoutSections.length || page?.sections.length || 0,
+      sectionTypes: layoutSections.length
+        ? layoutSections
+        : page?.sections.map((section) => section.type) ?? [],
     },
   };
 }

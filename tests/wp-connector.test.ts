@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   createElementorDraftPage,
   probeWordPressConnection,
+  WpRequestError,
   type WpConfig,
 } from "@figmapress/wp-connector";
 
@@ -21,7 +22,7 @@ test("WordPress connection probe reports Connector and Elementor versions", asyn
       return Response.json({ id: 7, name: "Editor", capabilities: { edit_pages: true } });
     }
     return Response.json({
-      connectorVersion: "0.3.0",
+      connectorVersion: "0.4.0",
       wordpressVersion: "7.0.1",
       canEditPages: true,
       elementor: { active: true, version: "3.30.0" },
@@ -67,4 +68,25 @@ test("Elementor draft creation uses the Connector endpoint and remains draft", a
   assert.equal(result.importedMedia, 1);
   assert.match(requests[1]?.url ?? "", /figmapress\/v1\/elementor\/pages/);
   assert.match(requests[1]?.body ?? "", /"status":"draft"/);
+});
+
+test("permission errors are not mislabeled as invalid credentials", async (context) => {
+  context.mock.method(globalThis, "fetch", async () =>
+    new Response(JSON.stringify({ message: "You cannot edit pages." }), { status: 403 }),
+  );
+
+  await assert.rejects(
+    createElementorDraftPage(config, {
+      title: "Forbidden",
+      slug: "/",
+      template: {
+        title: "Forbidden",
+        type: "page",
+        version: "0.4",
+        page_settings: {},
+        content: [{ id: "1234abcd", elType: "container", isInner: false, settings: {}, elements: [] }],
+      },
+    }),
+    (error: unknown) => error instanceof WpRequestError && error.status === 403,
+  );
 });

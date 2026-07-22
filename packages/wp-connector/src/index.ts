@@ -109,7 +109,7 @@ async function wpFetch(
     redirect: "error",
     signal: init.signal ?? AbortSignal.timeout(15_000),
   });
-  if (res.status === 401 || res.status === 403) {
+  if (res.status === 401) {
     const body = await res.text();
     throw new WpAuthError(
       `WordPress authentication failed (${res.status}). Verify WORDPRESS_USERNAME and WORDPRESS_APPLICATION_PASSWORD.\n${body}`,

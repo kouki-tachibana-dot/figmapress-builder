@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { fetchFigmaFile } from "../apps/web/src/lib/figma-api.ts";
+import { collectRenderedNodeIds, fetchFigmaFile } from "../apps/web/src/lib/figma-api.ts";
 
 test("real Figma file shape is normalized into parser tokens", async (context) => {
   const requested: string[] = [];
@@ -56,4 +56,38 @@ test("real Figma file shape is normalized into parser tokens", async (context) =
   assert.equal(result.file.styles?.typography?.[0]?.fontFamily, "Inter");
   assert.equal(result.file.styles?.spacing?.[0]?.size, "24px");
   assert.match(requested[0] ?? "", /ids=2%3A2/);
+});
+
+test("complex visual groups are rendered once while editable text stays native", () => {
+  const ids = collectRenderedNodeIds({
+    id: "0:0",
+    name: "Document",
+    type: "DOCUMENT",
+    children: [{
+      id: "1:0",
+      name: "Artwork",
+      type: "GROUP",
+      absoluteBoundingBox: { x: 0, y: 0, width: 300, height: 200 },
+      children: [{
+        id: "2:0",
+        name: "Vector",
+        type: "VECTOR",
+        absoluteBoundingBox: { x: 0, y: 0, width: 300, height: 200 },
+      }],
+    }, {
+      id: "1:1",
+      name: "Text group",
+      type: "GROUP",
+      absoluteBoundingBox: { x: 0, y: 220, width: 300, height: 100 },
+      children: [{
+        id: "2:1",
+        name: "Editable",
+        type: "TEXT",
+        characters: "編集できる文字",
+        absoluteBoundingBox: { x: 0, y: 220, width: 300, height: 50 },
+      }],
+    }],
+  });
+
+  assert.deepEqual(ids, ["1:0"]);
 });

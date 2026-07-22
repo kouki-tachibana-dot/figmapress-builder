@@ -52,6 +52,7 @@ export async function POST(request: Request): Promise<Response> {
         { siteName: fetched.fileName, pageTitle: fetched.fileName },
         fetched.imageUrls,
         fetched.warnings,
+        fetched.renderedNodeUrls,
       );
     } else {
       try {
