@@ -3,7 +3,7 @@
 Figma の構造を、WordPress で扱える Gutenberg ブロックまたはElementorページへ変換する
 オープンソースの Web アプリ＋CLIです。
 
-## v0.4 — Figma高忠実度Elementor変換
+## v0.4.1 — Figma高忠実度Elementor変換
 
 **Web版:** [https://figmapress-builder.vercel.app](https://figmapress-builder.vercel.app)
 
@@ -17,6 +17,8 @@ Figma の構造を、WordPress で扱える Gutenberg ブロックまたはEleme
 - HTTPSのWordPressサイトへGutenberg／Elementor下書き固定ページを作成
 - Figma画像をWordPressメディアライブラリへ取り込み、期限切れを防止
 - Figmaの座標・サイズ・文字スタイルをElementorへ直接反映
+- 1920px基準の文字・高さ・画像を画面幅へ連続追従し、日本語の縦書き化と位置ずれを防止
+- Figmaの折返し指定、混在文字サイズ、縦位置、回転を保持
 - 写真・マスク・ベクターをFigmaレンダーAPIから取得し、文字は編集可能なWidgetとして保持
 - WordPress Plugin／Theme ZIPのダウンロード
 

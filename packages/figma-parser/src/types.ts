@@ -54,6 +54,7 @@ export interface FigmaNodeBase {
   visible?: boolean;
   opacity?: number;
   rotation?: number;
+  textAutoResize?: "NONE" | "WIDTH_AND_HEIGHT" | "HEIGHT" | "TRUNCATE";
   absoluteBoundingBox?: FigmaBounds;
   absoluteRenderBounds?: FigmaBounds | null;
   fills?: FigmaPaint[];
