@@ -96,12 +96,11 @@ test("browser network failures are logged without WordPress credentials", async 
   assert.doesNotMatch(JSON.stringify(logs), /test application password/);
 });
 
-test("browser Elementor creation checks the slug and creates only a draft", async (context) => {
+test("browser Elementor creation sends one draft request without a status preflight", async (context) => {
   const requests: Array<{ url: string; body?: string }> = [];
   context.mock.method(globalThis, "fetch", async (input, init) => {
     const url = String(input);
     requests.push({ url, body: typeof init?.body === "string" ? init.body : undefined });
-    if (url.includes("/wp/v2/pages?")) return Response.json([]);
     return Response.json({ id: 42, slug: "home", status: "draft", importedMedia: 2 });
   });
 
@@ -121,8 +120,7 @@ test("browser Elementor creation checks the slug and creates only a draft", asyn
 
   assert.equal(result.status, "draft");
   assert.equal(result.target, "elementor");
-  assert.doesNotMatch(requests[0]?.url ?? "", /status=any/);
-  assert.match(requests[0]?.url ?? "", /status=publish%2Cfuture%2Cdraft%2Cpending%2Cprivate/);
-  assert.match(requests[1]?.url ?? "", /figmapress\/v1\/elementor\/pages$/);
-  assert.match(requests[1]?.body ?? "", /"status":"draft"/);
+  assert.equal(requests.length, 1);
+  assert.match(requests[0]?.url ?? "", /figmapress\/v1\/elementor\/pages$/);
+  assert.match(requests[0]?.body ?? "", /"status":"draft"/);
 });

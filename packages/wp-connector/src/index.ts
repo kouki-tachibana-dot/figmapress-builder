@@ -86,8 +86,6 @@ export function normalizeSlug(blueprintSlug: string): string {
   return blueprintSlug.replace(/^\/+|\/+$/g, "").replace(/\//g, "-") || "home";
 }
 
-const PAGE_STATUS_FILTER = "publish,future,draft,pending,private";
-
 function authHeader(cfg: WpConfig): string {
   const raw = `${cfg.username}:${cfg.applicationPassword}`;
   return `Basic ${Buffer.from(raw, "utf-8").toString("base64")}`;
@@ -190,29 +188,12 @@ export async function probeWordPressConnection(
   };
 }
 
-async function slugExists(cfg: WpConfig, slug: string): Promise<boolean> {
-  const res = await wpFetch(
-    cfg,
-    `/wp/v2/pages?slug=${encodeURIComponent(slug)}&status=${encodeURIComponent(PAGE_STATUS_FILTER)}&per_page=1&context=edit`,
-  );
-  if (!res.ok) return false;
-  const data = (await res.json()) as unknown[];
-  return Array.isArray(data) && data.length > 0;
-}
-
-async function pickAvailableSlug(cfg: WpConfig, desired: string): Promise<string> {
-  if (!(await slugExists(cfg, desired))) return desired;
-  const fallback = `${desired}-figmapress`;
-  if (!(await slugExists(cfg, fallback))) return fallback;
-  return `${fallback}-${Date.now()}`;
-}
-
 export async function createDraftPage(
   cfg: WpConfig,
   input: CreateDraftInput,
 ): Promise<CreateDraftResult> {
-  const desiredSlug = normalizeSlug(input.slug);
-  const slug = await pickAvailableSlug(cfg, desiredSlug);
+  // WordPress is authoritative for slug uniqueness and can adjust it as needed.
+  const slug = normalizeSlug(input.slug);
 
   const res = await wpFetch(cfg, "/wp/v2/pages", {
     method: "POST",
@@ -265,8 +246,7 @@ export async function createElementorDraftPage(
   cfg: WpConfig,
   input: CreateElementorDraftInput,
 ): Promise<CreateDraftResult> {
-  const desiredSlug = normalizeSlug(input.slug);
-  const slug = await pickAvailableSlug(cfg, desiredSlug);
+  const slug = normalizeSlug(input.slug);
   const res = await wpFetch(cfg, "/figmapress/v1/elementor/pages", {
     method: "POST",
     body: JSON.stringify({

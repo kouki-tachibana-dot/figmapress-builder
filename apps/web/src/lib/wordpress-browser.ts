@@ -203,30 +203,13 @@ function normalizeSlug(value: string): string {
   return value.replace(/^\/+|\/+$/g, "").replace(/\//g, "-") || "home";
 }
 
-const PAGE_STATUS_FILTER = "publish,future,draft,pending,private";
-
-async function slugExists(config: BrowserWordPressConfig, slug: string): Promise<boolean> {
-  const response = await directFetch(
-    config,
-    `/wp/v2/pages?slug=${encodeURIComponent(slug)}&status=${encodeURIComponent(PAGE_STATUS_FILTER)}&per_page=1&context=edit`,
-  );
-  const pages = await responseJson<unknown[]>(response);
-  return Array.isArray(pages) && pages.length > 0;
-}
-
-async function availableSlug(config: BrowserWordPressConfig, input: string): Promise<string> {
-  const desired = normalizeSlug(input);
-  if (!(await slugExists(config, desired))) return desired;
-  const fallback = `${desired}-figmapress`;
-  if (!(await slugExists(config, fallback))) return fallback;
-  return `${fallback}-${Date.now()}`;
-}
-
 export async function createWordPressDraftDirect(
   config: BrowserWordPressConfig,
   input: BrowserDraftInput,
 ): Promise<BrowserWordPressResult> {
-  const slug = await availableSlug(config, input.slug);
+  // WordPress is authoritative for slug uniqueness. A preflight pages query can
+  // reject otherwise valid status filters on hosts with restricted REST schemas.
+  const slug = normalizeSlug(input.slug);
   if (input.target === "elementor") {
     const result = await responseJson<BrowserWordPressResult>(
       await directFetch(config, "/figmapress/v1/elementor/pages", {
