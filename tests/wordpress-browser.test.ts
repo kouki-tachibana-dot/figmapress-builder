@@ -13,10 +13,14 @@ const config = {
 };
 
 test("browser connection probes the Connector directly with Basic auth", async (context) => {
-  const requests: Array<{ url: string; authorization: string | null }> = [];
+  const requests: Array<{ url: string; authorization: string | null; cache?: RequestCache }> = [];
   context.mock.method(globalThis, "fetch", async (input, init) => {
     const headers = new Headers(init?.headers);
-    requests.push({ url: String(input), authorization: headers.get("Authorization") });
+    requests.push({
+      url: String(input),
+      authorization: headers.get("Authorization"),
+      cache: init?.cache,
+    });
     return Response.json({
       connectorVersion: "0.4.1",
       wordpressVersion: "7.0.1",
@@ -30,6 +34,7 @@ test("browser connection probes the Connector directly with Basic auth", async (
   assert.equal(status.canEditPages, true);
   assert.match(requests[0]?.url ?? "", /figmapress\/v1\/status$/);
   assert.match(requests[0]?.authorization ?? "", /^Basic /);
+  assert.equal(requests[0]?.cache, undefined);
 });
 
 test("browser connection keeps authentication failures out of the server fallback", async (context) => {

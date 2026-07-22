@@ -93,9 +93,10 @@ async function directFetch(
   if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
 
   try {
+    // `cache: "no-store"` makes Chrome add Cache-Control and Pragma to the
+    // CORS preflight, which WordPress does not allow by default.
     return await fetch(`${normalizedBaseUrl(config.baseUrl)}/wp-json${path}`, {
       ...init,
-      cache: "no-store",
       credentials: "omit",
       headers,
       mode: "cors",
