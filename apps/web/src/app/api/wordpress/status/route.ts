@@ -41,7 +41,32 @@ export async function POST(request: Request): Promise<Response> {
         throw new RequestError("WordPressの認証に失敗しました。Application Passwordを確認してください。", 401);
       }
       if (error instanceof WpRequestError) {
-        throw new RequestError("WordPress REST APIの接続診断に失敗しました。", 502);
+        console.warn("WordPress status probe failed", {
+          status: error.status,
+          operation: error.message.split(" (HTTP ")[0],
+        });
+        if (error.status === 403) {
+          throw new RequestError(
+            "WordPress REST APIに拒否されました（HTTP 403）。ユーザー権限またはセキュリティ設定を確認してください。",
+            502,
+          );
+        }
+        if (error.status === 429) {
+          throw new RequestError(
+            "WordPress側のリクエスト制限に達しました（HTTP 429）。少し待ってから再試行してください。",
+            502,
+          );
+        }
+        if (error.status >= 500) {
+          throw new RequestError(
+            `WordPress側でサーバーエラーが発生しました（HTTP ${error.status}）。`,
+            502,
+          );
+        }
+        throw new RequestError(
+          `WordPress REST APIの接続診断に失敗しました（HTTP ${error.status}）。`,
+          502,
+        );
       }
       throw error;
     }

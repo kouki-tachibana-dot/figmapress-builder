@@ -121,19 +121,23 @@ async function wpFetch(
 export async function probeWordPressConnection(
   cfg: WpConfig,
 ): Promise<WordPressConnectionStatus> {
-  const userResponse = await wpFetch(cfg, "/wp/v2/users/me?context=edit");
-  const userText = await userResponse.text();
-  if (!userResponse.ok) {
-    throw new WpRequestError(
-      `Failed to inspect WordPress user (HTTP ${userResponse.status})`,
-      userResponse.status,
-      userText,
-    );
-  }
-  const user = JSON.parse(userText) as { id?: unknown; name?: unknown; capabilities?: Record<string, boolean> };
-
+  // The Connector status route already proves authentication and reports the
+  // capability needed by FigmaPress. Probe it first so REST-hardening plugins
+  // that block the core users endpoint do not break an otherwise valid setup.
   const statusResponse = await wpFetch(cfg, "/figmapress/v1/status");
   if (statusResponse.status === 404) {
+    // A missing Connector route cannot prove that the supplied credentials are
+    // valid, so fall back to the least-privileged current-user context.
+    const userResponse = await wpFetch(cfg, "/wp/v2/users/me");
+    const userText = await userResponse.text();
+    if (!userResponse.ok) {
+      throw new WpRequestError(
+        `Failed to inspect WordPress user (HTTP ${userResponse.status})`,
+        userResponse.status,
+        userText,
+      );
+    }
+    const user = JSON.parse(userText) as { id?: unknown; name?: unknown };
     return {
       authenticated: true,
       user: {
@@ -142,7 +146,7 @@ export async function probeWordPressConnection(
       },
       connectorInstalled: false,
       elementor: { active: false },
-      canEditPages: Boolean(user.capabilities?.edit_pages),
+      canEditPages: false,
     };
   }
 
@@ -163,8 +167,8 @@ export async function probeWordPressConnection(
   return {
     authenticated: true,
     user: {
-      id: typeof user.id === "number" ? user.id : 0,
-      name: typeof user.name === "string" ? user.name : cfg.username,
+      id: 0,
+      name: cfg.username,
     },
     connectorInstalled: true,
     connectorVersion: typeof status.connectorVersion === "string" ? status.connectorVersion : undefined,
