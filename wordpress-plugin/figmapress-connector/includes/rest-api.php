@@ -5,6 +5,45 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+/**
+ * Restore Application Password authentication on hosts that strip the
+ * standard Authorization header before PHP. FigmaPress retries with this
+ * connector-specific header only after normal HTTP Basic auth returns 401.
+ */
+function figmapress_connector_restore_application_password_header( $user_id ) {
+    if ( $user_id || ! empty( $_SERVER['PHP_AUTH_USER'] ) || ! empty( $_SERVER['PHP_AUTH_PW'] ) ) {
+        return $user_id;
+    }
+
+    $authorization = isset( $_SERVER['HTTP_X_FIGMAPRESS_AUTHORIZATION'] )
+        ? trim( wp_unslash( $_SERVER['HTTP_X_FIGMAPRESS_AUTHORIZATION'] ) )
+        : '';
+    if ( 0 !== stripos( $authorization, 'Basic ' ) ) {
+        return $user_id;
+    }
+
+    $decoded = base64_decode( substr( $authorization, 6 ), true );
+    if ( false === $decoded || false === strpos( $decoded, ':' ) ) {
+        return $user_id;
+    }
+
+    list( $username, $password ) = explode( ':', $decoded, 2 );
+    if ( '' === $username || '' === $password ) {
+        return $user_id;
+    }
+
+    $_SERVER['PHP_AUTH_USER'] = $username;
+    $_SERVER['PHP_AUTH_PW']   = $password;
+    return $user_id;
+}
+add_filter( 'determine_current_user', 'figmapress_connector_restore_application_password_header', 19 );
+
+function figmapress_connector_allow_auth_fallback_cors_header( $headers ) {
+    $headers[] = 'X-FigmaPress-Authorization';
+    return array_values( array_unique( $headers ) );
+}
+add_filter( 'rest_allowed_cors_headers', 'figmapress_connector_allow_auth_fallback_cors_header' );
+
 function figmapress_connector_register_rest_routes() {
     register_rest_route(
         'figmapress/v1',
@@ -13,6 +52,15 @@ function figmapress_connector_register_rest_routes() {
             'methods'             => WP_REST_Server::READABLE,
             'callback'            => 'figmapress_connector_rest_status',
             'permission_callback' => 'figmapress_connector_rest_is_authenticated',
+        )
+    );
+    register_rest_route(
+        'figmapress/v1',
+        '/auth-diagnostics',
+        array(
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => 'figmapress_connector_rest_auth_diagnostics',
+            'permission_callback' => '__return_true',
         )
     );
     register_rest_route(
@@ -26,6 +74,62 @@ function figmapress_connector_register_rest_routes() {
     );
 }
 add_action( 'rest_api_init', 'figmapress_connector_register_rest_routes' );
+
+/**
+ * Remember whether WordPress attempted Application Password authentication.
+ * Only booleans are exposed by the diagnostic route; credentials and errors
+ * are never returned or persisted.
+ */
+function figmapress_connector_record_application_password_failure() {
+    $GLOBALS['figmapress_application_password_failed'] = true;
+}
+add_action( 'application_password_failed_authentication', 'figmapress_connector_record_application_password_failure' );
+
+function figmapress_connector_record_application_password_success() {
+    $GLOBALS['figmapress_application_password_succeeded'] = true;
+}
+add_action( 'application_password_did_authenticate', 'figmapress_connector_record_application_password_success' );
+
+/**
+ * The diagnostic endpoint is public and intentionally returns booleans only.
+ * Let it run even when WordPress has already recorded a failed Application
+ * Password attempt, otherwise core short-circuits the request with HTTP 401
+ * before the route callback can report whether the header reached PHP.
+ */
+function figmapress_connector_allow_auth_diagnostics( $result ) {
+    $request_uri = isset( $_SERVER['REQUEST_URI'] ) ? wp_unslash( $_SERVER['REQUEST_URI'] ) : '';
+    $rest_route  = isset( $_GET['rest_route'] ) ? wp_unslash( $_GET['rest_route'] ) : '';
+
+    if (
+        false !== strpos( $request_uri, '/wp-json/figmapress/v1/auth-diagnostics' ) ||
+        '/figmapress/v1/auth-diagnostics' === $rest_route
+    ) {
+        return null;
+    }
+
+    return $result;
+}
+add_filter( 'rest_authentication_errors', 'figmapress_connector_allow_auth_diagnostics', PHP_INT_MAX );
+
+function figmapress_connector_rest_auth_diagnostics( WP_REST_Request $request ) {
+    $authorization = $request->get_header( 'authorization' );
+    $fallback_authorization = $request->get_header( 'x_figmapress_authorization' );
+
+    return rest_ensure_response(
+        array(
+            'connectorVersion'             => FIGMAPRESS_CONNECTOR_VERSION,
+            'authorizationHeaderSeen'      => is_string( $authorization ) && '' !== trim( $authorization ),
+            'basicAuthorizationSeen'       => is_string( $authorization ) && 0 === stripos( trim( $authorization ), 'Basic ' ),
+            'httpAuthorizationServerVar'   => ! empty( $_SERVER['HTTP_AUTHORIZATION'] ),
+            'redirectAuthorizationServerVar' => ! empty( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ),
+            'fallbackAuthorizationHeaderSeen' => is_string( $fallback_authorization ) && '' !== trim( $fallback_authorization ),
+            'phpAuthUserSeen'              => ! empty( $_SERVER['PHP_AUTH_USER'] ),
+            'phpAuthPasswordSeen'          => ! empty( $_SERVER['PHP_AUTH_PW'] ),
+            'applicationPasswordFailed'    => ! empty( $GLOBALS['figmapress_application_password_failed'] ),
+            'applicationPasswordSucceeded' => ! empty( $GLOBALS['figmapress_application_password_succeeded'] ),
+        )
+    );
+}
 
 function figmapress_connector_rest_can_edit_pages() {
     return current_user_can( 'edit_pages' );

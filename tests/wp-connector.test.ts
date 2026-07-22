@@ -58,6 +58,29 @@ test("WordPress connection probe falls back to the core user endpoint when Conne
   assert.match(requests[1] ?? "", /wp\/v2\/users\/me$/);
 });
 
+test("server connection retries with the Connector header after HTTP 401", async (context) => {
+  const fallbackHeaders: Array<string | null> = [];
+  context.mock.method(globalThis, "fetch", async (_input, init) => {
+    const headers = new Headers(init?.headers);
+    fallbackHeaders.push(headers.get("X-FigmaPress-Authorization"));
+    if (fallbackHeaders.length === 1) {
+      return Response.json({ code: "rest_not_logged_in" }, { status: 401 });
+    }
+    return Response.json({
+      connectorVersion: "0.4.2",
+      wordpressVersion: "7.0.2",
+      canEditPages: true,
+      elementor: { active: true, version: "3.30.0" },
+    });
+  });
+
+  const status = await probeWordPressConnection(config);
+  assert.equal(status.authenticated, true);
+  assert.equal(fallbackHeaders.length, 2);
+  assert.equal(fallbackHeaders[0], null);
+  assert.match(fallbackHeaders[1] ?? "", /^Basic /);
+});
+
 test("Elementor draft creation uses the Connector endpoint and remains draft", async (context) => {
   const requests: Array<{ url: string; method?: string; body?: string }> = [];
   context.mock.method(globalThis, "fetch", async (input, init) => {
