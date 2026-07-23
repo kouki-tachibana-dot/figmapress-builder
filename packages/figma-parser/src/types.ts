@@ -69,17 +69,35 @@ export interface FigmaNodeBase {
   styleOverrideTable?: Record<string, FigmaTypeStyle>;
   styles?: Record<string, string>;
   layoutMode?: "HORIZONTAL" | "VERTICAL" | "NONE";
+  layoutWrap?: "NO_WRAP" | "WRAP";
   primaryAxisAlignItems?: string;
   counterAxisAlignItems?: string;
   primaryAxisSizingMode?: string;
   counterAxisSizingMode?: string;
+  layoutSizingHorizontal?: "FIXED" | "HUG" | "FILL";
+  layoutSizingVertical?: "FIXED" | "HUG" | "FILL";
   layoutAlign?: string;
   layoutGrow?: number;
   itemSpacing?: number;
+  counterAxisSpacing?: number;
   paddingTop?: number;
   paddingRight?: number;
   paddingBottom?: number;
   paddingLeft?: number;
+  minWidth?: number | null;
+  maxWidth?: number | null;
+  minHeight?: number | null;
+  maxHeight?: number | null;
+  constraints?: {
+    horizontal?: "LEFT" | "RIGHT" | "CENTER" | "LEFT_RIGHT" | "SCALE";
+    vertical?: "TOP" | "BOTTOM" | "CENTER" | "TOP_BOTTOM" | "SCALE";
+  };
+  componentId?: string;
+  componentProperties?: Record<string, {
+    type?: string;
+    value?: string | boolean;
+  }>;
+  interactions?: Array<Record<string, unknown>>;
   children?: FigmaNode[];
 }
 

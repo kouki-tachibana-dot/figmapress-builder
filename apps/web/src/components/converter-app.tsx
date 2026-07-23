@@ -108,6 +108,32 @@ interface ConversionResult {
   pageContent: string;
   elementorTemplate: ElementorTemplate;
   previewHtml: string;
+  qualityReport: {
+    version: "1.0";
+    score: number;
+    grade: "A" | "B" | "C";
+    readyForDraft: boolean;
+    metrics: {
+      responsiveVariants: 1 | 2;
+      visibleNodes: number;
+      boundedNodes: number;
+      editableTextNodes: number;
+      autoLayoutFrames: number;
+      mappedAutoLayoutFrames: number;
+      absoluteLayoutNodes: number;
+      functionalWidgets: {
+        navigation: number;
+        contactForm: number;
+        accordion: number;
+      };
+    };
+    checks: Array<{
+      id: string;
+      label: string;
+      status: "pass" | "info" | "warning";
+      detail: string;
+    }>;
+  } | null;
   themeJson: unknown;
   warnings: string[];
   summary: {
@@ -399,7 +425,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.7.0 live</span>
+          <span className="status-pill"><i /> v0.8.0 live</span>
         </nav>
       </header>
 
@@ -594,6 +620,25 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                   <span key={type}>{sectionLabels[type] || type}</span>
                 ))}
               </div>
+              {output.qualityReport && (
+                <div className="quality-report">
+                  <div className="quality-report__score">
+                    <strong>{output.qualityReport.score}</strong>
+                    <span>
+                      <b>構造診断 {output.qualityReport.grade}</b>
+                      <small>{output.qualityReport.readyForDraft ? "下書き作成可能" : "要確認"}</small>
+                    </span>
+                  </div>
+                  <div className="quality-report__checks">
+                    {output.qualityReport.checks.map((check) => (
+                      <p className={`is-${check.status}`} key={check.id}>
+                        <i aria-hidden="true">{check.status === "pass" ? "✓" : check.status === "warning" ? "!" : "i"}</i>
+                        <span><b>{check.label}</b><small>{check.detail}</small></span>
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
               {output.warnings.length > 0 && (
                 <div className="warning-list">
                   <strong>確認事項</strong>
@@ -610,6 +655,11 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                 <button onClick={() => downloadText("elementor-template.json", JSON.stringify(output.elementorTemplate, null, 2), "application/json")} type="button">
                   <span>Elementor Template</span><b>JSON ↓</b>
                 </button>
+                {output.qualityReport && (
+                  <button onClick={() => downloadText("quality-report.json", JSON.stringify(output.qualityReport, null, 2), "application/json")} type="button">
+                    <span>Quality Report</span><b>JSON ↓</b>
+                  </button>
+                )}
                 <button onClick={() => downloadText("theme.json", JSON.stringify(output.themeJson, null, 2), "application/json")} type="button">
                   <span>WordPress Theme</span><b>JSON ↓</b>
                 </button>
@@ -747,7 +797,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.7.0</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.8.0</span></div>
       </footer>
     </main>
   );

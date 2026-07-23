@@ -3,7 +3,7 @@ Contributors: figmapress
 Tags: blocks, figma, gutenberg, elementor
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 0.7.0
+Stable tag: 0.8.0
 License: GPLv2 or later
 
 Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
@@ -15,6 +15,11 @@ Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
    create a draft page containing figmapress/* blocks.
 
 == Changelog ==
+= 0.8.0 =
+* Figma Auto LayoutをElementor Flexboxの通常フローへ変換。
+* 方向、間隔、余白、整列、折返し、伸縮設定を保持。
+* レイヤー構造、編集可能文字、レスポンシブ、実動パーツの品質診断に対応。
+
 = 0.7.0 =
 * 同じFigmaページのPC版とスマホ版を自動検出し、端末別Elementorレイアウトとして出力。
 * スマホ版の文字位置、画像トリミング、セクション順を独立して保持。

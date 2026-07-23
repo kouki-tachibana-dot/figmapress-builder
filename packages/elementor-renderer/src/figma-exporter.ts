@@ -237,7 +237,7 @@ function renderRootElement(
 ): ElementorElement {
   const rootBounds = context.rootBounds;
   const children = (root.children ?? [])
-    .map((node) => renderElement(node, rootBounds, context))
+    .map((node) => renderElement(node, rootBounds, root, context))
     .filter((element): element is ElementorElement => element !== null);
   return {
     id: context.ids.create(`${root.id}:root`),
@@ -265,35 +265,36 @@ function previewRoot(
 ): string {
   const rootBounds = context.rootBounds;
   const background = solidColor(root.fills) ?? "#FFFFFF";
-  return `<div class="figmapress-figma-preview${className}" data-figmapress-layout="${context.variant}" style="--figma-unit:calc(100cqw / ${round(rootBounds.width)});aspect-ratio:${round(rootBounds.width)}/${round(rootBounds.height)};background:${escapeAttribute(background)}">${(root.children ?? []).map((node) => previewNode(node, rootBounds, context)).join("")}</div>`;
+  return `<div class="figmapress-figma-preview${className}" data-figmapress-layout="${context.variant}" style="--figma-unit:calc(100cqw / ${round(rootBounds.width)});aspect-ratio:${round(rootBounds.width)}/${round(rootBounds.height)};background:${escapeAttribute(background)};${previewAutoLayout(root)}">${(root.children ?? []).map((node) => previewNode(node, rootBounds, root, context)).join("")}</div>`;
 }
 
 function renderElement(
   node: FigmaNode,
   parentBounds: FigmaBounds,
+  parentNode: FigmaNode,
   context: RenderContext,
 ): ElementorElement | null {
   const bounds = node.absoluteBoundingBox;
   if (node.visible === false || !bounds || bounds.width <= 0 || bounds.height <= 0) return null;
 
-  const navigation = navigationElement(node, bounds, parentBounds, context);
+  const navigation = navigationElement(node, bounds, parentBounds, parentNode, context);
   if (navigation) return navigation;
-  const contactForm = contactFormElement(node, bounds, parentBounds, context);
+  const contactForm = contactFormElement(node, bounds, parentBounds, parentNode, context);
   if (contactForm) return contactForm;
 
   const assetUrl = visualUrl(node, context.assets);
-  if (assetUrl) return imageElement(node, bounds, parentBounds, assetUrl, context);
+  if (assetUrl) return imageElement(node, bounds, parentBounds, parentNode, assetUrl, context);
   if (node.type === "TEXT" && typeof node.characters === "string") {
-    return textElement(node, bounds, parentBounds, context);
+    return textElement(node, bounds, parentBounds, parentNode, context);
   }
 
   const accordion = accordionPlan(node);
   const children = (node.children ?? [])
     .filter((child) => !accordion || !isInsideInteractionBounds(child, accordion.bounds))
-    .map((child) => renderElement(child, bounds, context))
+    .map((child) => renderElement(child, bounds, node, context))
     .filter((element): element is ElementorElement => element !== null);
   if (accordion) {
-    children.push(accordionElement(node, accordion, bounds, context));
+    children.push(accordionElement(node, accordion, bounds, node, context));
   }
   const hasVisibleStyle = Boolean(solidColor(node.fills) || solidColor(node.strokes));
   if (!children.length && !hasVisibleStyle) return null;
@@ -304,7 +305,7 @@ function renderElement(
     isInner: true,
     settings: {
       ...baseContainerSettings(node, context),
-      ...containerPosition(bounds, parentBounds, context),
+      ...containerPosition(node, bounds, parentBounds, parentNode, context),
       html_tag: htmlTag(node),
       ...sectionAnchorSettings(node, context),
     },
@@ -316,6 +317,7 @@ function navigationElement(
   node: FigmaNode,
   bounds: FigmaBounds,
   parentBounds: FigmaBounds,
+  parentNode: FigmaNode,
   context: RenderContext,
 ): ElementorElement | null {
   const localMenuTexts = navigationMenuTexts(node);
@@ -332,7 +334,7 @@ function navigationElement(
   const topBar = descendants(node).find((child) => /top bar/i.test(child.name));
 
   return widget(context.ids, node.id, "figmapress-nav", {
-    ...widgetPosition(bounds, parentBounds),
+    ...widgetPosition(node, bounds, parentBounds, parentNode),
     _element_id: anchorId("site-navigation", context),
     layout_variant: context.variant,
     logo: logoUrl ? { url: logoUrl, id: "", alt: "サイトロゴ", source: "library" } : undefined,
@@ -354,6 +356,7 @@ function contactFormElement(
   node: FigmaNode,
   bounds: FigmaBounds,
   parentBounds: FigmaBounds,
+  parentNode: FigmaNode,
   context: RenderContext,
 ): ElementorElement | null {
   const texts = descendants(node)
@@ -393,7 +396,7 @@ function contactFormElement(
   }) : undefined;
 
   return widget(context.ids, node.id, "figmapress-contact-form", {
-    ...widgetPosition(bounds, parentBounds),
+    ...widgetPosition(node, bounds, parentBounds, parentNode),
     _element_id: anchorId("contact", context),
     title,
     name_label: exact(/^(?:お名前|氏名|name)$/i, "お名前"),
@@ -462,10 +465,11 @@ function accordionElement(
   node: FigmaNode,
   plan: AccordionPlan,
   parentBounds: FigmaBounds,
+  parentNode: FigmaNode,
   context: RenderContext,
 ): ElementorElement {
   return widget(context.ids, `${node.id}:accordion`, "figmapress-accordion", {
-    ...widgetPosition(plan.bounds, parentBounds),
+    ...widgetPosition(node, plan.bounds, parentBounds, parentNode),
     items: plan.items.map((item, index) => ({
       _id: hashId(`${node.id}:accordion:${index}`),
       title: item.title,
@@ -556,6 +560,7 @@ function textElement(
   node: FigmaNode,
   bounds: FigmaBounds,
   parentBounds: FigmaBounds,
+  parentNode: FigmaNode,
   context: RenderContext,
 ): ElementorElement {
   const style = node.style ?? {};
@@ -563,7 +568,7 @@ function textElement(
   const fontSize = textFontSize(style, richRuns, bounds);
   const lineHeight = textLineHeight(style, richRuns, fontSize);
   const settings: ElementorSettings = {
-    ...widgetPosition(bounds, parentBounds),
+    ...widgetPosition(node, bounds, parentBounds, parentNode),
     text_color: solidColor(style.fills ?? node.fills) ?? "#111111",
     typography_typography: "custom",
     typography_font_family: style.fontFamily ?? "Arial",
@@ -587,11 +592,12 @@ function imageElement(
   node: FigmaNode,
   bounds: FigmaBounds,
   parentBounds: FigmaBounds,
+  parentNode: FigmaNode,
   url: string,
   context: RenderContext,
 ): ElementorElement {
   const settings: ElementorSettings = {
-    ...widgetPosition(bounds, parentBounds),
+    ...widgetPosition(node, bounds, parentBounds, parentNode),
     image: { url, id: "", alt: node.name, source: "library" },
     image_size: "full",
     space: size(100, "%"),
@@ -608,13 +614,30 @@ function imageElement(
 
 function baseContainerSettings(node: FigmaNode, context: RenderContext): ElementorSettings {
   const bounds = node.absoluteBoundingBox;
+  const autoLayout = isAutoLayout(node);
   const settings: ElementorSettings = {
     content_width: "full",
-    flex_direction: "column",
-    flex_gap: gap(0),
-    padding: dimensions(0, 0, 0, 0),
+    flex_direction: node.layoutMode === "HORIZONTAL" ? "row" : "column",
+    flex_gap: autoLayout
+      ? gap(node.itemSpacing ?? 0, "vw", context.rootBounds.width)
+      : gap(0),
+    padding: autoLayout
+      ? dimensions(
+          node.paddingTop ?? 0,
+          node.paddingRight ?? 0,
+          node.paddingBottom ?? 0,
+          node.paddingLeft ?? 0,
+          "vw",
+          context.rootBounds.width,
+        )
+      : dimensions(0, 0, 0, 0),
     overflow: node.clipsContent ? "hidden" : "",
   };
+  if (autoLayout) {
+    settings.flex_justify_content = flexAlignment(node.primaryAxisAlignItems);
+    settings.flex_align_items = flexAlignment(node.counterAxisAlignItems);
+    settings.flex_wrap = node.layoutWrap === "WRAP" ? "wrap" : "nowrap";
+  }
   const background = solidColor(node.fills);
   if (background) {
     settings.background_background = "classic";
@@ -649,10 +672,21 @@ function baseContainerSettings(node: FigmaNode, context: RenderContext): Element
 }
 
 function containerPosition(
+  node: FigmaNode,
   bounds: FigmaBounds,
   parent: FigmaBounds,
+  parentNode: FigmaNode,
   context: RenderContext,
 ): ElementorSettings {
+  if (isAutoLayout(parentNode)) {
+    return {
+      width: flowSize(node, bounds, parent, parentNode),
+      min_height: canvasSize(bounds.height, context),
+      flex_grow: node.layoutGrow && node.layoutGrow > 0 ? "1" : "0",
+      flex_shrink: "0",
+      ...(node.layoutAlign ? { flex_align_self: flexAlignment(node.layoutAlign) } : {}),
+    };
+  }
   return {
     position: "absolute",
     _offset_orientation_h: "start",
@@ -664,7 +698,23 @@ function containerPosition(
   };
 }
 
-function widgetPosition(bounds: FigmaBounds, parent: FigmaBounds): ElementorSettings {
+function widgetPosition(
+  node: FigmaNode,
+  bounds: FigmaBounds,
+  parent: FigmaBounds,
+  parentNode: FigmaNode,
+): ElementorSettings {
+  if (isAutoLayout(parentNode)) {
+    const width = flowSize(node, bounds, parent, parentNode);
+    return {
+      _element_width: "initial",
+      _element_custom_width: width,
+      _element_custom_width_tablet: width,
+      _element_custom_width_mobile: width,
+      _flex_grow: node.layoutGrow && node.layoutGrow > 0 ? "1" : "0",
+      ...(node.layoutAlign ? { _flex_align_self: flexAlignment(node.layoutAlign) } : {}),
+    };
+  }
   return {
     _position: "absolute",
     _offset_orientation_h: "start",
@@ -697,11 +747,12 @@ function widget(
 function previewNode(
   node: FigmaNode,
   parentBounds: FigmaBounds,
+  parentNode: FigmaNode,
   context: RenderContext,
 ): string {
   const bounds = node.absoluteBoundingBox;
   if (node.visible === false || !bounds || bounds.width <= 0 || bounds.height <= 0) return "";
-  const position = previewPosition(bounds, parentBounds);
+  const position = previewPosition(node, bounds, parentBounds, parentNode);
   const assetUrl = visualUrl(node, context.assets);
   if (assetUrl) {
     return `<img alt="${escapeAttribute(node.name)}" src="${escapeAttribute(assetUrl)}" style="${position};object-fit:fill;${previewRadius(node)}" />`;
@@ -727,13 +778,84 @@ function previewNode(
     return `<div style="${position};color:${escapeAttribute(solidColor(style.fills ?? node.fills) ?? "#111111")};display:flex;flex-direction:column;font-family:${escapeAttribute(cssFont(style.fontFamily))};font-size:calc(var(--figma-unit) * ${round(fontSize)});font-style:${style.italic ? "italic" : "normal"};font-weight:${round(style.fontWeight ?? 400)};justify-content:${textVerticalAlign(style.textAlignVertical)};letter-spacing:calc(var(--figma-unit) * ${round(style.letterSpacing ?? 0)});line-height:${round(textLineHeight(style, runs, fontSize) / fontSize)};overflow:visible;overflow-wrap:normal;text-align:${textAlign(style.textAlignHorizontal)};text-decoration:${textDecoration(style.textDecoration)};text-transform:${textTransform(style.textCase)};white-space:${textWhiteSpace(node)};word-break:${textWhiteSpace(node) === "pre" ? "keep-all" : "normal"};${previewRotation(node)}${opacity}"><span style="display:block">${content}</span></div>`;
   }
 
-  const children = (node.children ?? []).map((child) => previewNode(child, bounds, context)).join("");
+  const children = (node.children ?? []).map((child) => previewNode(child, bounds, node, context)).join("");
   if (!children && !background && !border) return "";
-  return `<div aria-label="${escapeAttribute(node.name)}" style="${position};${background}${border}${previewRadius(node)}${overflow}${opacity}">${children}</div>`;
+  return `<div aria-label="${escapeAttribute(node.name)}" style="${position};${previewAutoLayout(node)}${background}${border}${previewRadius(node)}${overflow}${opacity}">${children}</div>`;
 }
 
-function previewPosition(bounds: FigmaBounds, parent: FigmaBounds): string {
+function previewPosition(
+  node: FigmaNode,
+  bounds: FigmaBounds,
+  parent: FigmaBounds,
+  parentNode: FigmaNode,
+): string {
+  if (isAutoLayout(parentNode)) {
+    const horizontalParent = parentNode.layoutMode === "HORIZONTAL";
+    const stretch = node.layoutAlign === "STRETCH";
+    const fillHorizontal = node.layoutSizingHorizontal === "FILL"
+      || (stretch && !horizontalParent);
+    const fillVertical = node.layoutSizingVertical === "FILL"
+      || (stretch && horizontalParent);
+    const width = fillHorizontal
+      ? "width:auto;"
+      : `width:calc(var(--figma-unit) * ${round(bounds.width)});`;
+    const height = fillVertical
+      ? "height:auto;"
+      : `height:calc(var(--figma-unit) * ${round(bounds.height)});`;
+    const grow = node.layoutGrow && node.layoutGrow > 0 ? "flex-grow:1;" : "flex-grow:0;";
+    return `position:relative;${width}${height}${grow}flex-shrink:0;${stretch ? "align-self:stretch;" : ""}`;
+  }
   return `position:absolute;left:${round(percent(bounds.x - parent.x, parent.width))}%;top:${round(percent(bounds.y - parent.y, parent.height))}%;width:${round(percent(bounds.width, parent.width))}%;height:${round(percent(bounds.height, parent.height))}%;`;
+}
+
+function previewAutoLayout(node: FigmaNode): string {
+  if (!isAutoLayout(node)) return "";
+  const padding = [
+    node.paddingTop ?? 0,
+    node.paddingRight ?? 0,
+    node.paddingBottom ?? 0,
+    node.paddingLeft ?? 0,
+  ].map((value) => `calc(var(--figma-unit) * ${round(value)})`).join(" ");
+  return [
+    "display:flex;",
+    `flex-direction:${node.layoutMode === "HORIZONTAL" ? "row" : "column"};`,
+    `flex-wrap:${node.layoutWrap === "WRAP" ? "wrap" : "nowrap"};`,
+    `gap:calc(var(--figma-unit) * ${round(node.itemSpacing ?? 0)});`,
+    `justify-content:${flexAlignment(node.primaryAxisAlignItems)};`,
+    `align-items:${flexAlignment(node.counterAxisAlignItems)};`,
+    `padding:${padding};`,
+  ].join("");
+}
+
+function isAutoLayout(node: FigmaNode): boolean {
+  return node.layoutMode === "HORIZONTAL" || node.layoutMode === "VERTICAL";
+}
+
+function flowSize(
+  node: FigmaNode,
+  bounds: FigmaBounds,
+  parent: FigmaBounds,
+  parentNode: FigmaNode,
+): Record<string, unknown> {
+  if (parentNode.layoutMode === "HORIZONTAL" && node.layoutGrow && node.layoutGrow > 0) {
+    return size(0, "%");
+  }
+  if (
+    node.layoutSizingHorizontal === "FILL"
+    || (parentNode.layoutMode === "VERTICAL" && node.layoutAlign === "STRETCH")
+  ) {
+    return size(100, "%");
+  }
+  return size(percent(bounds.width, parent.width), "%");
+}
+
+function flexAlignment(value: string | undefined): string {
+  if (value === "CENTER") return "center";
+  if (value === "MAX") return "flex-end";
+  if (value === "SPACE_BETWEEN") return "space-between";
+  if (value === "BASELINE") return "baseline";
+  if (value === "STRETCH") return "stretch";
+  return "flex-start";
 }
 
 function textRuns(node: FigmaNode): RichRun[] {
@@ -939,8 +1061,16 @@ function canvasCss(value: number, context: RenderContext): string {
   return `${round(percent(value, context.rootBounds.width))}vw`;
 }
 
-function gap(value: number): Record<string, unknown> {
-  return { column: String(value), row: String(value), isLinked: true, unit: "px", size: value };
+function gap(value: number, unit = "px", scaleBase?: number): Record<string, unknown> {
+  const converted = scaleBase ? percent(value, scaleBase) : value;
+  const rounded = round(converted);
+  return {
+    column: String(rounded),
+    row: String(rounded),
+    isLinked: true,
+    unit,
+    size: rounded,
+  };
 }
 
 function dimensions(

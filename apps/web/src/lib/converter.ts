@@ -15,11 +15,13 @@ import {
 import {
   ElementorExporter,
   FigmaElementorExporter,
+  createFigmaQualityReport,
   figmaLayoutSectionNames,
   hasFigmaLayout,
   hasFigmaResponsiveLayout,
   renderFigmaPreview,
   type ElementorTemplate,
+  type FigmaQualityReport,
 } from "@figmapress/elementor-renderer";
 import { tokensToThemeJson } from "@figmapress/token-pipeline";
 
@@ -28,6 +30,7 @@ export interface ConversionOutput {
   pageContent: string;
   elementorTemplate: ElementorTemplate;
   previewHtml: string;
+  qualityReport: FigmaQualityReport | null;
   themeJson: ReturnType<typeof tokensToThemeJson>;
   warnings: string[];
   summary: {
@@ -81,6 +84,9 @@ export async function convertFile(
       )
     : new ElementorExporter().toTemplate(blueprint);
   const fidelityPreview = fidelityLayout ? renderFigmaPreview(file, fidelityAssets) : null;
+  const qualityReport = fidelityLayout
+    ? createFigmaQualityReport(file, elementorTemplate)
+    : null;
   const warnings = [...new Set([
     ...initialWarnings,
     ...mapped.warnings,
@@ -91,6 +97,11 @@ export async function convertFile(
     ...(responsiveFidelityLayout
       ? ["FigmaのPC版とスマホ版を端末別レイアウトとして変換しました。"]
       : []),
+    ...(qualityReport
+      ? qualityReport.checks
+        .filter((check) => check.status === "warning")
+        .map((check) => `${check.label}: ${check.detail}`)
+      : []),
   ])];
   const layoutSections = fidelityLayout ? figmaLayoutSectionNames(file) : [];
 
@@ -99,6 +110,7 @@ export async function convertFile(
     pageContent: exported.pageContent ?? "",
     elementorTemplate,
     previewHtml: fidelityPreview ?? (page ? renderPreviewPage(page) : ""),
+    qualityReport,
     themeJson: tokensToThemeJson(blueprint.tokens),
     warnings,
     summary: {
