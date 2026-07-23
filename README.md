@@ -3,7 +3,7 @@
 Figma の構造を、WordPress で扱える Gutenberg ブロックまたはElementorページへ変換する
 オープンソースの Web アプリ＋CLIです。
 
-## v0.4.1 — Figma高忠実度Elementor変換
+## v0.5.0 — Figma機能連携Elementor変換
 
 **Web版:** [https://figmapress-builder.vercel.app](https://figmapress-builder.vercel.app)
 
@@ -20,6 +20,9 @@ Figma の構造を、WordPress で扱える Gutenberg ブロックまたはEleme
 - 1920px基準の文字・高さ・画像を画面幅へ連続追従し、日本語の縦書き化と位置ずれを防止
 - Figmaの折返し指定、混在文字サイズ、縦位置、回転を保持
 - 写真・マスク・ベクターをFigmaレンダーAPIから取得し、文字は編集可能なWidgetとして保持
+- Figmaのメニュー、問い合わせフォーム、年表／FAQをElementorの実動Widgetへ変換
+- ナビのモバイルメニュー、フォーム送信、アコーディオン開閉をElementor Proなしで提供
+- Connector導入後の更新をWordPress標準のプラグイン更新画面から実行
 - WordPress Plugin／Theme ZIPのダウンロード
 
 ローカルで実行する場合は `npm install`、`npm run dev:web` の順に実行し、
@@ -40,7 +43,7 @@ Figma Tokenは再入力を省くため同じタブの `sessionStorage` だけに
 - Elementor高忠実度変換は任意のレイヤー名に対応。Gutenberg変換では `section/*` または Hero / Services / Features / FAQ / CTA / Contact の意味が分かる名前を推奨
 - PCフレームだけを選択した場合、Elementor出力もPCデザインを基準に縮小する。独立したモバイル構成の自動統合は対象外
 - WordPressへの送信は固定ページの `draft` 作成だけ
-- Elementor Pro専用Widget、Theme Builder、WooCommerce、Popupは対象外
+- Elementor Pro専用Widget、Theme Builder、WooCommerce、Popupは対象外（ナビ・フォーム・アコーディオンはConnector独自Widgetで対応）
 
 ---
 
@@ -203,6 +206,9 @@ npm run wp:create-draft
 1. `wordpress-plugin/figmapress-connector/` フォルダ全体を
    `wp-content/plugins/figmapress-connector/` にコピー
 2. WordPress 管理画面 → プラグイン → **FigmaPress Connector** を有効化
+
+異なるWordPressサイトにはそれぞれ初回インストールが必要です。0.5.0以降は、更新通知が
+WordPress管理画面に表示されるため、以後のバージョン更新でXServerやFTPを触る必要はありません。
 
 これで `figmapress/hero`, `figmapress/service-list`, `figmapress/card-grid`,
 `figmapress/faq`, `figmapress/cta`, `figmapress/contact` が登録されます。

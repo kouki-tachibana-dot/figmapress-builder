@@ -153,6 +153,11 @@ function figmapress_connector_rest_status() {
                 'active'  => did_action( 'elementor/loaded' ) > 0 || defined( 'ELEMENTOR_VERSION' ),
                 'version' => defined( 'ELEMENTOR_VERSION' ) ? ELEMENTOR_VERSION : null,
             ),
+            'functionalWidgets' => array(
+                'navigation'  => class_exists( 'FigmaPress_Nav_Widget' ),
+                'contactForm' => class_exists( 'FigmaPress_Contact_Form_Widget' ),
+                'accordion'   => class_exists( 'FigmaPress_Accordion_Widget' ),
+            ),
         )
     );
 }
@@ -432,7 +437,15 @@ function figmapress_connector_sanitize_elementor_elements( $elements, &$count ) 
     }
 
     $result          = array();
-    $allowed_widgets = array( 'heading', 'text-editor', 'button', 'image' );
+    $allowed_widgets = array(
+        'heading',
+        'text-editor',
+        'button',
+        'image',
+        'figmapress-nav',
+        'figmapress-contact-form',
+        'figmapress-accordion',
+    );
     foreach ( $elements as $element ) {
         if ( ! is_array( $element ) || $count >= 1200 ) {
             continue;
@@ -540,6 +553,9 @@ function figmapress_connector_localize_elementor_images( &$elements, $post_id, &
         }
         if ( 'widget' === $element['elType'] && 'image' === ( isset( $element['widgetType'] ) ? $element['widgetType'] : '' ) && isset( $element['settings']['image'] ) ) {
             figmapress_connector_localize_image_setting( $element['settings']['image'], $post_id, $warnings, $imported_media, $deadline );
+        }
+        if ( 'widget' === $element['elType'] && 'figmapress-nav' === ( isset( $element['widgetType'] ) ? $element['widgetType'] : '' ) && isset( $element['settings']['logo'] ) ) {
+            figmapress_connector_localize_image_setting( $element['settings']['logo'], $post_id, $warnings, $imported_media, $deadline );
         }
         if ( 'container' === $element['elType'] && isset( $element['settings']['background_image'] ) ) {
             figmapress_connector_localize_image_setting( $element['settings']['background_image'], $post_id, $warnings, $imported_media, $deadline );

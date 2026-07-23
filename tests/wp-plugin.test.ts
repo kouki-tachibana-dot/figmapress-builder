@@ -6,6 +6,18 @@ const restApiPath = new URL(
   "../wordpress-plugin/figmapress-connector/includes/rest-api.php",
   import.meta.url,
 );
+const pluginPath = new URL(
+  "../wordpress-plugin/figmapress-connector/figmapress-connector.php",
+  import.meta.url,
+);
+const contactPath = new URL(
+  "../wordpress-plugin/figmapress-connector/includes/contact-form.php",
+  import.meta.url,
+);
+const updatePath = new URL(
+  "../wordpress-plugin/figmapress-connector/includes/update-checker.php",
+  import.meta.url,
+);
 
 test("Connector stores Elementor content before attempting remote image imports", async () => {
   const source = await readFile(restApiPath, "utf8");
@@ -62,4 +74,34 @@ test("Connector ensures Elementor Containers are available before creating a pag
   assert.match(source, /current_user_can\( 'manage_options' \)/);
   assert.match(source, /get_feature_option_key\( 'container' \)/);
   assert.match(source, /update_option\( \$option_key, 'active' \)/);
+});
+
+test("Connector accepts and registers functional Elementor widgets", async () => {
+  const [plugin, rest] = await Promise.all([
+    readFile(pluginPath, "utf8"),
+    readFile(restApiPath, "utf8"),
+  ]);
+  assert.match(plugin, /Version:\s+0\.5\.0/);
+  assert.match(plugin, /elementor\/widgets\/register/);
+  for (const widget of ["figmapress-nav", "figmapress-contact-form", "figmapress-accordion"]) {
+    assert.match(rest, new RegExp(`'${widget}'`));
+  }
+});
+
+test("public contact form verifies origin, token, rate limit, and stored widget", async () => {
+  const source = await readFile(contactPath, "utf8");
+  assert.match(source, /figmapress_connector_contact_same_origin/);
+  assert.match(source, /hash_equals\( \$expected, \$token \)/);
+  assert.match(source, /figmapress_connector_contact_rate_limit/);
+  assert.match(source, /figmapress_connector_find_elementor_widget/);
+  assert.match(source, /wp_mail\( \$recipient/);
+  assert.match(source, /'permission_callback' => '__return_true'/);
+});
+
+test("Connector checks the pinned HTTPS manifest for native WordPress updates", async () => {
+  const source = await readFile(updatePath, "utf8");
+  assert.match(source, /pre_set_site_transient_update_plugins/);
+  assert.match(source, /figmapress-builder\.vercel\.app/);
+  assert.match(source, /version_compare/);
+  assert.match(source, /'plugins_api'/);
 });

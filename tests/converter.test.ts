@@ -277,3 +277,102 @@ test("real Figma bounds produce a high-fidelity editable Elementor document", as
   assert.match(result.previewHtml, /portrait-rendered\.png/);
   assert.ok(result.warnings.some((warning) => warning.includes("高忠実度モード")));
 });
+
+test("Figma interaction layers become functional Elementor widgets", async () => {
+  const text = (id: string, name: string, characters: string, x: number, y: number, width = 120, height = 28) => ({
+    id,
+    name,
+    type: "TEXT",
+    characters,
+    absoluteBoundingBox: { x, y, width, height },
+    style: { fontSize: 18, fontWeight: 600 },
+  });
+  const file: MockFigmaFile = {
+    document: {
+      id: "0:0",
+      name: "Functional campaign",
+      type: "DOCUMENT",
+      children: [{
+        id: "1:0",
+        name: "Page",
+        type: "CANVAS",
+        children: [{
+          id: "46:12",
+          name: "PC-page",
+          type: "FRAME",
+          absoluteBoundingBox: { x: 0, y: 0, width: 1920, height: 2600 },
+          children: [
+            {
+              id: "10:0",
+              name: "Header/Header Sec",
+              type: "FRAME",
+              absoluteBoundingBox: { x: 0, y: 0, width: 1920, height: 115 },
+              children: [
+                text("10:1", "Header/Menu-Item", "想い", 1000, 50),
+                text("10:2", "Header/Menu-Item", "政策", 1160, 50),
+                text("10:3", "Header/Menu-Item", "活動報告", 1320, 50),
+                text("10:4", "Header/Menu-Item", "プロフィール", 1500, 50),
+                text("10:5", "Comp/Button-HeaderCTA/text", "ご相談はこちら", 1700, 50, 160),
+              ],
+            },
+            {
+              id: "20:0",
+              name: "Sec/Thoughts Sec",
+              type: "FRAME",
+              absoluteBoundingBox: { x: 0, y: 115, width: 1920, height: 400 },
+              fills: [{ type: "SOLID", color: { r: 1, g: 1, b: 1 } }],
+            },
+            {
+              id: "30:0",
+              name: "Sec/Profile Sec",
+              type: "FRAME",
+              absoluteBoundingBox: { x: 0, y: 515, width: 1920, height: 1000 },
+              children: [
+                text("30:1", "{acf:section_heading}", "2019年度", 360, 700),
+                text("30:2", "{acf:section_heading}", "活動内容", 360, 750, 400, 40),
+                text("30:3", "{acf:section_heading}", "2020年度", 360, 830),
+                text("30:4", "{acf:section_heading}", "2021年度", 360, 910),
+                text("30:5", "{acf:section_heading}", "2022年度", 360, 990),
+                { id: "30:6", name: "Divider", type: "LINE", absoluteBoundingBox: { x: 266, y: 810, width: 1389, height: 1 } },
+              ],
+            },
+            {
+              id: "40:0",
+              name: "Comp/Button-CTA",
+              type: "FRAME",
+              absoluteBoundingBox: { x: 0, y: 1515, width: 1920, height: 900 },
+              children: [
+                text("40:1", "Heading", "あなたの声を聞かせてください。", 600, 1580, 700, 50),
+                text("40:2", "Label", "お名前", 430, 1700),
+                text("40:3", "Label", "メールアドレス", 430, 1780, 180),
+                text("40:4", "Label", "お住まいの地域", 430, 1860, 180),
+                text("40:5", "Label", "ご相談・ご意見の内容", 430, 1940, 220),
+                text("40:6", "Button", "相談・意見を送る →", 800, 2200, 260),
+              ],
+            },
+          ],
+        }],
+      }],
+    },
+  };
+
+  const result = await convertFile(file);
+  const elements: typeof result.elementorTemplate.content = [];
+  const visit = (items: typeof result.elementorTemplate.content): void => {
+    for (const item of items) {
+      elements.push(item);
+      visit(item.elements);
+    }
+  };
+  visit(result.elementorTemplate.content);
+
+  const navigation = elements.find((element) => element.widgetType === "figmapress-nav");
+  const accordion = elements.find((element) => element.widgetType === "figmapress-accordion");
+  const form = elements.find((element) => element.widgetType === "figmapress-contact-form");
+  assert.equal((navigation?.settings.items as Array<{ label: string }>).length, 4);
+  assert.equal((navigation?.settings.items as Array<{ url: { url: string } }>)[0]?.url.url, "#thoughts");
+  assert.equal((accordion?.settings.items as Array<{ title: string }>).length, 4);
+  assert.equal((accordion?.settings.items as Array<{ content: string }>)[0]?.content, "活動内容");
+  assert.equal(form?.settings._element_id, "contact");
+  assert.ok(elements.some((element) => element.settings._element_id === "thoughts"));
+});

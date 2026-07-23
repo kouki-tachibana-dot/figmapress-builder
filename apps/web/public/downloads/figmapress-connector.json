@@ -1,0 +1,11 @@
+{
+  "name": "FigmaPress Connector",
+  "slug": "figmapress-connector",
+  "version": "0.5.0",
+  "requires": "6.4",
+  "requires_php": "7.4",
+  "tested": "7.0",
+  "homepage": "https://figmapress-builder.vercel.app",
+  "download_url": "https://figmapress-builder.vercel.app/downloads/figmapress-connector.zip",
+  "changelog": "<h4>0.5.0</h4><ul><li>Figmaのヘッダーを、モバイルメニュー付きの実動ナビへ変換。</li><li>問い合わせフォームをWordPress管理者メールへ安全に送信。</li><li>年表・FAQを編集可能なアコーディオンへ変換。</li><li>以後のConnector更新をWordPress標準更新画面から実行可能。</li></ul>"
+}
