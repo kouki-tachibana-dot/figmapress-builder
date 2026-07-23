@@ -50,3 +50,16 @@ test("Connector saves through Elementor and verifies persisted elements", async 
   assert.match(source, /figmapress_elementor_save_failed/);
   assert.match(source, /wp_delete_post\( \$post_id, true \)/);
 });
+
+test("Connector ensures Elementor Containers are available before creating a page", async () => {
+  const source = await readFile(restApiPath, "utf8");
+  const ensureContainers = source.indexOf("figmapress_connector_ensure_elementor_containers()");
+  const insertPost = source.indexOf("$post_id = wp_insert_post(");
+
+  assert.ok(ensureContainers > 0, "Container compatibility check must exist");
+  assert.ok(insertPost > ensureContainers, "Container compatibility must be checked before creating the draft");
+  assert.match(source, /get_element_types\( 'container' \)/);
+  assert.match(source, /current_user_can\( 'manage_options' \)/);
+  assert.match(source, /get_feature_option_key\( 'container' \)/);
+  assert.match(source, /update_option\( \$option_key, 'active' \)/);
+});

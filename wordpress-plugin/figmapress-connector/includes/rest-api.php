@@ -162,6 +162,16 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
         return new WP_Error( 'figmapress_elementor_missing', 'Elementor is not active on this site.', array( 'status' => 409 ) );
     }
 
+    $container_activated = figmapress_connector_ensure_elementor_containers();
+    if ( is_wp_error( $container_activated ) ) {
+        return $container_activated;
+    }
+
+    $warnings = array();
+    if ( $container_activated ) {
+        $warnings[] = 'Elementorの安定機能「コンテナ」を有効化しました。既存ページの内容は変更していません。';
+    }
+
     $params   = $request->get_json_params();
     $title    = isset( $params['title'] ) ? sanitize_text_field( $params['title'] ) : '';
     $slug     = isset( $params['slug'] ) ? sanitize_title( $params['slug'] ) : '';
@@ -213,7 +223,6 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
         return $stored_elements;
     }
 
-    $warnings       = array();
     $imported_media = 0;
     $media_deadline = microtime( true ) + 12;
     figmapress_connector_localize_elementor_images( $content, $post_id, $warnings, $imported_media, $media_deadline );
@@ -239,6 +248,67 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
             'warnings'      => $warnings,
         )
     );
+}
+
+function figmapress_connector_ensure_elementor_containers() {
+    if ( ! class_exists( '\\Elementor\\Plugin' ) || ! isset( \Elementor\Plugin::$instance->elements_manager ) ) {
+        return new WP_Error(
+            'figmapress_elementor_container_unavailable',
+            'Elementor Containers are not available on this site.',
+            array( 'status' => 409 )
+        );
+    }
+
+    $elements_manager = \Elementor\Plugin::$instance->elements_manager;
+    if ( method_exists( $elements_manager, 'get_element_types' ) ) {
+        $container = $elements_manager->get_element_types( 'container' );
+        if ( $container ) {
+            return false;
+        }
+    }
+
+    if ( ! current_user_can( 'manage_options' ) ) {
+        return new WP_Error(
+            'figmapress_elementor_container_inactive',
+            'Elementor Containers are disabled. Ask a WordPress administrator to enable Elementor > Settings > Features > Container.',
+            array( 'status' => 409 )
+        );
+    }
+
+    if ( ! isset( \Elementor\Plugin::$instance->experiments ) ) {
+        return new WP_Error(
+            'figmapress_elementor_container_unavailable',
+            'Elementor Containers are not available on this site.',
+            array( 'status' => 409 )
+        );
+    }
+
+    $experiments = \Elementor\Plugin::$instance->experiments;
+    $feature     = method_exists( $experiments, 'get_features' )
+        ? $experiments->get_features( 'container' )
+        : null;
+    if ( ! $feature ) {
+        return new WP_Error(
+            'figmapress_elementor_container_unavailable',
+            'This Elementor version does not provide the Container feature required by the generated page.',
+            array( 'status' => 409 )
+        );
+    }
+
+    $option_key = method_exists( $experiments, 'get_feature_option_key' )
+        ? $experiments->get_feature_option_key( 'container' )
+        : 'elementor_experiment-container';
+    update_option( $option_key, 'active' );
+
+    if ( 'active' !== get_option( $option_key ) ) {
+        return new WP_Error(
+            'figmapress_elementor_container_activation_failed',
+            'Elementor Containers could not be enabled on this site.',
+            array( 'status' => 500 )
+        );
+    }
+
+    return true;
 }
 
 function figmapress_connector_store_elementor_document( $post_id, $content, $page_settings, $page_template ) {
