@@ -1,0 +1,370 @@
+<?php
+/** Elementor widgets for functional FigmaPress output. */
+
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
+/** Sanitize a CSS color while allowing the rgba() colors returned by Figma. */
+function figmapress_connector_css_color( $value, $fallback ) {
+    $value = trim( (string) $value );
+    if ( sanitize_hex_color( $value ) ) {
+        return $value;
+    }
+    if ( preg_match( '/^rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}(?:\s*,\s*(?:0(?:\.\d+)?|1(?:\.0+)?))?\s*\)$/', $value ) ) {
+        return $value;
+    }
+    return $fallback;
+}
+
+abstract class FigmaPress_Widget_Base extends \Elementor\Widget_Base {
+    public function get_categories() {
+        return array( 'figmapress' );
+    }
+
+    public function get_style_depends() {
+        return array( 'figmapress-elementor-interactions' );
+    }
+
+    public function get_script_depends() {
+        return array( 'figmapress-elementor-interactions' );
+    }
+}
+
+final class FigmaPress_Nav_Widget extends FigmaPress_Widget_Base {
+    public function get_name() {
+        return 'figmapress-nav';
+    }
+
+    public function get_title() {
+        return esc_html__( 'FigmaPress ナビ', 'figmapress-connector' );
+    }
+
+    public function get_icon() {
+        return 'eicon-nav-menu';
+    }
+
+    protected function register_controls() {
+        $this->start_controls_section(
+            'content',
+            array( 'label' => esc_html__( 'ナビゲーション', 'figmapress-connector' ) )
+        );
+        $this->add_control(
+            'logo',
+            array(
+                'label' => esc_html__( 'ロゴ', 'figmapress-connector' ),
+                'type'  => \Elementor\Controls_Manager::MEDIA,
+            )
+        );
+        $repeater = new \Elementor\Repeater();
+        $repeater->add_control(
+            'label',
+            array(
+                'label'   => esc_html__( '表示名', 'figmapress-connector' ),
+                'type'    => \Elementor\Controls_Manager::TEXT,
+                'default' => esc_html__( 'メニュー', 'figmapress-connector' ),
+            )
+        );
+        $repeater->add_control(
+            'url',
+            array(
+                'label'   => esc_html__( 'リンク', 'figmapress-connector' ),
+                'type'    => \Elementor\Controls_Manager::URL,
+                'default' => array( 'url' => '#content' ),
+            )
+        );
+        $this->add_control(
+            'items',
+            array(
+                'label'       => esc_html__( 'メニュー項目', 'figmapress-connector' ),
+                'type'        => \Elementor\Controls_Manager::REPEATER,
+                'fields'      => $repeater->get_controls(),
+                'title_field' => '{{{ label }}}',
+            )
+        );
+        $this->add_control(
+            'cta_label',
+            array(
+                'label'   => esc_html__( 'CTA表示名', 'figmapress-connector' ),
+                'type'    => \Elementor\Controls_Manager::TEXT,
+                'default' => esc_html__( 'お問い合わせ', 'figmapress-connector' ),
+            )
+        );
+        $this->add_control(
+            'cta_url',
+            array(
+                'label'   => esc_html__( 'CTAリンク', 'figmapress-connector' ),
+                'type'    => \Elementor\Controls_Manager::URL,
+                'default' => array( 'url' => '#contact' ),
+            )
+        );
+        $this->end_controls_section();
+
+        $this->start_controls_section(
+            'colors',
+            array(
+                'label' => esc_html__( '色', 'figmapress-connector' ),
+                'tab'   => \Elementor\Controls_Manager::TAB_STYLE,
+            )
+        );
+        foreach ( array(
+            'background_color' => array( '背景色', '#FFFFFF' ),
+            'accent_color'     => array( 'アクセント色', '#D10B2C' ),
+            'text_color'       => array( '文字色', '#202020' ),
+        ) as $key => $control ) {
+            $this->add_control(
+                $key,
+                array(
+                    'label'   => esc_html__( $control[0], 'figmapress-connector' ),
+                    'type'    => \Elementor\Controls_Manager::COLOR,
+                    'default' => $control[1],
+                )
+            );
+        }
+        $this->end_controls_section();
+    }
+
+    protected function render() {
+        $settings   = $this->get_settings_for_display();
+        $items      = isset( $settings['items'] ) && is_array( $settings['items'] ) ? $settings['items'] : array();
+        $logo       = isset( $settings['logo']['url'] ) ? $settings['logo']['url'] : '';
+        $cta_url    = isset( $settings['cta_url']['url'] ) ? $settings['cta_url']['url'] : '#contact';
+        $menu_id    = 'figmapress-menu-' . $this->get_id();
+        $background = figmapress_connector_css_color( isset( $settings['background_color'] ) ? $settings['background_color'] : '', '#FFFFFF' );
+        $accent     = figmapress_connector_css_color( isset( $settings['accent_color'] ) ? $settings['accent_color'] : '', '#D10B2C' );
+        $text       = figmapress_connector_css_color( isset( $settings['text_color'] ) ? $settings['text_color'] : '', '#202020' );
+        ?>
+        <nav class="figmapress-nav" aria-label="<?php esc_attr_e( 'メインナビゲーション', 'figmapress-connector' ); ?>" style="--figmapress-nav-bg:<?php echo esc_attr( $background ); ?>;--figmapress-accent:<?php echo esc_attr( $accent ); ?>;--figmapress-text:<?php echo esc_attr( $text ); ?>">
+            <?php if ( $logo ) : ?>
+                <a class="figmapress-nav__logo" href="#top" aria-label="<?php esc_attr_e( 'ページ先頭', 'figmapress-connector' ); ?>"><img src="<?php echo esc_url( $logo ); ?>" alt="<?php esc_attr_e( 'サイトロゴ', 'figmapress-connector' ); ?>"></a>
+            <?php endif; ?>
+            <button class="figmapress-nav__toggle" type="button" aria-controls="<?php echo esc_attr( $menu_id ); ?>" aria-expanded="false"><span></span><span></span><span></span><span class="screen-reader-text"><?php esc_html_e( 'メニューを開く', 'figmapress-connector' ); ?></span></button>
+            <div class="figmapress-nav__panel" id="<?php echo esc_attr( $menu_id ); ?>">
+                <ul class="figmapress-nav__items">
+                    <?php foreach ( $items as $item ) :
+                        $url = isset( $item['url']['url'] ) ? $item['url']['url'] : '#';
+                        ?>
+                        <li><a href="<?php echo esc_url( $url ); ?>"><?php echo esc_html( isset( $item['label'] ) ? $item['label'] : '' ); ?></a></li>
+                    <?php endforeach; ?>
+                </ul>
+                <?php if ( ! empty( $settings['cta_label'] ) ) : ?>
+                    <a class="figmapress-nav__cta" href="<?php echo esc_url( $cta_url ); ?>"><?php echo esc_html( $settings['cta_label'] ); ?></a>
+                <?php endif; ?>
+            </div>
+        </nav>
+        <?php
+    }
+}
+
+final class FigmaPress_Contact_Form_Widget extends FigmaPress_Widget_Base {
+    public function get_name() {
+        return 'figmapress-contact-form';
+    }
+
+    public function get_title() {
+        return esc_html__( 'FigmaPress 問い合わせフォーム', 'figmapress-connector' );
+    }
+
+    public function get_icon() {
+        return 'eicon-form-horizontal';
+    }
+
+    protected function register_controls() {
+        $this->start_controls_section(
+            'content',
+            array( 'label' => esc_html__( 'フォーム', 'figmapress-connector' ) )
+        );
+        $controls = array(
+            'title'           => array( '見出し', 'お問い合わせ' ),
+            'name_label'      => array( '名前ラベル', 'お名前' ),
+            'email_label'     => array( 'メールラベル', 'メールアドレス' ),
+            'region_label'    => array( '地域ラベル', 'お住まいの地域' ),
+            'message_label'   => array( '本文ラベル', 'ご相談・ご意見の内容' ),
+            'reply_label'     => array( '返信希望ラベル', '返信希望' ),
+            'reply_yes_label' => array( '返信希望する', '希望する' ),
+            'reply_no_label'  => array( '返信希望しない', '希望しない' ),
+            'button_text'     => array( '送信ボタン', '送信する' ),
+            'success_message' => array( '送信完了文', '送信しました。お問い合わせありがとうございます。' ),
+        );
+        foreach ( $controls as $key => $control ) {
+            $this->add_control(
+                $key,
+                array(
+                    'label'   => esc_html__( $control[0], 'figmapress-connector' ),
+                    'type'    => \Elementor\Controls_Manager::TEXT,
+                    'default' => esc_html__( $control[1], 'figmapress-connector' ),
+                )
+            );
+        }
+        $this->add_control(
+            'recipient',
+            array(
+                'label'       => esc_html__( '送信先メール', 'figmapress-connector' ),
+                'description' => esc_html__( '空欄の場合はWordPress管理者メールへ送信します。', 'figmapress-connector' ),
+                'type'        => \Elementor\Controls_Manager::TEXT,
+                'input_type'  => 'email',
+            )
+        );
+        $this->end_controls_section();
+
+        $this->start_controls_section(
+            'colors',
+            array(
+                'label' => esc_html__( '色', 'figmapress-connector' ),
+                'tab'   => \Elementor\Controls_Manager::TAB_STYLE,
+            )
+        );
+        foreach ( array(
+            'panel_color'  => array( 'パネル色', '#FFE2E8' ),
+            'accent_color' => array( 'ボタン色', '#B90A23' ),
+            'text_color'   => array( '文字色', '#202020' ),
+        ) as $key => $control ) {
+            $this->add_control(
+                $key,
+                array(
+                    'label'   => esc_html__( $control[0], 'figmapress-connector' ),
+                    'type'    => \Elementor\Controls_Manager::COLOR,
+                    'default' => $control[1],
+                )
+            );
+        }
+        $this->end_controls_section();
+    }
+
+    protected function render() {
+        $settings    = $this->get_settings_for_display();
+        $page_id     = get_queried_object_id() ? get_queried_object_id() : get_the_ID();
+        $rendered_at = time();
+        $token       = hash_hmac( 'sha256', $page_id . '|' . $this->get_id() . '|' . $rendered_at, wp_salt( 'auth' ) );
+        $panel       = figmapress_connector_css_color( isset( $settings['panel_color'] ) ? $settings['panel_color'] : '', '#FFE2E8' );
+        $accent      = figmapress_connector_css_color( isset( $settings['accent_color'] ) ? $settings['accent_color'] : '', '#B90A23' );
+        $text        = figmapress_connector_css_color( isset( $settings['text_color'] ) ? $settings['text_color'] : '', '#202020' );
+        $field       = function ( $key, $fallback ) use ( $settings ) {
+            return isset( $settings[ $key ] ) && '' !== $settings[ $key ] ? $settings[ $key ] : $fallback;
+        };
+        ?>
+        <section class="figmapress-contact" style="--figmapress-panel:<?php echo esc_attr( $panel ); ?>;--figmapress-accent:<?php echo esc_attr( $accent ); ?>;--figmapress-text:<?php echo esc_attr( $text ); ?>">
+            <h2><?php echo esc_html( $field( 'title', 'お問い合わせ' ) ); ?></h2>
+            <form class="figmapress-contact__form" data-endpoint="<?php echo esc_url( rest_url( 'figmapress/v1/contact' ) ); ?>" novalidate>
+                <input type="hidden" name="page_id" value="<?php echo esc_attr( $page_id ); ?>">
+                <input type="hidden" name="widget_id" value="<?php echo esc_attr( $this->get_id() ); ?>">
+                <input type="hidden" name="rendered_at" value="<?php echo esc_attr( $rendered_at ); ?>">
+                <input type="hidden" name="form_token" value="<?php echo esc_attr( $token ); ?>">
+                <label class="figmapress-contact__honeypot" aria-hidden="true">Website<input type="text" name="website" tabindex="-1" autocomplete="off"></label>
+                <label><span><?php echo esc_html( $field( 'name_label', 'お名前' ) ); ?></span><input name="name" type="text" maxlength="120" autocomplete="name" required></label>
+                <label><span><?php echo esc_html( $field( 'email_label', 'メールアドレス' ) ); ?></span><input name="email" type="email" maxlength="254" autocomplete="email" required></label>
+                <label><span><?php echo esc_html( $field( 'region_label', 'お住まいの地域' ) ); ?></span><input name="region" type="text" maxlength="160" autocomplete="address-level1"></label>
+                <label><span><?php echo esc_html( $field( 'message_label', 'ご相談・ご意見の内容' ) ); ?></span><textarea name="message" maxlength="5000" rows="6" required></textarea></label>
+                <fieldset><legend><?php echo esc_html( $field( 'reply_label', '返信希望' ) ); ?></legend><label><input name="reply_preference" type="radio" value="yes" checked> <?php echo esc_html( $field( 'reply_yes_label', '希望する' ) ); ?></label><label><input name="reply_preference" type="radio" value="no"> <?php echo esc_html( $field( 'reply_no_label', '希望しない' ) ); ?></label></fieldset>
+                <button type="submit"><?php echo esc_html( $field( 'button_text', '送信する' ) ); ?></button>
+                <p class="figmapress-contact__status" data-success="<?php echo esc_attr( $field( 'success_message', '送信しました。お問い合わせありがとうございます。' ) ); ?>" aria-live="polite"></p>
+            </form>
+        </section>
+        <?php
+    }
+}
+
+final class FigmaPress_Accordion_Widget extends FigmaPress_Widget_Base {
+    public function get_name() {
+        return 'figmapress-accordion';
+    }
+
+    public function get_title() {
+        return esc_html__( 'FigmaPress アコーディオン', 'figmapress-connector' );
+    }
+
+    public function get_icon() {
+        return 'eicon-accordion';
+    }
+
+    protected function register_controls() {
+        $this->start_controls_section(
+            'content',
+            array( 'label' => esc_html__( 'アコーディオン', 'figmapress-connector' ) )
+        );
+        $repeater = new \Elementor\Repeater();
+        $repeater->add_control(
+            'title',
+            array(
+                'label'   => esc_html__( '見出し', 'figmapress-connector' ),
+                'type'    => \Elementor\Controls_Manager::TEXT,
+                'default' => esc_html__( '項目', 'figmapress-connector' ),
+            )
+        );
+        $repeater->add_control(
+            'content',
+            array(
+                'label' => esc_html__( '内容', 'figmapress-connector' ),
+                'type'  => \Elementor\Controls_Manager::WYSIWYG,
+            )
+        );
+        $this->add_control(
+            'items',
+            array(
+                'label'       => esc_html__( '項目', 'figmapress-connector' ),
+                'type'        => \Elementor\Controls_Manager::REPEATER,
+                'fields'      => $repeater->get_controls(),
+                'title_field' => '{{{ title }}}',
+            )
+        );
+        $this->add_control(
+            'open_first',
+            array(
+                'label'        => esc_html__( '最初の項目を開く', 'figmapress-connector' ),
+                'type'         => \Elementor\Controls_Manager::SWITCHER,
+                'return_value' => 'yes',
+                'default'      => 'yes',
+            )
+        );
+        $this->add_control(
+            'allow_multiple',
+            array(
+                'label'        => esc_html__( '複数項目を同時に開く', 'figmapress-connector' ),
+                'type'         => \Elementor\Controls_Manager::SWITCHER,
+                'return_value' => 'yes',
+            )
+        );
+        $this->end_controls_section();
+
+        $this->start_controls_section(
+            'colors',
+            array(
+                'label' => esc_html__( '色', 'figmapress-connector' ),
+                'tab'   => \Elementor\Controls_Manager::TAB_STYLE,
+            )
+        );
+        foreach ( array(
+            'background_color' => array( '背景色', '#FFFFFF' ),
+            'accent_color'     => array( 'アクセント色', '#D50327' ),
+            'text_color'       => array( '文字色', '#202020' ),
+        ) as $key => $control ) {
+            $this->add_control(
+                $key,
+                array(
+                    'label'   => esc_html__( $control[0], 'figmapress-connector' ),
+                    'type'    => \Elementor\Controls_Manager::COLOR,
+                    'default' => $control[1],
+                )
+            );
+        }
+        $this->end_controls_section();
+    }
+
+    protected function render() {
+        $settings   = $this->get_settings_for_display();
+        $items      = isset( $settings['items'] ) && is_array( $settings['items'] ) ? $settings['items'] : array();
+        $background = figmapress_connector_css_color( isset( $settings['background_color'] ) ? $settings['background_color'] : '', '#FFFFFF' );
+        $accent     = figmapress_connector_css_color( isset( $settings['accent_color'] ) ? $settings['accent_color'] : '', '#D50327' );
+        $text       = figmapress_connector_css_color( isset( $settings['text_color'] ) ? $settings['text_color'] : '', '#202020' );
+        ?>
+        <div class="figmapress-accordion" data-multiple="<?php echo 'yes' === ( isset( $settings['allow_multiple'] ) ? $settings['allow_multiple'] : '' ) ? 'true' : 'false'; ?>" style="--figmapress-panel:<?php echo esc_attr( $background ); ?>;--figmapress-accent:<?php echo esc_attr( $accent ); ?>;--figmapress-text:<?php echo esc_attr( $text ); ?>">
+            <?php foreach ( $items as $index => $item ) : ?>
+                <details<?php echo 0 === $index && 'yes' === ( isset( $settings['open_first'] ) ? $settings['open_first'] : 'yes' ) ? ' open' : ''; ?>>
+                    <summary><span><?php echo esc_html( isset( $item['title'] ) ? $item['title'] : '' ); ?></span><span class="figmapress-accordion__icon" aria-hidden="true"></span></summary>
+                    <div class="figmapress-accordion__content"><?php echo wp_kses_post( wpautop( isset( $item['content'] ) ? $item['content'] : '' ) ); ?></div>
+                </details>
+            <?php endforeach; ?>
+        </div>
+        <?php
+    }
+}

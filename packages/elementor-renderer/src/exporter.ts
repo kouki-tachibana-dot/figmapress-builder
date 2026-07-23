@@ -132,23 +132,20 @@ function renderSection(
 
     case "section/faq": {
       const content = section.content as FaqContent;
-      const items = content.items.map((item, index) => container(ids, `${section.id}:faq:${index}`, {
-        padding: dimensions(22, 24, 22, 24),
-        background_background: "classic",
-        background_color: "#FFFFFF",
-        border_border: "solid",
-        border_width: dimensions(1, 1, 1, 1),
-        border_color: "#D7DEDB",
-        border_radius: dimensions(14, 14, 14, 14),
-        flex_direction: "column",
-        flex_gap: size(8),
-      }, [
-        heading(ids, `${section.id}:q:${index}`, item.question, "h3", theme, 22),
-        text(ids, `${section.id}:a:${index}`, item.answer, theme),
-      ]));
       return [container(ids, section.id, sectionSettings, [
         heading(ids, `${section.id}:headline`, content.headline ?? "FAQ", "h2", theme, 44),
-        ...items,
+        widget(ids, `${section.id}:accordion`, "figmapress-accordion", {
+          items: content.items.map((item, index) => ({
+            _id: hashId(`${section.id}:faq:${index}`),
+            title: item.question,
+            content: item.answer,
+          })),
+          open_first: "yes",
+          allow_multiple: "",
+          accent_color: theme.primary,
+          background_color: "#FFFFFF",
+          text_color: theme.text,
+        }),
       ], false)];
     }
 
@@ -174,7 +171,14 @@ function renderSection(
       }, [
         heading(ids, `${section.id}:headline`, content.headline, "h2", theme, 44),
         text(ids, `${section.id}:text`, content.text, theme),
-        button(ids, `${section.id}:button`, content.buttonText, content.buttonUrl, theme),
+        widget(ids, `${section.id}:form`, "figmapress-contact-form", {
+          title: content.headline,
+          button_text: content.buttonText || "送信する",
+          accent_color: theme.primary,
+          panel_color: theme.surface,
+          text_color: theme.text,
+          success_message: "送信しました。お問い合わせありがとうございます。",
+        }),
       ], false)];
     }
 

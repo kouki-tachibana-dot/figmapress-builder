@@ -12,6 +12,18 @@ type SourceMode = "figma" | "json";
 type OutputTarget = "gutenberg" | "elementor";
 
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
+const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.5.0";
+
+function versionAtLeast(version: string | undefined, minimum: string): boolean {
+  if (!version) return false;
+  const current = version.split(".").map((part) => Number.parseInt(part, 10) || 0);
+  const required = minimum.split(".").map((part) => Number.parseInt(part, 10) || 0);
+  for (let index = 0; index < Math.max(current.length, required.length); index += 1) {
+    if ((current[index] ?? 0) > (required[index] ?? 0)) return true;
+    if ((current[index] ?? 0) < (required[index] ?? 0)) return false;
+  }
+  return true;
+}
 
 function readSessionFigmaToken(): string {
   if (typeof window === "undefined") return "";
@@ -148,6 +160,10 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const [confirmed, setConfirmed] = useState(false);
 
   const srcDoc = output ? previewDocument(output.previewHtml) : "";
+  const connectorSupportsInteractions = versionAtLeast(
+    wpStatus?.connectorVersion,
+    FUNCTIONAL_WIDGETS_CONNECTOR_VERSION,
+  );
 
   function updateFigmaToken(value: string) {
     writeSessionFigmaToken(value);
@@ -321,7 +337,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.4.1 live</span>
+          <span className="status-pill"><i /> v0.5.0 live</span>
         </nav>
       </header>
 
@@ -461,7 +477,8 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
             <details className="naming-guide">
               <summary>対応するFigmaレイヤー名を確認</summary>
               <p>
-                Elementor高忠実度変換ではレイヤー名の変更は不要です。
+                Elementor高忠実度変換では、一般的なHeader/Menu-Item、フォーム項目、FAQ・年表を自動検出します。
+                他のデザインでは <code>{"{wp:nav}"}</code>、<code>{"{wp:form}"}</code>、<code>{"{wp:accordion}"}</code> の明示名も利用できます。
                 特定フレームの「選択範囲へのリンク」を貼り付けてください。
                 Gutenberg専用ブロックでは <code>section/hero</code> などの意味レイヤー名を利用します。
               </p>
@@ -583,6 +600,11 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
               {wpStatus && wpTarget === "elementor" && !wpStatus.elementor.active && (
                 <div className="alert alert--error" role="alert">このサイトではElementorが有効化されていません。</div>
               )}
+              {wpStatus && wpTarget === "elementor" && wpStatus.connectorInstalled && !connectorSupportsInteractions && (
+                <div className="alert alert--error" role="alert">
+                  メニュー・フォーム・アコーディオンを動作させるにはConnector v{FUNCTIONAL_WIDGETS_CONNECTOR_VERSION}以上が必要です。<a href="/downloads/figmapress-connector.zip" download>最新版ZIPをダウンロード</a>し、WordPressの「プラグインを追加 → プラグインのアップロード」から一度だけ更新してください。
+                </div>
+              )}
               <label className="consent">
                 <input checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} type="checkbox" />
                 <span>認証情報がこの処理のためだけに一時利用され、保存されないことを確認しました。</span>
@@ -600,7 +622,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                 <span>常に <code>status: draft</code></span>
                 <button
                   className="button button--dark"
-                  disabled={!confirmed || wpBusy || !wpStatus || !wpStatus.connectorInstalled || !wpStatus.canEditPages || (wpTarget === "elementor" && !wpStatus.elementor.active)}
+                  disabled={!confirmed || wpBusy || !wpStatus || !wpStatus.connectorInstalled || !wpStatus.canEditPages || (wpTarget === "elementor" && (!wpStatus.elementor.active || !connectorSupportsInteractions))}
                   type="submit"
                 >
                   {wpBusy ? "作成中…" : `${wpTarget === "elementor" ? "Elementor" : "Gutenberg"}下書きを作成 →`}
@@ -617,7 +639,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
           <div>
             <span className="eyebrow">One-time setup</span>
             <h2>WordPressに導入</h2>
-            <p>生成ブロックを表示するため、初回だけプラグインをインストールします。</p>
+            <p>WordPressサイトごとに初回だけインストールします。以後は管理画面の通常更新で完了します。</p>
           </div>
         </div>
         <div className="setup-grid">
@@ -630,7 +652,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
           <article>
             <span className="setup-icon">02</span>
             <h3>必要機能を有効化</h3>
-            <p>Connectorを有効化。Elementor出力ではElementor本体も有効化します。</p>
+            <p>Connectorを有効化。Elementor出力ではElementor本体も有効化します。以後XServer操作は不要です。</p>
           </article>
           <article>
             <span className="setup-icon">03</span>
@@ -643,14 +665,14 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
 
       <section className="scope-strip">
         <div><span>READY</span><strong>Gutenberg blocks</strong><p>編集可能な6セクション</p></div>
-        <div><span>READY</span><strong>Elementor documents</strong><p>Widget化・画像永続化</p></div>
+        <div><span>READY</span><strong>Elementor documents</strong><p>機能Widget化・画像永続化</p></div>
         <div><span>SECURITY</span><strong>Tab-only token</strong><p>サーバー保存なし・下書き限定</p></div>
       </section>
 
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.4.1</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.5.0</span></div>
       </footer>
     </main>
   );

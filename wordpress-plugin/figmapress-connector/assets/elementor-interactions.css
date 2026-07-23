@@ -1,0 +1,423 @@
+.elementor-widget-figmapress-nav,
+.elementor-widget-figmapress-nav > .elementor-widget-container {
+    height: 100%;
+    min-height: 72px;
+    width: 100%;
+}
+
+.figmapress-nav,
+.figmapress-contact,
+.figmapress-accordion {
+    box-sizing: border-box;
+    color: var(--figmapress-text, #202020);
+    font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", sans-serif;
+}
+
+.figmapress-nav *,
+.figmapress-contact *,
+.figmapress-accordion * {
+    box-sizing: border-box;
+}
+
+.figmapress-nav {
+    align-items: stretch;
+    background: var(--figmapress-nav-bg, rgba(255, 255, 255, .94));
+    border-top: 18px solid var(--figmapress-accent, #d10b2c);
+    display: flex;
+    height: 100%;
+    justify-content: space-between;
+    min-height: 97px;
+    position: relative;
+    width: 100%;
+    z-index: 100;
+}
+
+.figmapress-nav__logo {
+    align-items: center;
+    display: flex;
+    flex: 0 0 auto;
+    margin-left: clamp(20px, 3.55vw, 68px);
+    padding: 10px 0;
+}
+
+.figmapress-nav__logo img {
+    display: block;
+    height: 60px;
+    max-width: 170px;
+    object-fit: contain;
+    width: auto;
+}
+
+.figmapress-nav__panel {
+    align-items: stretch;
+    display: flex;
+    margin-left: auto;
+}
+
+.figmapress-nav__items {
+    align-items: center;
+    display: flex;
+    gap: clamp(30px, 4.8vw, 92px);
+    list-style: none;
+    margin: 0 clamp(34px, 4.9vw, 94px) 0 24px;
+    padding: 0;
+}
+
+.figmapress-nav__items a,
+.figmapress-nav__cta {
+    color: var(--figmapress-text, #202020);
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: .05em;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.figmapress-nav__items a:hover,
+.figmapress-nav__items a:focus-visible {
+    color: var(--figmapress-accent, #d10b2c);
+}
+
+.figmapress-nav__cta {
+    align-items: flex-end;
+    background: var(--figmapress-accent, #d10b2c);
+    border-radius: 0 0 0 10px;
+    color: #fff;
+    display: flex;
+    justify-content: center;
+    min-width: clamp(190px, 13.125vw, 252px);
+    padding: 18px 28px 14px;
+}
+
+.figmapress-nav__toggle {
+    display: none;
+}
+
+.figmapress-contact {
+    background: linear-gradient(to bottom, rgba(255, 255, 255, 0), #fff 15%);
+    min-height: 100%;
+    padding: clamp(70px, 5vw, 96px) clamp(18px, 7.8vw, 150px) clamp(40px, 6vw, 100px);
+    width: 100%;
+}
+
+.figmapress-contact h2 {
+    color: var(--figmapress-accent, #b90a23);
+    font-size: clamp(30px, 2.19vw, 42px);
+    letter-spacing: .05em;
+    margin: 0 auto 28px;
+    text-align: center;
+}
+
+.figmapress-contact__form {
+    background: var(--figmapress-panel, #ffe2e8);
+    margin: 0 auto;
+    max-width: 1124px;
+    padding: clamp(26px, 2.1vw, 40px);
+    position: relative;
+}
+
+.figmapress-contact__form > label:not(.figmapress-contact__honeypot) {
+    align-items: center;
+    display: grid;
+    gap: 24px;
+    grid-template-columns: minmax(190px, 270px) minmax(0, 1fr);
+    margin-bottom: 24px;
+}
+
+.figmapress-contact__form label > span,
+.figmapress-contact__form legend {
+    font-size: 18px;
+    font-weight: 650;
+}
+
+.figmapress-contact input[type="text"],
+.figmapress-contact input[type="email"],
+.figmapress-contact textarea {
+    background: #fff;
+    border: 1px solid #6c6c6c;
+    border-radius: 5px;
+    color: var(--figmapress-text, #202020);
+    font: inherit;
+    min-height: 51px;
+    padding: 10px 14px;
+    width: 100%;
+}
+
+.figmapress-contact textarea {
+    min-height: 144px;
+    resize: vertical;
+}
+
+.figmapress-contact input:focus-visible,
+.figmapress-contact textarea:focus-visible,
+.figmapress-contact button:focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--figmapress-accent, #b90a23) 32%, transparent);
+    outline-offset: 2px;
+}
+
+.figmapress-contact fieldset {
+    align-items: center;
+    border: 0;
+    display: flex;
+    gap: 32px;
+    margin: 0 0 28px;
+    padding: 0;
+}
+
+.figmapress-contact fieldset legend {
+    float: left;
+    margin-right: clamp(40px, 10vw, 190px);
+}
+
+.figmapress-contact fieldset label {
+    align-items: center;
+    display: flex;
+    gap: 8px;
+}
+
+.figmapress-contact input[type="radio"] {
+    accent-color: var(--figmapress-accent, #b90a23);
+    height: 22px;
+    width: 22px;
+}
+
+.figmapress-contact button[type="submit"] {
+    background: var(--figmapress-accent, #b90a23);
+    border: 0;
+    border-radius: 10px;
+    color: #fff;
+    cursor: pointer;
+    display: block;
+    font-size: 22px;
+    font-weight: 700;
+    margin: 0 auto;
+    min-height: 58px;
+    padding: 12px 42px;
+    width: min(596px, 100%);
+}
+
+.figmapress-contact button[disabled] {
+    cursor: wait;
+    opacity: .62;
+}
+
+.figmapress-contact__honeypot {
+    height: 1px;
+    left: -10000px;
+    overflow: hidden;
+    position: absolute;
+    top: auto;
+    width: 1px;
+}
+
+.figmapress-contact__status {
+    font-size: 15px;
+    font-weight: 650;
+    margin: 14px 0 0;
+    min-height: 1.5em;
+    text-align: center;
+}
+
+.figmapress-contact__status.is-error {
+    color: #9d1429;
+}
+
+.figmapress-accordion {
+    background: var(--figmapress-panel, #fff);
+    border: 1px solid var(--figmapress-accent, #d50327);
+    box-shadow: 15px 15px 0 var(--figmapress-accent, #d50327);
+    min-height: 100%;
+    padding: clamp(12px, 1.7vw, 32px);
+    width: 100%;
+}
+
+.figmapress-accordion details {
+    border-bottom: 1px solid color-mix(in srgb, var(--figmapress-text, #202020) 24%, transparent);
+}
+
+.figmapress-accordion summary {
+    align-items: center;
+    cursor: pointer;
+    display: flex;
+    font-size: clamp(16px, 1.05vw, 20px);
+    font-weight: 600;
+    justify-content: space-between;
+    list-style: none;
+    min-height: clamp(58px, 4vw, 76px);
+    padding: 10px 4px;
+}
+
+.figmapress-accordion summary::-webkit-details-marker {
+    display: none;
+}
+
+.figmapress-accordion__icon {
+    border: 2px solid var(--figmapress-accent, #d50327);
+    border-radius: 50%;
+    flex: 0 0 24px;
+    height: 24px;
+    position: relative;
+    width: 24px;
+}
+
+.figmapress-accordion__icon::before,
+.figmapress-accordion__icon::after {
+    background: var(--figmapress-accent, #d50327);
+    content: "";
+    height: 2px;
+    left: 5px;
+    position: absolute;
+    top: 9px;
+    transition: transform .2s ease;
+    width: 10px;
+}
+
+.figmapress-accordion__icon::after {
+    transform: rotate(90deg);
+}
+
+.figmapress-accordion details[open] .figmapress-accordion__icon::after {
+    transform: rotate(0);
+}
+
+.figmapress-accordion__content {
+    line-height: 1.8;
+    padding: 0 44px 20px 4px;
+}
+
+.figmapress-accordion__content > :first-child {
+    margin-top: 0;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+#thoughts,
+#policies,
+#activities,
+#profile,
+#contact {
+    scroll-margin-top: 90px;
+}
+
+@media (max-width: 767px) {
+    .figmapress-nav {
+        border-top-width: 6px;
+        min-height: 72px;
+    }
+
+    .figmapress-nav__logo {
+        margin-left: 16px;
+        padding: 7px 0;
+    }
+
+    .figmapress-nav__logo img {
+        height: 48px;
+        max-width: 140px;
+    }
+
+    .figmapress-nav__toggle {
+        align-self: center;
+        background: transparent;
+        border: 0;
+        cursor: pointer;
+        display: grid;
+        gap: 5px;
+        margin: 0 14px 0 auto;
+        padding: 12px;
+        width: 48px;
+    }
+
+    .figmapress-nav__toggle > span:not(.screen-reader-text) {
+        background: var(--figmapress-accent, #d10b2c);
+        display: block;
+        height: 2px;
+        width: 24px;
+    }
+
+    .figmapress-nav__panel {
+        background: var(--figmapress-nav-bg, #fff);
+        box-shadow: 0 16px 28px rgba(0, 0, 0, .14);
+        display: none;
+        left: 0;
+        padding: 12px 18px 18px;
+        position: absolute;
+        right: 0;
+        top: 100%;
+    }
+
+    .figmapress-nav.is-open .figmapress-nav__panel {
+        display: block;
+    }
+
+    .figmapress-nav__items {
+        align-items: stretch;
+        display: grid;
+        gap: 0;
+        margin: 0 0 10px;
+    }
+
+    .figmapress-nav__items a {
+        border-bottom: 1px solid rgba(0, 0, 0, .1);
+        display: block;
+        padding: 13px 5px;
+    }
+
+    .figmapress-nav__cta {
+        align-items: center;
+        border-radius: 8px;
+        min-height: 48px;
+        padding: 10px 18px;
+    }
+
+    .figmapress-contact {
+        min-height: 680px;
+        padding: 42px 14px;
+    }
+
+    .figmapress-contact h2 {
+        font-size: 28px;
+        margin-bottom: 20px;
+    }
+
+    .figmapress-contact__form {
+        padding: 20px 16px;
+    }
+
+    .figmapress-contact__form > label:not(.figmapress-contact__honeypot) {
+        display: block;
+        margin-bottom: 16px;
+    }
+
+    .figmapress-contact__form label > span {
+        display: block;
+        font-size: 15px;
+        margin-bottom: 6px;
+    }
+
+    .figmapress-contact fieldset {
+        align-items: flex-start;
+        flex-wrap: wrap;
+        gap: 12px 22px;
+    }
+
+    .figmapress-contact fieldset legend {
+        float: none;
+        margin: 0 0 8px;
+        width: 100%;
+    }
+
+    .figmapress-contact button[type="submit"] {
+        font-size: 18px;
+    }
+
+    .figmapress-accordion {
+        box-shadow: 7px 7px 0 var(--figmapress-accent, #d50327);
+        padding: 10px 14px;
+    }
+
+    .figmapress-accordion__content {
+        padding-right: 8px;
+    }
+}

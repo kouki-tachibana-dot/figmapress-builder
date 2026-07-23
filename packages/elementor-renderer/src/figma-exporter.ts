@@ -29,6 +29,16 @@ interface RichRun {
   style: FigmaTypeStyle;
 }
 
+interface AccordionItem {
+  title: string;
+  content: string;
+}
+
+interface AccordionPlan {
+  bounds: FigmaBounds;
+  items: AccordionItem[];
+}
+
 class ElementIdFactory {
   private readonly seen = new Set<string>();
 
@@ -150,15 +160,25 @@ function renderElement(
   const bounds = node.absoluteBoundingBox;
   if (node.visible === false || !bounds || bounds.width <= 0 || bounds.height <= 0) return null;
 
+  const navigation = navigationElement(node, bounds, parentBounds, context);
+  if (navigation) return navigation;
+  const contactForm = contactFormElement(node, bounds, parentBounds, context);
+  if (contactForm) return contactForm;
+
   const assetUrl = visualUrl(node, context.assets);
   if (assetUrl) return imageElement(node, bounds, parentBounds, assetUrl, context);
   if (node.type === "TEXT" && typeof node.characters === "string") {
     return textElement(node, bounds, parentBounds, context);
   }
 
+  const accordion = accordionPlan(node);
   const children = (node.children ?? [])
+    .filter((child) => !accordion || !isInsideInteractionBounds(child, accordion.bounds))
     .map((child) => renderElement(child, bounds, context))
     .filter((element): element is ElementorElement => element !== null);
+  if (accordion) {
+    children.push(accordionElement(node, accordion, bounds, context));
+  }
   const hasVisibleStyle = Boolean(solidColor(node.fills) || solidColor(node.strokes));
   if (!children.length && !hasVisibleStyle) return null;
 
@@ -170,9 +190,220 @@ function renderElement(
       ...baseContainerSettings(node, context),
       ...containerPosition(bounds, parentBounds, context),
       html_tag: htmlTag(node),
+      ...sectionAnchorSettings(node),
     },
     elements: children,
   };
+}
+
+function navigationElement(
+  node: FigmaNode,
+  bounds: FigmaBounds,
+  parentBounds: FigmaBounds,
+  context: RenderContext,
+): ElementorElement | null {
+  const menuTexts = descendants(node)
+    .filter((child) => child.type === "TEXT" && /(?:menu.?item|nav.?item|メニュー)/i.test(child.name))
+    .filter((child) => child.characters?.trim() && child.absoluteBoundingBox)
+    .sort((left, right) => (left.absoluteBoundingBox?.x ?? 0) - (right.absoluteBoundingBox?.x ?? 0));
+  const explicitlyNamed = /(?:\{wp:nav\}|header.*(?:sec|section)|navigation)/i.test(node.name);
+  if (!explicitlyNamed || menuTexts.length < 2) return null;
+
+  const logoNode = descendants(node).find((child) => /(?:header\/logo|\blogo\b|ロゴ)/i.test(child.name));
+  const logoUrl = logoNode ? visualUrl(logoNode, context.assets) ?? "" : "";
+  const ctaText = descendants(node).find((child) =>
+    child.type === "TEXT" && /(?:headercta\/text|ご相談|お問い合わせ|contact)/i.test(`${child.name} ${child.characters ?? ""}`),
+  );
+  const background = descendants(node).find((child) => /nav bar background/i.test(child.name));
+  const topBar = descendants(node).find((child) => /top bar/i.test(child.name));
+
+  return widget(context.ids, node.id, "figmapress-nav", {
+    ...widgetPosition(bounds, parentBounds),
+    _element_id: "site-navigation",
+    logo: logoUrl ? { url: logoUrl, id: "", alt: "サイトロゴ", source: "library" } : undefined,
+    items: menuTexts.map((item, index) => ({
+      _id: hashId(`${item.id}:menu:${index}`),
+      label: item.characters?.trim() ?? "",
+      url: { url: menuAnchor(item.characters ?? ""), is_external: "", nofollow: "" },
+    })),
+    cta_label: ctaText?.characters?.trim() || "お問い合わせ",
+    cta_url: { url: "#contact", is_external: "", nofollow: "" },
+    background_color: solidColor(background?.fills) ?? "rgba(255,255,255,0.92)",
+    accent_color: solidColor(topBar?.fills) ?? "#D10B2C",
+    text_color: solidColor(menuTexts[0]?.fills) ?? "#202020",
+  });
+}
+
+function contactFormElement(
+  node: FigmaNode,
+  bounds: FigmaBounds,
+  parentBounds: FigmaBounds,
+  context: RenderContext,
+): ElementorElement | null {
+  const texts = descendants(node)
+    .filter((child) => child.type === "TEXT" && child.characters?.trim())
+    .sort((left, right) => {
+      const y = (left.absoluteBoundingBox?.y ?? 0) - (right.absoluteBoundingBox?.y ?? 0);
+      return y || (left.absoluteBoundingBox?.x ?? 0) - (right.absoluteBoundingBox?.x ?? 0);
+    });
+  const copy = texts.map((child) => child.characters?.trim() ?? "");
+  const looksLikeForm = copy.some((value) => /メールアドレス|e-?mail/i.test(value))
+    && copy.some((value) => /ご相談|ご意見|message|お問い合わせ内容/i.test(value))
+    && copy.some((value) => /お名前|氏名|name/i.test(value));
+  const explicitlyNamed = /(?:\{wp:form\}|contact.?form|button.?cta|お問い合わせ)/i.test(node.name);
+  if (!looksLikeForm || !explicitlyNamed) return null;
+
+  const exact = (pattern: RegExp, fallback: string): string =>
+    copy.find((value) => pattern.test(value)) ?? fallback;
+  const title = copy.find((value) => /声を聞かせて|お問い合わせ|ご相談ください/.test(value)) ?? "お問い合わせ";
+  const panel = descendants(node).find((child) => {
+    const childBounds = child.absoluteBoundingBox;
+    return childBounds && childBounds.width > bounds.width * 0.4 && childBounds.width < bounds.width * 0.9
+      && childBounds.height > bounds.height * 0.35;
+  });
+  const buttonNode = descendants(node).find((child) =>
+    child.type === "TEXT" && /送る|送信|submit/i.test(child.characters ?? ""),
+  );
+  const buttonBounds = buttonNode?.absoluteBoundingBox;
+  const buttonBackground = buttonBounds ? descendants(node).find((child) => {
+    const candidate = child.absoluteBoundingBox;
+    if (!candidate || child.type === "TEXT" || !solidColor(child.fills)) return false;
+    const centerX = buttonBounds.x + buttonBounds.width / 2;
+    const centerY = buttonBounds.y + buttonBounds.height / 2;
+    return centerX >= candidate.x && centerX <= candidate.x + candidate.width
+      && centerY >= candidate.y && centerY <= candidate.y + candidate.height
+      && candidate.width > buttonBounds.width && candidate.height > buttonBounds.height
+      && candidate.height < bounds.height * 0.2;
+  }) : undefined;
+
+  return widget(context.ids, node.id, "figmapress-contact-form", {
+    ...widgetPosition(bounds, parentBounds),
+    _element_id: "contact",
+    title,
+    name_label: exact(/^(?:お名前|氏名|name)$/i, "お名前"),
+    email_label: exact(/メールアドレス|e-?mail/i, "メールアドレス"),
+    region_label: exact(/お住まいの地域|地域|area/i, "お住まいの地域"),
+    message_label: exact(/ご相談・ご意見の内容|お問い合わせ内容|message/i, "ご相談・ご意見の内容"),
+    reply_label: exact(/返信希望/, "返信希望"),
+    reply_yes_label: exact(/^希望する$/, "希望する"),
+    reply_no_label: exact(/^希望しない$/, "希望しない"),
+    button_text: buttonNode?.characters?.trim() || "送信する",
+    accent_color: solidColor(buttonBackground?.fills) ?? "#B90A23",
+    panel_color: solidColor(panel?.fills) ?? "#FFE2E8",
+    text_color: "#202020",
+    success_message: "送信しました。お問い合わせありがとうございます。",
+  });
+}
+
+function accordionPlan(node: FigmaNode): AccordionPlan | null {
+  if (!/(?:\{wp:accordion\}|profile|プロフィール|faq|よくある質問)/i.test(node.name)) return null;
+  const all = descendants(node);
+  const titles = all
+    .filter((child) => child.type === "TEXT" && /^\s*\d{4}年度\s*$/.test(child.characters ?? ""))
+    .filter((child) => child.absoluteBoundingBox)
+    .sort((left, right) => (left.absoluteBoundingBox?.y ?? 0) - (right.absoluteBoundingBox?.y ?? 0));
+  if (titles.length < 3) return null;
+
+  const firstY = titles[0]?.absoluteBoundingBox?.y ?? 0;
+  const last = titles[titles.length - 1];
+  const lastBounds = last?.absoluteBoundingBox;
+  if (!lastBounds) return null;
+  const wideRule = all
+    .filter((child) => child.type === "LINE" && child.absoluteBoundingBox)
+    .filter((child) => {
+      const line = child.absoluteBoundingBox as FigmaBounds;
+      return line.y >= firstY - 40 && line.y <= lastBounds.y + lastBounds.height + 100;
+    })
+    .sort((left, right) => (right.absoluteBoundingBox?.width ?? 0) - (left.absoluteBoundingBox?.width ?? 0))[0];
+  const ruleBounds = wideRule?.absoluteBoundingBox;
+  const x = ruleBounds?.x ?? Math.max(node.absoluteBoundingBox?.x ?? 0, (titles[0]?.absoluteBoundingBox?.x ?? 0) - 80);
+  const width = ruleBounds?.width ?? Math.min(node.absoluteBoundingBox?.width ?? 1200, Math.max(600, (node.absoluteBoundingBox?.width ?? 1200) * 0.72));
+  const y = Math.max(node.absoluteBoundingBox?.y ?? 0, firstY - 16);
+  const bottom = Math.min(
+    (node.absoluteBoundingBox?.y ?? 0) + (node.absoluteBoundingBox?.height ?? 0),
+    lastBounds.y + lastBounds.height + 44,
+  );
+
+  const items = titles.map((title, index) => {
+    const titleBounds = title.absoluteBoundingBox as FigmaBounds;
+    const nextY = titles[index + 1]?.absoluteBoundingBox?.y ?? bottom;
+    const content = all
+      .filter((child) => child.type === "TEXT" && child !== title && child.characters?.trim() && child.absoluteBoundingBox)
+      .filter((child) => {
+        const candidate = child.absoluteBoundingBox as FigmaBounds;
+        return candidate.y > titleBounds.y + 8 && candidate.y < nextY - 6
+          && candidate.x >= x && candidate.x <= x + width;
+      })
+      .sort((left, right) => (left.absoluteBoundingBox?.y ?? 0) - (right.absoluteBoundingBox?.y ?? 0))
+      .map((child) => child.characters?.trim() ?? "")
+      .join("\n");
+    return { title: title.characters?.trim() ?? `項目 ${index + 1}`, content };
+  });
+  return { bounds: { x, y, width, height: Math.max(120, bottom - y) }, items };
+}
+
+function accordionElement(
+  node: FigmaNode,
+  plan: AccordionPlan,
+  parentBounds: FigmaBounds,
+  context: RenderContext,
+): ElementorElement {
+  return widget(context.ids, `${node.id}:accordion`, "figmapress-accordion", {
+    ...widgetPosition(plan.bounds, parentBounds),
+    items: plan.items.map((item, index) => ({
+      _id: hashId(`${node.id}:accordion:${index}`),
+      title: item.title,
+      content: item.content,
+    })),
+    allow_multiple: "",
+    open_first: "yes",
+    accent_color: "#D50327",
+    background_color: "#FFFFFF",
+    text_color: "#202020",
+  });
+}
+
+function descendants(node: FigmaNode): FigmaNode[] {
+  const result: FigmaNode[] = [];
+  const visit = (child: FigmaNode): void => {
+    result.push(child);
+    for (const nested of child.children ?? []) visit(nested);
+  };
+  for (const child of node.children ?? []) visit(child);
+  return result;
+}
+
+function isInsideInteractionBounds(node: FigmaNode, interaction: FigmaBounds): boolean {
+  const bounds = node.absoluteBoundingBox;
+  if (!bounds) return false;
+  const centerX = bounds.x + bounds.width / 2;
+  const centerY = bounds.y + bounds.height / 2;
+  return centerX >= interaction.x && centerX <= interaction.x + interaction.width
+    && centerY >= interaction.y && centerY <= interaction.y + interaction.height;
+}
+
+function menuAnchor(label: string): string {
+  if (/想い|thought|message/i.test(label)) return "#thoughts";
+  if (/政策|policy|policies/i.test(label)) return "#policies";
+  if (/活動報告|activit|report/i.test(label)) return "#activities";
+  if (/プロフィール|profile/i.test(label)) return "#profile";
+  if (/相談|問合|contact/i.test(label)) return "#contact";
+  return `#${slug(label) || "section"}`;
+}
+
+function sectionAnchorSettings(node: FigmaNode): ElementorSettings {
+  const name = node.name;
+  if (!/(?:sec|section|contact|profile|政策|活動|想い|プロフィール|お問い合わせ)/i.test(name)) return {};
+  if (/thought|message|想い/i.test(name)) return { _element_id: "thoughts" };
+  if (/policy|policies|政策/i.test(name)) return { _element_id: "policies" };
+  if (/activit|report|活動/i.test(name)) return { _element_id: "activities" };
+  if (/profile|プロフィール/i.test(name)) return { _element_id: "profile" };
+  if (/contact|相談|問合/i.test(name)) return { _element_id: "contact" };
+  return {};
+}
+
+function slug(value: string): string {
+  return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
 function textElement(

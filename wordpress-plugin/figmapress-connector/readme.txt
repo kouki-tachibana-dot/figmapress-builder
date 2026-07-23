@@ -3,7 +3,7 @@ Contributors: figmapress
 Tags: blocks, figma, gutenberg, elementor
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 0.4.6
+Stable tag: 0.5.0
 License: GPLv2 or later
 
 Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
@@ -15,6 +15,12 @@ Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
    create a draft page containing figmapress/* blocks.
 
 == Changelog ==
+= 0.5.0 =
+* Convert Figma navigation layers into a real responsive navigation widget.
+* Convert contact-form visuals into a validated WordPress mail form with anti-spam protections.
+* Convert timeline and FAQ rows into accessible, editable accordion widgets.
+* Add native WordPress update checks so future releases do not require FTP replacement.
+
 = 0.4.6 =
 * Detect when Elementor Containers are unavailable before creating a page.
 * Let administrators enable Elementor's stable Container feature during creation without modifying existing page content.
