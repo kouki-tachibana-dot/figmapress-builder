@@ -17,6 +17,7 @@ import {
   FigmaElementorExporter,
   figmaLayoutSectionNames,
   hasFigmaLayout,
+  hasFigmaResponsiveLayout,
   renderFigmaPreview,
   type ElementorTemplate,
 } from "@figmapress/elementor-renderer";
@@ -44,6 +45,7 @@ export async function convertFile(
   renderedNodeUrls: Record<string, string> = {},
 ): Promise<ConversionOutput> {
   const fidelityLayout = hasFigmaLayout(file);
+  const responsiveFidelityLayout = fidelityLayout && hasFigmaResponsiveLayout(file);
   let mapped;
   try {
     mapped = mapFigmaToBlueprint(file, options);
@@ -85,6 +87,9 @@ export async function convertFile(
     ...exported.warnings,
     ...(fidelityLayout
       ? ["Elementor出力はFigmaの座標・文字スタイル・画像を直接保持する高忠実度モードです。"]
+      : []),
+    ...(responsiveFidelityLayout
+      ? ["FigmaのPC版とスマホ版を端末別レイアウトとして変換しました。"]
       : []),
   ])];
   const layoutSections = fidelityLayout ? figmaLayoutSectionNames(file) : [];

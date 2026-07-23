@@ -1,11 +1,11 @@
 {
   "name": "FigmaPress Connector",
   "slug": "figmapress-connector",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "requires": "6.4",
   "requires_php": "7.4",
   "tested": "7.0",
   "homepage": "https://figmapress-builder.vercel.app",
   "download_url": "https://figmapress-builder.vercel.app/downloads/figmapress-connector.zip",
-  "changelog": "<h4>0.6.0</h4><ul><li>タイムアウト後の再送でもElementor下書きが重複しないように改善。</li><li>キャッシュされた問い合わせフォームの期限切れを解消。</li><li>モバイルメニューのキーボード操作とフォーカス管理を改善。</li><li>問い合わせ送信のタイムアウト表示を追加。</li></ul><h4>0.5.0</h4><ul><li>Figmaのヘッダーを実動ナビへ変換。</li><li>問い合わせフォームとアコーディオンを機能Widget化。</li></ul>"
+  "changelog": "<h4>0.7.0</h4><ul><li>同じFigmaページのPC版とスマホ版を自動検出し、端末別Elementorレイアウトとして出力。</li><li>スマホ版の文字位置、画像トリミング、セクション順を独立して保持。</li><li>スマホヘッダーへPC版メニュー項目を引き継ぎ、CTA付き実動メニューへ変換。</li><li>PC版とスマホ版のアンカーIDを分離し、誤スクロールを防止。</li></ul><h4>0.6.0</h4><ul><li>タイムアウト後の再送でもElementor下書きが重複しないように改善。</li><li>キャッシュされた問い合わせフォームの期限切れを解消。</li><li>モバイルメニューのキーボード操作とフォーカス管理を改善。</li><li>問い合わせ送信のタイムアウト表示を追加。</li></ul>"
 }

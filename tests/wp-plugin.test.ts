@@ -26,6 +26,10 @@ const interactionStylePath = new URL(
   "../wordpress-plugin/figmapress-connector/assets/elementor-interactions.css",
   import.meta.url,
 );
+const elementorWidgetsPath = new URL(
+  "../wordpress-plugin/figmapress-connector/includes/elementor-widgets.php",
+  import.meta.url,
+);
 
 test("Connector stores Elementor content before attempting remote image imports", async () => {
   const source = await readFile(restApiPath, "utf8");
@@ -46,6 +50,8 @@ test("Connector bounds synchronous media localization", async () => {
   assert.match(source, /\$media_deadline\s*=\s*microtime\( true \) \+ 12;/);
   assert.match(source, /min\( 6, \$remaining \)/);
   assert.match(source, /download_url\( \$url, max\( 1, \(int\) \$download_timeout \) \)/);
+  assert.match(source, /isset\( \$localized_images\[ \$url \] \)/);
+  assert.match(source, /\$localized_images\[ \$url \]\s*=\s*array\(/);
 });
 
 test("Connector saves through Elementor and verifies persisted elements", async () => {
@@ -89,7 +95,7 @@ test("Connector accepts and registers functional Elementor widgets", async () =>
     readFile(pluginPath, "utf8"),
     readFile(restApiPath, "utf8"),
   ]);
-  assert.match(plugin, /Version:\s+0\.6\.0/);
+  assert.match(plugin, /Version:\s+0\.7\.0/);
   assert.match(plugin, /elementor\/widgets\/register/);
   for (const widget of ["figmapress-nav", "figmapress-contact-form", "figmapress-accordion"]) {
     assert.match(rest, new RegExp(`'${widget}'`));
@@ -136,6 +142,20 @@ test("functional widgets include keyboard, reduced-motion, and timeout safeguard
   assert.match(script, /aria-busy/);
   assert.match(style, /prefers-reduced-motion:\s*reduce/);
   assert.match(style, /focus-visible/);
+});
+
+test("mobile navigation keeps its CTA and device-specific anchor targets", async () => {
+  const [widget, style] = await Promise.all([
+    readFile(elementorWidgetsPath, "utf8"),
+    readFile(interactionStylePath, "utf8"),
+  ]);
+  assert.match(widget, /'home_url'/);
+  assert.match(widget, /'layout_variant'/);
+  assert.match(widget, /figmapress-nav--mobile/);
+  assert.match(widget, /figmapress-nav__mobile-cta/);
+  assert.match(style, /\.figmapress-nav--mobile/);
+  assert.match(style, /#contact-mobile/);
+  assert.match(style, /#contact-desktop/);
 });
 
 test("Connector checks the pinned HTTPS manifest for native WordPress updates", async () => {

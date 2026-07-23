@@ -340,7 +340,8 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
 
     $imported_media = 0;
     $media_deadline = microtime( true ) + 12;
-    figmapress_connector_localize_elementor_images( $content, $post_id, $warnings, $imported_media, $media_deadline );
+    $localized_images = array();
+    figmapress_connector_localize_elementor_images( $content, $post_id, $warnings, $imported_media, $media_deadline, $localized_images );
     $localized_store = figmapress_connector_store_elementor_document( $post_id, $content, $page_settings, $page_template );
     if ( is_wp_error( $localized_store ) ) {
         $warnings[] = '画像の保存後にElementorデータを更新できなかったため、画像処理前の編集可能データを保持しました。';
@@ -656,23 +657,23 @@ function figmapress_connector_allow_layout_css( $properties ) {
     );
 }
 
-function figmapress_connector_localize_elementor_images( &$elements, $post_id, &$warnings, &$imported_media, $deadline ) {
+function figmapress_connector_localize_elementor_images( &$elements, $post_id, &$warnings, &$imported_media, $deadline, &$localized_images ) {
     foreach ( $elements as &$element ) {
         if ( microtime( true ) >= $deadline ) {
             figmapress_connector_add_media_budget_warning( $warnings );
             return;
         }
         if ( 'widget' === $element['elType'] && 'image' === ( isset( $element['widgetType'] ) ? $element['widgetType'] : '' ) && isset( $element['settings']['image'] ) ) {
-            figmapress_connector_localize_image_setting( $element['settings']['image'], $post_id, $warnings, $imported_media, $deadline );
+            figmapress_connector_localize_image_setting( $element['settings']['image'], $post_id, $warnings, $imported_media, $deadline, $localized_images );
         }
         if ( 'widget' === $element['elType'] && 'figmapress-nav' === ( isset( $element['widgetType'] ) ? $element['widgetType'] : '' ) && isset( $element['settings']['logo'] ) ) {
-            figmapress_connector_localize_image_setting( $element['settings']['logo'], $post_id, $warnings, $imported_media, $deadline );
+            figmapress_connector_localize_image_setting( $element['settings']['logo'], $post_id, $warnings, $imported_media, $deadline, $localized_images );
         }
         if ( 'container' === $element['elType'] && isset( $element['settings']['background_image'] ) ) {
-            figmapress_connector_localize_image_setting( $element['settings']['background_image'], $post_id, $warnings, $imported_media, $deadline );
+            figmapress_connector_localize_image_setting( $element['settings']['background_image'], $post_id, $warnings, $imported_media, $deadline, $localized_images );
         }
         if ( ! empty( $element['elements'] ) ) {
-            figmapress_connector_localize_elementor_images( $element['elements'], $post_id, $warnings, $imported_media, $deadline );
+            figmapress_connector_localize_elementor_images( $element['elements'], $post_id, $warnings, $imported_media, $deadline, $localized_images );
         }
     }
 }
@@ -684,12 +685,19 @@ function figmapress_connector_add_media_budget_warning( &$warnings ) {
     }
 }
 
-function figmapress_connector_localize_image_setting( &$image, $post_id, &$warnings, &$imported_media, $deadline ) {
-    if ( ! is_array( $image ) || $imported_media >= 60 ) {
+function figmapress_connector_localize_image_setting( &$image, $post_id, &$warnings, &$imported_media, $deadline, &$localized_images ) {
+    if ( ! is_array( $image ) ) {
         return;
     }
     $url = isset( $image['url'] ) ? $image['url'] : '';
     if ( ! $url ) {
+        return;
+    }
+    if ( isset( $localized_images[ $url ] ) ) {
+        $image = array_merge( $image, $localized_images[ $url ] );
+        return;
+    }
+    if ( $imported_media >= 60 ) {
         return;
     }
     $remaining = (int) floor( $deadline - microtime( true ) );
@@ -710,6 +718,11 @@ function figmapress_connector_localize_image_setting( &$image, $post_id, &$warni
     $image['id']     = $attachment['id'];
     $image['url']    = $attachment['url'];
     $image['source'] = 'library';
+    $localized_images[ $url ] = array(
+        'id'     => $image['id'],
+        'url'    => $image['url'],
+        'source' => $image['source'],
+    );
     ++$imported_media;
 }
 
