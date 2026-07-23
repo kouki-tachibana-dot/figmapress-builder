@@ -1,4 +1,43 @@
 export type VisualQaStatus = "pass" | "review" | "fail";
+export type VisualQaDraftGateState = "off" | "pending" | "clear" | "warning";
+
+export interface VisualQaDraftGate {
+  state: VisualQaDraftGateState;
+  blocksDraft: boolean;
+  complete: boolean;
+  hasFailure: boolean;
+}
+
+export function resolveVisualQaDraftGate(input: {
+  enabled: boolean;
+  referenceCount: number;
+  resultStatuses: VisualQaStatus[];
+  busy: boolean;
+  error: boolean;
+  acknowledged: boolean;
+}): VisualQaDraftGate {
+  const hasFailure = input.resultStatuses.includes("fail");
+  const complete =
+    input.referenceCount > 0 &&
+    input.resultStatuses.length === input.referenceCount &&
+    !input.busy &&
+    !input.error;
+  if (!input.enabled || input.referenceCount <= 0) {
+    return { state: "off", blocksDraft: false, complete, hasFailure };
+  }
+  if (!complete) {
+    return { state: "pending", blocksDraft: true, complete, hasFailure };
+  }
+  if (hasFailure) {
+    return {
+      state: "warning",
+      blocksDraft: !input.acknowledged,
+      complete,
+      hasFailure,
+    };
+  }
+  return { state: "clear", blocksDraft: false, complete, hasFailure };
+}
 
 export interface VisualQaHotspot {
   startPercent: number;
@@ -6,6 +45,17 @@ export interface VisualQaHotspot {
   changedPixelRatio: number;
   meanColorError: number;
   label: string;
+}
+
+export interface VisualQaAlignment {
+  offsetX: number;
+  offsetY: number;
+  baselineError: number;
+  correctedError: number;
+  errorReductionRatio: number;
+  confidence: "high" | "medium" | "low";
+  safeToApply: boolean;
+  reason: string;
 }
 
 export interface VisualQaMetrics {
@@ -19,6 +69,7 @@ export interface VisualQaMetrics {
   generatedHeight: number;
   heightDifferenceRatio: number;
   hotspots: VisualQaHotspot[];
+  alignment: VisualQaAlignment;
   recommendations: string[];
 }
 
@@ -48,18 +99,234 @@ function locationLabel(startPercent: number, endPercent: number): string {
   return `${area} ${startPercent}–${endPercent}%`;
 }
 
+interface AlignmentError {
+  error: number;
+  signalRatio: number;
+}
+
+function alignmentError(
+  reference: Uint8ClampedArray,
+  target: Uint8ClampedArray,
+  width: number,
+  height: number,
+  correctionX: number,
+  correctionY: number,
+  maximumShift: number,
+  sampleStride: number,
+): AlignmentError {
+  const left = maximumShift + 1;
+  const top = maximumShift + 1;
+  const right = width - maximumShift - 1;
+  const bottom = height - maximumShift - 1;
+  let weightedError = 0;
+  let totalWeight = 0;
+  let signalSamples = 0;
+  let samples = 0;
+
+  for (let y = top; y < bottom; y += sampleStride) {
+    for (let x = left; x < right; x += sampleStride) {
+      const referenceOffset = (y * width + x) * 4;
+      const targetOffset =
+        ((y - correctionY) * width + x - correctionX) * 4;
+      const rightOffset = referenceOffset + 4;
+      const lowerOffset = referenceOffset + width * 4;
+      const referenceLuminance =
+        reference[referenceOffset] * 0.2126 +
+        reference[referenceOffset + 1] * 0.7152 +
+        reference[referenceOffset + 2] * 0.0722;
+      const rightLuminance =
+        reference[rightOffset] * 0.2126 +
+        reference[rightOffset + 1] * 0.7152 +
+        reference[rightOffset + 2] * 0.0722;
+      const lowerLuminance =
+        reference[lowerOffset] * 0.2126 +
+        reference[lowerOffset + 1] * 0.7152 +
+        reference[lowerOffset + 2] * 0.0722;
+      const edgeStrength = Math.max(
+        Math.abs(referenceLuminance - rightLuminance),
+        Math.abs(referenceLuminance - lowerLuminance),
+      );
+      const weight = 1 + Math.min(8, edgeStrength / 20);
+      const pixelError =
+        (
+          Math.abs(reference[referenceOffset] - target[targetOffset]) +
+          Math.abs(reference[referenceOffset + 1] - target[targetOffset + 1]) +
+          Math.abs(reference[referenceOffset + 2] - target[targetOffset + 2])
+        ) / 3;
+
+      weightedError += pixelError * weight;
+      totalWeight += weight;
+      if (edgeStrength >= 8) signalSamples += 1;
+      samples += 1;
+    }
+  }
+
+  return {
+    error: totalWeight ? weightedError / totalWeight : 0,
+    signalRatio: samples ? signalSamples / samples : 0,
+  };
+}
+
+export function estimateVisualAlignment(
+  reference: Uint8ClampedArray,
+  target: Uint8ClampedArray,
+  width: number,
+  height: number,
+  maximumShift = 12,
+): VisualQaAlignment {
+  const safeMaximumShift = Math.max(
+    0,
+    Math.min(
+      Math.round(maximumShift),
+      Math.floor((Math.min(width, height) - 4) / 2),
+    ),
+  );
+  if (safeMaximumShift < 2) {
+    return {
+      offsetX: 0,
+      offsetY: 0,
+      baselineError: 0,
+      correctedError: 0,
+      errorReductionRatio: 0,
+      confidence: "low",
+      safeToApply: false,
+      reason: "測定画像が小さいため、全体位置ずれを判定できません。",
+    };
+  }
+
+  const sampleStride = Math.max(
+    1,
+    Math.ceil(Math.sqrt((width * height) / 45_000)),
+  );
+  const baseline = alignmentError(
+    reference,
+    target,
+    width,
+    height,
+    0,
+    0,
+    safeMaximumShift,
+    sampleStride,
+  );
+  let bestX = 0;
+  let bestY = 0;
+  let bestError = baseline.error;
+  const coarseStep = safeMaximumShift >= 6 ? 3 : 2;
+
+  for (
+    let correctionY = -safeMaximumShift;
+    correctionY <= safeMaximumShift;
+    correctionY += coarseStep
+  ) {
+    for (
+      let correctionX = -safeMaximumShift;
+      correctionX <= safeMaximumShift;
+      correctionX += coarseStep
+    ) {
+      const measurement = alignmentError(
+        reference,
+        target,
+        width,
+        height,
+        correctionX,
+        correctionY,
+        safeMaximumShift,
+        sampleStride,
+      );
+      if (measurement.error < bestError) {
+        bestX = correctionX;
+        bestY = correctionY;
+        bestError = measurement.error;
+      }
+    }
+  }
+
+  const refinedX = bestX;
+  const refinedY = bestY;
+  for (
+    let correctionY = Math.max(-safeMaximumShift, refinedY - coarseStep);
+    correctionY <= Math.min(safeMaximumShift, refinedY + coarseStep);
+    correctionY += 1
+  ) {
+    for (
+      let correctionX = Math.max(-safeMaximumShift, refinedX - coarseStep);
+      correctionX <= Math.min(safeMaximumShift, refinedX + coarseStep);
+      correctionX += 1
+    ) {
+      const measurement = alignmentError(
+        reference,
+        target,
+        width,
+        height,
+        correctionX,
+        correctionY,
+        safeMaximumShift,
+        sampleStride,
+      );
+      if (measurement.error < bestError) {
+        bestX = correctionX;
+        bestY = correctionY;
+        bestError = measurement.error;
+      }
+    }
+  }
+
+  const errorReductionRatio =
+    baseline.error > 0
+      ? ((baseline.error - bestError) / baseline.error) * 100
+      : 0;
+  const hitsSearchBoundary =
+    Math.abs(bestX) === safeMaximumShift ||
+    Math.abs(bestY) === safeMaximumShift;
+  const hasUsableSignal = baseline.signalRatio >= 0.003;
+  const confidence =
+    hasUsableSignal && errorReductionRatio >= 22 && baseline.error >= 8
+      ? "high"
+      : hasUsableSignal && errorReductionRatio >= 10 && baseline.error >= 4
+        ? "medium"
+        : "low";
+  const safeToApply =
+    (bestX !== 0 || bestY !== 0) &&
+    !hitsSearchBoundary &&
+    confidence !== "low";
+  const reason = baseline.error < 0.1
+    ? "全体位置ずれは検出されませんでした。"
+    : !hasUsableSignal
+      ? "輪郭情報が少ないため、全体位置ずれを確定できません。"
+    : hitsSearchBoundary
+      ? "探索範囲の端まで差が続くため、単純な位置補正ではなくレイアウト差の可能性があります。"
+      : !safeToApply
+        ? "局所差分の影響が大きく、全体移動による補正の確度は低い状態です。"
+        : `ページ全体をX ${bestX >= 0 ? "+" : ""}${bestX}px / Y ${bestY >= 0 ? "+" : ""}${bestY}px移動すると、画素誤差を約${round(errorReductionRatio)}%削減できる見込みです。`;
+
+  return {
+    offsetX: bestX,
+    offsetY: bestY,
+    baselineError: round(baseline.error),
+    correctedError: round(bestError),
+    errorReductionRatio: round(errorReductionRatio),
+    confidence,
+    safeToApply,
+    reason,
+  };
+}
+
 function recommendationsFor(
   score: number,
   changedPixelRatio: number,
   brightnessDelta: number,
   heightDifferenceRatio: number,
   hotspots: VisualQaHotspot[],
+  alignment: VisualQaAlignment,
 ): string[] {
   if (score >= 92 && Math.abs(heightDifferenceRatio) < 3) {
     return ["Figma基準画像との大きな視覚差は検出されませんでした。"];
   }
 
   const recommendations: string[] = [];
+  if (alignment.safeToApply) {
+    recommendations.push(alignment.reason);
+  }
   if (Math.abs(heightDifferenceRatio) >= 3) {
     recommendations.push(
       heightDifferenceRatio > 0
@@ -178,6 +445,22 @@ export function analyzeVisualPixels(
       : height;
   const heightDifferenceRatio =
     ((normalizedGeneratedHeight - height) / height) * 100;
+  const estimatedAlignment = estimateVisualAlignment(
+    reference,
+    target,
+    width,
+    height,
+  );
+  const alignment: VisualQaAlignment =
+    Math.abs(heightDifferenceRatio) >= 5 && estimatedAlignment.safeToApply
+      ? {
+          ...estimatedAlignment,
+          confidence: "low",
+          safeToApply: false,
+          reason:
+            "ページ全体の高さがFigma基準と異なるため、位置補正より先にセクション高と欠落要素の確認が必要です。",
+        }
+      : estimatedAlignment;
   const score = clamp(
     100 -
       changedPixelRatio * 0.68 -
@@ -221,12 +504,14 @@ export function analyzeVisualPixels(
       generatedHeight: Math.round(normalizedGeneratedHeight),
       heightDifferenceRatio: round(heightDifferenceRatio),
       hotspots,
+      alignment,
       recommendations: recommendationsFor(
         roundedScore,
         changedPixelRatio,
         brightnessDelta,
         heightDifferenceRatio,
         hotspots,
+        alignment,
       ),
     },
     diffPixels,
