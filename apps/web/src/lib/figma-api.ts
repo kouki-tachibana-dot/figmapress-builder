@@ -13,7 +13,21 @@ export interface FigmaFetchResult {
   fileName: string;
   imageUrls: Record<string, string>;
   renderedNodeUrls: Record<string, string>;
+  visualReferences: FigmaVisualReferences;
   warnings: string[];
+}
+
+export interface FigmaVisualReference {
+  nodeId: string;
+  name: string;
+  url: string;
+  width: number;
+  height: number;
+}
+
+export interface FigmaVisualReferences {
+  desktop?: FigmaVisualReference;
+  mobile?: FigmaVisualReference;
 }
 
 export interface FigmaReference {
@@ -311,6 +325,82 @@ async function fetchRenderedNodeUrls(
   }
 }
 
+async function fetchVisualReferences(
+  key: string,
+  document: FigmaNode,
+  init: RequestInit,
+  warnings: string[],
+): Promise<FigmaVisualReferences> {
+  const responsive = responsivePageRoots(document);
+  const canvases = (document.children ?? []).filter((node) => node.type === "CANVAS");
+  const candidates = canvases
+    .flatMap((canvas) => canvas.children ?? [])
+    .filter((node) => node.visible !== false && node.absoluteBoundingBox)
+    .sort((left, right) => {
+      const leftBounds = left.absoluteBoundingBox;
+      const rightBounds = right.absoluteBoundingBox;
+      return (rightBounds?.width ?? 0) * (rightBounds?.height ?? 0)
+        - (leftBounds?.width ?? 0) * (leftBounds?.height ?? 0);
+    });
+  const desktop = responsive.desktop ?? candidates[0] ?? null;
+  const mobile = responsive.mobile;
+  const roots = [desktop, mobile].filter((node): node is FigmaNode =>
+    Boolean(node?.absoluteBoundingBox),
+  );
+  if (!roots.length) return {};
+
+  try {
+    const rendered = await Promise.all(roots.map(async (node) => {
+      const bounds = node.absoluteBoundingBox;
+      if (!bounds) return null;
+      const preferredWidth = bounds.width <= 768 ? 440 : 960;
+      const widthScale = Math.min(1, preferredWidth / bounds.width);
+      const pixelScale = Math.min(
+        1,
+        Math.sqrt(8_000_000 / (bounds.width * bounds.height)),
+      );
+      const scale = Math.max(0.01, Math.min(widthScale, pixelScale));
+      const query = new URLSearchParams({
+        ids: node.id,
+        format: "jpg",
+        scale: String(Math.round(scale * 1_000) / 1_000),
+        use_absolute_bounds: "true",
+      });
+      const response = await fetch(
+        `https://api.figma.com/v1/images/${encodeURIComponent(key)}?${query.toString()}`,
+        init,
+      );
+      if (!response.ok) return null;
+      const data = await readLimitedJson(response);
+      if (!isRecord(data) || !isRecord(data.images)) return null;
+      const image = data.images[node.id];
+      if (typeof image !== "string") return null;
+      return {
+        nodeId: node.id,
+        name: node.name,
+        url: image,
+        width: Math.max(1, Math.round(bounds.width * scale)),
+        height: Math.max(1, Math.round(bounds.height * scale)),
+      };
+    }));
+    const references = new Map(
+      rendered
+        .filter((item): item is FigmaVisualReference => Boolean(item))
+        .map((item) => [item.nodeId, item]),
+    );
+    if (!references.size) {
+      warnings.push("Visual QA用のFigma基準画像を取得できませんでした。");
+    }
+    return {
+      desktop: desktop ? references.get(desktop.id) : undefined,
+      mobile: mobile ? references.get(mobile.id) : undefined,
+    };
+  } catch {
+    warnings.push("Visual QA用のFigma基準画像を取得できませんでした。");
+    return {};
+  }
+}
+
 export async function fetchFigmaFile(
   fileKeyOrUrl: string,
   token: string,
@@ -398,6 +488,12 @@ export async function fetchFigmaFile(
     requestInit(),
     warnings,
   );
+  const visualReferences = await fetchVisualReferences(
+    key,
+    (data as RawFigmaFile).document,
+    requestInit(),
+    warnings,
+  );
   const normalizedData = data as RawFigmaFile;
 
   return {
@@ -405,6 +501,7 @@ export async function fetchFigmaFile(
     fileName: typeof normalizedData.name === "string" ? normalizedData.name : "FigmaPress Page",
     imageUrls,
     renderedNodeUrls,
+    visualReferences,
     warnings,
   };
 }

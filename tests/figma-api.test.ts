@@ -7,6 +7,11 @@ test("real Figma file shape is normalized into parser tokens", async (context) =
   context.mock.method(globalThis, "fetch", async (input) => {
     const url = String(input);
     requested.push(url);
+    if (url.includes("/v1/images/")) {
+      return Response.json({
+        images: { "2:2": "https://s3-alpha-sig.figma.com/reference.png" },
+      });
+    }
     if (url.includes("/images")) {
       return Response.json({ images: { heroFill: "https://s3-alpha.figma.com/example.png" } });
     }
@@ -29,6 +34,7 @@ test("real Figma file shape is normalized into parser tokens", async (context) =
             name: "section/hero",
             type: "FRAME",
             itemSpacing: 24,
+            absoluteBoundingBox: { x: 0, y: 0, width: 1440, height: 900 },
             fills: [{ type: "SOLID", color: { r: 0.1, g: 0.2, b: 0.9 } }],
             styles: { fill: "fillStyle" },
             children: [{
@@ -55,6 +61,8 @@ test("real Figma file shape is normalized into parser tokens", async (context) =
   assert.equal(result.file.styles?.colors?.[0]?.value, "#1A33E6");
   assert.equal(result.file.styles?.typography?.[0]?.fontFamily, "Inter");
   assert.equal(result.file.styles?.spacing?.[0]?.size, "24px");
+  assert.equal(result.visualReferences.desktop?.nodeId, "2:2");
+  assert.equal(result.visualReferences.desktop?.url, "https://s3-alpha-sig.figma.com/reference.png");
   assert.match(requested[0] ?? "", /ids=2%3A2/);
 });
 
@@ -77,6 +85,14 @@ test("selected responsive page frame also fetches its device companion", async (
   context.mock.method(globalThis, "fetch", async (input) => {
     const url = String(input);
     requested.push(url);
+    if (url.includes("/v1/images/")) {
+      return Response.json({
+        images: {
+          "46:12": "https://s3-alpha-sig.figma.com/desktop.png",
+          "46:210": "https://s3-alpha-sig.figma.com/mobile.png",
+        },
+      });
+    }
     if (url.includes("/images")) return Response.json({ images: {} });
     const selectedOnly = url.includes("ids=46%3A12");
     return Response.json({
@@ -112,6 +128,8 @@ test("selected responsive page frame also fetches its device companion", async (
     /\/files\/AbCdEf123456\?depth=12$/.test(url),
   ));
   assert.ok(result.warnings.some((warning) => warning.includes("PC版とスマホ版")));
+  assert.equal(result.visualReferences.desktop?.nodeId, "46:12");
+  assert.equal(result.visualReferences.mobile?.nodeId, "46:210");
 });
 
 test("complex visual groups are rendered once while editable text stays native", () => {

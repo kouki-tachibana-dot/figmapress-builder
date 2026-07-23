@@ -274,6 +274,12 @@ a { color: inherit; }
 .quality-report__checks span { display: flex; flex-direction: column; }
 .quality-report__checks b { color: #3a4a41; font-size: 9px; }
 .quality-report__checks small { color: #7a8980; font-size: 8px; line-height: 1.35; }
+.visual-qa-launch { background: #eef3f5; border: 1px solid #d5e0e4; border-radius: 14px; margin-top: 16px; padding: 14px; }
+.visual-qa-launch > strong { color: #294b59; font-size: 11px; }
+.visual-qa-launch p { color: #6c7e85; font-size: 9px; line-height: 1.5; margin: 4px 0 11px; }
+.visual-qa-launch button { align-items: center; background: #102d39; border: 0; border-radius: 999px; color: #fff; cursor: pointer; display: inline-flex; font-size: 9px; font-weight: 800; gap: 7px; min-height: 33px; padding: 0 13px; }
+.visual-qa-launch button:disabled { cursor: wait; opacity: .7; }
+.visual-qa-launch .spinner { border-color: rgba(255,255,255,.25); border-top-color: var(--lime); height: 12px; width: 12px; }
 .warning-list { background: #fff9e8; border: 1px solid #efe0ab; border-radius: 12px; margin-top: 22px; padding: 13px; }
 .warning-list strong { color: #735d20; font-size: 10px; }
 .warning-list p { color: #806f3b; font-size: 9px; line-height: 1.45; margin: 4px 0; }
@@ -281,6 +287,40 @@ a { color: inherit; }
 .download-list button { align-items: center; background: transparent; border: 0; border-bottom: 1px solid #e9ece9; color: var(--ink); cursor: pointer; display: flex; font-size: 11px; justify-content: space-between; padding: 13px 0; text-align: left; }
 .download-list button:hover { color: #5d8527; }
 .download-list b { color: #6b7a7f; font-size: 9px; }
+
+.visual-qa-card { background: #0c252f; border: 1px solid #26424d; border-radius: 20px; box-shadow: 0 18px 60px rgba(10,31,39,.1); color: #fff; margin: 22px auto 0; max-width: 1260px; padding: clamp(25px, 4vw, 42px); }
+.visual-qa-card__head { align-items: flex-start; display: flex; gap: 24px; justify-content: space-between; }
+.visual-qa-card__head h3 { font-size: 28px; letter-spacing: -.045em; margin: 2px 0 5px; }
+.visual-qa-card__head p { color: #9badb4; font-size: 11px; line-height: 1.7; margin: 0; max-width: 680px; }
+.visual-qa-card__head > button { background: transparent; border: 1px solid #56707a; border-radius: 999px; color: #c8d5d9; cursor: pointer; flex: 0 0 auto; font-size: 9px; font-weight: 800; min-height: 35px; padding: 0 14px; }
+.visual-qa-card__head > button:hover { border-color: var(--lime); color: var(--lime); }
+.visual-qa-progress { align-items: center; background: #15343f; border-radius: 14px; color: #b8c8cd; display: flex; font-size: 11px; gap: 10px; margin-top: 24px; padding: 18px; }
+.visual-qa-progress .spinner { border-color: rgba(255,255,255,.22); border-top-color: var(--lime); }
+.visual-qa-results { display: grid; gap: 15px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 28px; }
+.visual-qa-result { background: #f8faf8; border: 1px solid #d9e1de; border-top: 4px solid #f3a749; border-radius: 16px; color: var(--ink); overflow: hidden; padding: 22px; }
+.visual-qa-result.is-pass { border-top-color: #9bcb4b; }
+.visual-qa-result.is-fail { border-top-color: var(--coral); }
+.visual-qa-result__score { align-items: center; display: flex; gap: 12px; }
+.visual-qa-result__score > strong { color: #c17616; font-size: 43px; letter-spacing: -.07em; line-height: 1; }
+.visual-qa-result.is-pass .visual-qa-result__score > strong { color: #588229; }
+.visual-qa-result.is-fail .visual-qa-result__score > strong { color: #bd4e39; }
+.visual-qa-result__score > span { display: flex; flex-direction: column; }
+.visual-qa-result__score b { font-size: 12px; }
+.visual-qa-result__score small { color: #728188; font-size: 9px; }
+.visual-qa-metrics { display: grid; gap: 1px; grid-template-columns: repeat(4, 1fr); margin: 20px 0 0; }
+.visual-qa-metrics > div { background: #e9efed; padding: 10px; }
+.visual-qa-metrics > div:first-child { border-radius: 10px 0 0 10px; }
+.visual-qa-metrics > div:last-child { border-radius: 0 10px 10px 0; }
+.visual-qa-metrics dt { color: #76858a; font-size: 8px; }
+.visual-qa-metrics dd { font-size: 12px; font-weight: 800; margin: 2px 0 0; }
+.visual-qa-hotspots { border-top: 1px solid #dde5e2; margin-top: 18px; padding-top: 14px; }
+.visual-qa-hotspots > strong { font-size: 9px; }
+.visual-qa-hotspots p { align-items: center; background: #fff0ec; border-radius: 8px; color: #7b4a40; display: flex; font-size: 9px; justify-content: space-between; margin: 6px 0 0; padding: 7px 9px; }
+.visual-qa-hotspots p b { color: #a23f2e; }
+.visual-qa-recommendations { color: #627279; font-size: 9px; line-height: 1.65; margin: 15px 0 0; padding-left: 17px; }
+.visual-qa-diff { border-top: 1px solid #dce4e1; margin-top: 17px; padding-top: 13px; }
+.visual-qa-diff summary { color: #365a69; cursor: pointer; font-size: 9px; font-weight: 800; }
+.visual-qa-diff img { background: #fff; border: 1px solid #d3ddda; border-radius: 8px; display: block; height: auto; margin-top: 12px; width: 100%; }
 
 .wordpress-card { margin: 22px auto 0; max-width: 1260px; padding: clamp(25px, 4vw, 42px); }
 .wordpress-card__intro { align-items: center; display: flex; gap: 18px; margin-bottom: 28px; }
@@ -359,6 +399,7 @@ footer > div:last-child a, footer > div:last-child span { color: #83969d; font-s
   .result-grid { grid-template-columns: 1fr; }
   .output-card { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
   .download-list { border-left: 1px solid #e1e5e2; border-top: 0; margin: 0; padding: 0 0 0 22px; }
+  .visual-qa-results { grid-template-columns: 1fr; }
   .form-grid--three { grid-template-columns: 1fr 1fr; }
   .form-grid--three .field:first-child { grid-column: 1 / -1; }
 }
@@ -390,6 +431,11 @@ footer > div:last-child a, footer > div:last-child span { color: #83969d; font-s
   .preview-card iframe { height: 500px; }
   .output-card { display: block; }
   .download-list { border-left: 0; border-top: 1px solid #e1e5e2; margin-top: 24px; padding: 14px 0 0; }
+  .visual-qa-card__head { flex-direction: column; }
+  .visual-qa-metrics { grid-template-columns: 1fr; }
+  .visual-qa-metrics > div:first-child, .visual-qa-metrics > div:last-child { border-radius: 0; }
+  .visual-qa-metrics > div:first-child { border-radius: 10px 10px 0 0; }
+  .visual-qa-metrics > div:last-child { border-radius: 0 0 10px 10px; }
   .wordpress-card__intro { align-items: flex-start; }
   .setup-section { padding: 75px 16px; }
   .setup-grid { grid-template-columns: 1fr; }
