@@ -177,12 +177,80 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
         $warnings[] = 'Elementorの安定機能「コンテナ」を有効化しました。既存ページの内容は変更していません。';
     }
 
-    $params   = $request->get_json_params();
-    $title    = isset( $params['title'] ) ? sanitize_text_field( $params['title'] ) : '';
-    $slug     = isset( $params['slug'] ) ? sanitize_title( $params['slug'] ) : '';
-    $template = isset( $params['template'] ) && is_array( $params['template'] ) ? $params['template'] : null;
+    $params     = $request->get_json_params();
+    $title      = isset( $params['title'] ) ? sanitize_text_field( $params['title'] ) : '';
+    $slug       = isset( $params['slug'] ) ? sanitize_title( $params['slug'] ) : '';
+    $request_id = isset( $params['requestId'] ) ? sanitize_text_field( $params['requestId'] ) : '';
+    $template   = isset( $params['template'] ) && is_array( $params['template'] ) ? $params['template'] : null;
     if ( '' === $title || ! $template || '0.4' !== ( isset( $template['version'] ) ? (string) $template['version'] : '' ) ) {
         return new WP_Error( 'figmapress_invalid_template', 'The Elementor template payload is invalid.', array( 'status' => 422 ) );
+    }
+    if ( '' !== $request_id && ! preg_match( '/^[a-f0-9-]{16,64}$/i', $request_id ) ) {
+        return new WP_Error( 'figmapress_invalid_request_id', '作成リクエストの識別情報が無効です。', array( 'status' => 422 ) );
+    }
+
+    $request_lock_key = '' !== $request_id
+        ? 'figmapress_request_' . substr( hash_hmac( 'sha256', $request_id, wp_salt( 'nonce' ) ), 0, 32 )
+        : '';
+    if ( '' !== $request_id ) {
+        $existing_pages = get_posts(
+            array(
+                'post_type'              => 'page',
+                'post_status'            => array( 'draft', 'pending', 'private', 'publish', 'future' ),
+                'posts_per_page'         => 1,
+                'fields'                 => 'ids',
+                'meta_key'               => '_figmapress_request_id',
+                'meta_value'             => $request_id,
+                'no_found_rows'          => true,
+                'orderby'                => 'ID',
+                'order'                  => 'DESC',
+                'suppress_filters'       => false,
+                'update_post_meta_cache' => false,
+                'update_post_term_cache' => false,
+            )
+        );
+        $existing_id = isset( $existing_pages[0] ) ? absint( $existing_pages[0] ) : 0;
+        if ( $existing_id && current_user_can( 'edit_post', $existing_id ) ) {
+            $stored_elements = figmapress_connector_count_elementor_elements( figmapress_connector_read_elementor_data( $existing_id ) );
+            $existing_lock   = get_option( $request_lock_key );
+            $lock_started    = is_array( $existing_lock ) && isset( $existing_lock['started'] )
+                ? absint( $existing_lock['started'] )
+                : 0;
+            if ( $lock_started && $lock_started >= time() - ( 10 * MINUTE_IN_SECONDS ) ) {
+                return new WP_Error(
+                    'figmapress_request_in_progress',
+                    '同じElementor下書きを作成中です。少し待ってから同じボタンを再度押してください。',
+                    array( 'status' => 409, 'postId' => $existing_id )
+                );
+            }
+            $existing_status = get_post_status( $existing_id );
+            if ( 'draft' !== $existing_status ) {
+                return new WP_Error(
+                    'figmapress_request_already_completed',
+                    'この処理で作成したページは、すでに下書き以外の状態になっています。',
+                    array( 'status' => 409, 'postId' => $existing_id )
+                );
+            }
+            if ( 0 === $stored_elements ) {
+                wp_delete_post( $existing_id, true );
+                delete_option( $request_lock_key );
+            } else {
+                return rest_ensure_response(
+                    array(
+                        'id'             => $existing_id,
+                        'slug'           => get_post_field( 'post_name', $existing_id ),
+                        'status'         => $existing_status,
+                        'target'         => 'elementor',
+                        'editLink'       => admin_url( 'post.php?post=' . $existing_id . '&action=elementor' ),
+                        'previewLink'    => get_preview_post_link( $existing_id ),
+                        'rawLink'        => get_permalink( $existing_id ),
+                        'storedElements' => $stored_elements,
+                        'idempotent'     => true,
+                        'warnings'       => array( '前回の処理で作成済みの下書きを再利用しました。重複ページは作成していません。' ),
+                    )
+                );
+            }
+        }
     }
 
     $element_count = 0;
@@ -195,6 +263,31 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
     }
     if ( 0 === $element_count ) {
         return new WP_Error( 'figmapress_empty_template', 'The Elementor template contains no supported elements.', array( 'status' => 422 ) );
+    }
+
+    if ( '' !== $request_id ) {
+        $lock_value       = array(
+            'started' => time(),
+            'user'    => get_current_user_id(),
+        );
+        $locked           = add_option( $request_lock_key, $lock_value, '', false );
+        if ( ! $locked ) {
+            $existing_lock = get_option( $request_lock_key );
+            $started       = is_array( $existing_lock ) && isset( $existing_lock['started'] )
+                ? absint( $existing_lock['started'] )
+                : 0;
+            if ( $started && $started < time() - ( 10 * MINUTE_IN_SECONDS ) ) {
+                delete_option( $request_lock_key );
+                $locked = add_option( $request_lock_key, $lock_value, '', false );
+            }
+        }
+        if ( ! $locked ) {
+            return new WP_Error(
+                'figmapress_request_in_progress',
+                '同じElementor下書きを作成中です。少し待ってから同じボタンを再度押してください。',
+                array( 'status' => 409 )
+            );
+        }
     }
 
     $page_template = isset( $params['pageTemplate'] ) ? $params['pageTemplate'] : 'elementor_canvas';
@@ -213,9 +306,20 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
         true
     );
     if ( is_wp_error( $post_id ) ) {
+        if ( $request_lock_key ) {
+            delete_option( $request_lock_key );
+        }
         return $post_id;
     }
-
+    if ( '' !== $request_id && ! add_post_meta( $post_id, '_figmapress_request_id', $request_id, true ) ) {
+        delete_option( $request_lock_key );
+        wp_delete_post( $post_id, true );
+        return new WP_Error(
+            'figmapress_request_id_store_failed',
+            '下書きの重複防止情報を安全に保存できませんでした。',
+            array( 'status' => 500 )
+        );
+    }
     $page_settings = isset( $template['page_settings'] ) && is_array( $template['page_settings'] )
         ? figmapress_connector_sanitize_elementor_value( $template['page_settings'] )
         : array();
@@ -224,8 +328,14 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
     // Hosts can terminate slow downloads; the page must never be left empty.
     $stored_elements = figmapress_connector_store_elementor_document( $post_id, $content, $page_settings, $page_template );
     if ( is_wp_error( $stored_elements ) ) {
+        if ( $request_lock_key ) {
+            delete_option( $request_lock_key );
+        }
         wp_delete_post( $post_id, true );
         return $stored_elements;
+    }
+    if ( $request_lock_key ) {
+        delete_option( $request_lock_key );
     }
 
     $imported_media = 0;
@@ -250,6 +360,7 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
             'rawLink'       => get_permalink( $post_id ),
             'importedMedia' => $imported_media,
             'storedElements' => $stored_elements,
+            'idempotent'     => false,
             'warnings'      => $warnings,
         )
     );

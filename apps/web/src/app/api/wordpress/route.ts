@@ -42,6 +42,7 @@ const RequestSchema = z.discriminatedUnion("target", [
   }).strict(),
   CommonSchema.extend({
     target: z.literal("elementor"),
+    requestId: z.string().trim().regex(/^[a-f0-9-]{16,64}$/i),
     template: ElementorTemplateSchema,
     pageTemplate: z.enum(["elementor_canvas", "elementor_header_footer", "default"]).default("elementor_canvas"),
   }).strict(),
@@ -77,6 +78,7 @@ export async function POST(request: Request): Promise<Response> {
         ? await createElementorDraftPage(config, {
             title: parsed.data.title,
             slug: parsed.data.slug,
+            requestId: parsed.data.requestId,
             template: parsed.data.template,
             pageTemplate: parsed.data.pageTemplate,
           })

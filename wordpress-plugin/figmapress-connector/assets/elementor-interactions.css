@@ -78,6 +78,13 @@
     color: var(--figmapress-accent, #d10b2c);
 }
 
+.figmapress-nav a:focus-visible,
+.figmapress-nav__toggle:focus-visible,
+.figmapress-accordion summary:focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--figmapress-accent, #d10b2c) 38%, transparent);
+    outline-offset: 3px;
+}
+
 .figmapress-nav__cta {
     align-items: flex-end;
     background: var(--figmapress-accent, #d10b2c);
@@ -291,6 +298,16 @@
 
 html {
     scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html {
+        scroll-behavior: auto;
+    }
+
+    .figmapress-accordion__icon::after {
+        transition: none;
+    }
 }
 
 #thoughts,

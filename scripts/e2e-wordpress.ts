@@ -93,6 +93,7 @@ try {
   const page = conversion.blueprint.pages[0];
   assert.ok(page);
   const result = await createElementorDraftPage(config, {
+    requestId: crypto.randomUUID(),
     title: `FigmaPress E2E ${Date.now()}`,
     slug: `figmapress-e2e-${Date.now()}`,
     template: conversion.elementorTemplate,
