@@ -207,13 +207,22 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
 
     // Persist the complete editable document before any remote image work.
     // Hosts can terminate slow downloads; the page must never be left empty.
-    figmapress_connector_store_elementor_document( $post_id, $content, $page_settings, $page_template );
+    $stored_elements = figmapress_connector_store_elementor_document( $post_id, $content, $page_settings, $page_template );
+    if ( is_wp_error( $stored_elements ) ) {
+        wp_delete_post( $post_id, true );
+        return $stored_elements;
+    }
 
     $warnings       = array();
     $imported_media = 0;
     $media_deadline = microtime( true ) + 12;
     figmapress_connector_localize_elementor_images( $content, $post_id, $warnings, $imported_media, $media_deadline );
-    figmapress_connector_store_elementor_document( $post_id, $content, $page_settings, $page_template );
+    $localized_store = figmapress_connector_store_elementor_document( $post_id, $content, $page_settings, $page_template );
+    if ( is_wp_error( $localized_store ) ) {
+        $warnings[] = '画像の保存後にElementorデータを更新できなかったため、画像処理前の編集可能データを保持しました。';
+    } else {
+        $stored_elements = $localized_store;
+    }
     figmapress_connector_clear_elementor_cache( $post_id );
 
     return rest_ensure_response(
@@ -226,18 +235,71 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
             'previewLink'   => get_preview_post_link( $post_id ),
             'rawLink'       => get_permalink( $post_id ),
             'importedMedia' => $imported_media,
+            'storedElements' => $stored_elements,
             'warnings'      => $warnings,
         )
     );
 }
 
 function figmapress_connector_store_elementor_document( $post_id, $content, $page_settings, $page_template ) {
-    update_post_meta( $post_id, '_elementor_edit_mode', 'builder' );
-    update_post_meta( $post_id, '_elementor_template_type', 'wp-page' );
-    update_post_meta( $post_id, '_elementor_version', defined( 'ELEMENTOR_VERSION' ) ? ELEMENTOR_VERSION : '' );
-    update_post_meta( $post_id, '_elementor_data', wp_slash( wp_json_encode( $content ) ) );
-    update_post_meta( $post_id, '_elementor_page_settings', $page_settings );
     update_post_meta( $post_id, '_wp_page_template', $page_template );
+
+    $saved_with_document_api = false;
+    if ( class_exists( '\\Elementor\\Plugin' ) && isset( \Elementor\Plugin::$instance->documents ) ) {
+        try {
+            $document = \Elementor\Plugin::$instance->documents->get( $post_id );
+            if ( $document && method_exists( $document, 'save' ) ) {
+                $saved_with_document_api = true === $document->save(
+                    array(
+                        'elements' => $content,
+                        'settings' => $page_settings,
+                    )
+                );
+            }
+        } catch ( Throwable $error ) {
+            $saved_with_document_api = false;
+        }
+    }
+
+    // Retain a direct-meta fallback for older Elementor releases while using
+    // Elementor's document API whenever the active version provides it.
+    if ( ! $saved_with_document_api ) {
+        update_post_meta( $post_id, '_elementor_edit_mode', 'builder' );
+        update_post_meta( $post_id, '_elementor_template_type', 'wp-page' );
+        update_post_meta( $post_id, '_elementor_version', defined( 'ELEMENTOR_VERSION' ) ? ELEMENTOR_VERSION : '' );
+        update_post_meta( $post_id, '_elementor_data', wp_slash( wp_json_encode( $content ) ) );
+        update_post_meta( $post_id, '_elementor_page_settings', $page_settings );
+    }
+
+    // Elementor reads the template assignment from WordPress post meta, so
+    // restore it after Document::save() processes document settings.
+    update_post_meta( $post_id, '_wp_page_template', $page_template );
+
+    $stored_json = get_post_meta( $post_id, '_elementor_data', true );
+    $stored_data = is_string( $stored_json ) ? json_decode( $stored_json, true ) : null;
+    if ( ! is_array( $stored_data ) || empty( $stored_data ) ) {
+        return new WP_Error(
+            'figmapress_elementor_save_failed',
+            'Elementor data could not be stored on this server.',
+            array( 'status' => 500 )
+        );
+    }
+
+    return figmapress_connector_count_elementor_elements( $stored_data );
+}
+
+function figmapress_connector_count_elementor_elements( $elements ) {
+    $count = 0;
+    foreach ( $elements as $element ) {
+        if ( ! is_array( $element ) ) {
+            continue;
+        }
+        ++$count;
+        if ( isset( $element['elements'] ) && is_array( $element['elements'] ) ) {
+            $count += figmapress_connector_count_elementor_elements( $element['elements'] );
+        }
+    }
+    return $count;
 }
 
 function figmapress_connector_sanitize_elementor_elements( $elements, &$count ) {

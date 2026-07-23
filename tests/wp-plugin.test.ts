@@ -27,3 +27,12 @@ test("Connector bounds synchronous media localization", async () => {
   assert.match(source, /min\( 6, \$remaining \)/);
   assert.match(source, /download_url\( \$url, max\( 1, \(int\) \$download_timeout \) \)/);
 });
+
+test("Connector saves through Elementor and verifies persisted elements", async () => {
+  const source = await readFile(restApiPath, "utf8");
+  assert.match(source, /\\Elementor\\Plugin::\$instance->documents->get\( \$post_id \)/);
+  assert.match(source, /\$document->save\(/);
+  assert.match(source, /get_post_meta\( \$post_id, '_elementor_data', true \)/);
+  assert.match(source, /figmapress_elementor_save_failed/);
+  assert.match(source, /wp_delete_post\( \$post_id, true \)/);
+});
