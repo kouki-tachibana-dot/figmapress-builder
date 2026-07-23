@@ -557,7 +557,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
 
             {error && <div className="alert alert--error" role="alert">{error}</div>}
             <div className="form-footer">
-              <p><span className="lock">⌁</span> サーバー保存なし。Figmaトークンはこのタブだけに保持されます。</p>
+              <p><span className="lock">⌁</span> サーバー保存なし。標準はタブ内、選択時のみこのブラウザに保持します。</p>
               <button className="button button--primary button--submit" disabled={converting} type="submit">
                 {converting ? <><span className="spinner" /> 変換中…</> : <>WordPress用に変換 <span>→</span></>}
               </button>
