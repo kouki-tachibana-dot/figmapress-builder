@@ -277,6 +277,7 @@ test("real Figma bounds produce a high-fidelity editable Elementor document", as
   assert.match(String(heading?.settings.editor), /line-break:strict/);
   assert.equal(heading?.settings.css_classes, "figmapress-text figmapress-text--horizontal");
   assert.deepEqual(heading?.settings.typography_font_size, { unit: "vw", size: 3.333, sizes: [] });
+  assert.equal(punctuation?.settings._transform_rotate_popover, "transform");
   assert.deepEqual(punctuation?.settings._transform_rotateZ_effect, { unit: "deg", size: 7.54, sizes: [] });
   assert.deepEqual(mixedHeading?.settings.typography_font_size, { unit: "vw", size: 4.375, sizes: [] });
   assert.match(String(mixedHeading?.settings.editor), /<span style="display:block;max-width:100%"><span/);
@@ -295,6 +296,7 @@ test("real Figma bounds produce a high-fidelity editable Elementor document", as
   assert.match(result.previewHtml, /data-figmapress-node-name="Main heading"/);
   assert.match(result.previewHtml, /data-figmapress-kind="text"/);
   assert.match(result.previewHtml, /writing-mode:horizontal-tb/);
+  assert.match(result.previewHtml, /transform:var\(--figmapress-qa-transform\) rotate\(7\.54deg\)/);
   assert.match(result.previewHtml, /portrait-rendered\.png/);
   assert.deepEqual(result.qualityReport?.metrics.typography, {
     horizontalTextNodes: 5,

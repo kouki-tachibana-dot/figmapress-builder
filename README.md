@@ -3,7 +3,7 @@
 Figma の構造を、WordPress で扱える Gutenberg ブロックまたはElementorページへ変換する
 オープンソースの Web アプリ＋CLIです。
 
-## v0.11.0 — Section & Typography Visual QA
+## v0.12.0 — Measured Visual Auto-Correction
 
 **Web版:** [https://figmapress-builder.vercel.app](https://figmapress-builder.vercel.app)
 
@@ -25,6 +25,9 @@ Figma の構造を、WordPress で扱える Gutenberg ブロックまたはEleme
 - PC／スマホ別の差分ヒートマップと改善提案を画面表示し、JSONとして保存
 - 差分をセクション／文字要素単位で再計測し、ページ全体への影響が大きい順に表示
 - PC／スマホ別に全体位置ずれの補正候補、確度、推定誤差削減率を自動判定
+- 安全と判定したPC／スマホ別の全体位置ずれをElementor標準Transformへワンクリック反映
+- 補正後にFigma基準画像と自動再比較し、実測スコアが改善した場合だけ生成データへ採用
+- 改善しない補正はプレビューとElementor JSONの両方から自動で巻き戻し
 - ページ高の不一致や局所差分を単純な全体移動と誤認しない安全判定
 - Elementor下書き前にVisual QAを必須化し、重大差分がある場合は明示確認してから送信
 - `PC-page` と `SP-page` を自動検出し、ElementorでPC／タブレット用とスマホ用を安全に切り替え

@@ -99,6 +99,46 @@ export interface VisualQaAnalysis {
   diffPixels: Uint8ClampedArray;
 }
 
+export interface VisualQaCorrectionOutcome {
+  variant: "desktop" | "mobile";
+  score: number;
+  changedPixelRatio: number;
+}
+
+export function shouldKeepVisualCorrections(
+  before: VisualQaCorrectionOutcome[],
+  after: VisualQaCorrectionOutcome[],
+  correctedVariants: Array<"desktop" | "mobile">,
+): boolean {
+  const targetVariants = new Set(correctedVariants);
+  if (!targetVariants.size) return false;
+  const beforeByVariant = new Map(
+    before.map((result) => [result.variant, result]),
+  );
+  const afterByVariant = new Map(
+    after.map((result) => [result.variant, result]),
+  );
+  let aggregateScoreGain = 0;
+  let aggregateChangedPixelReduction = 0;
+
+  for (const variant of targetVariants) {
+    const baseline = beforeByVariant.get(variant);
+    const corrected = afterByVariant.get(variant);
+    if (!baseline || !corrected) return false;
+    if (
+      corrected.score < baseline.score - 0.2
+      || corrected.changedPixelRatio > baseline.changedPixelRatio + 0.2
+    ) {
+      return false;
+    }
+    aggregateScoreGain += corrected.score - baseline.score;
+    aggregateChangedPixelReduction +=
+      baseline.changedPixelRatio - corrected.changedPixelRatio;
+  }
+
+  return aggregateScoreGain >= 0.1 || aggregateChangedPixelReduction >= 0.1;
+}
+
 interface BandAccumulator {
   pixels: number;
   changed: number;
