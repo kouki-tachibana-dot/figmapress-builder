@@ -12,6 +12,7 @@ import {
   type VisualQaBrowserResult,
   type VisualQaReference,
 } from "@/lib/visual-qa-browser";
+import { resolveVisualQaDraftGate } from "@/lib/visual-qa";
 
 type SourceMode = "figma" | "json";
 type OutputTarget = "gutenberg" | "elementor";
@@ -245,6 +246,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const [visualQaBusy, setVisualQaBusy] = useState(false);
   const [visualQaError, setVisualQaError] = useState("");
   const [visualQaResults, setVisualQaResults] = useState<VisualQaBrowserResult[]>([]);
+  const [visualQaAcknowledged, setVisualQaAcknowledged] = useState(false);
   const [draftRequestId, setDraftRequestId] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [username, setUsername] = useState("");
@@ -255,6 +257,22 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const connectorSupportsInteractions = wpStatus?.functionalWidgets
     ? Object.values(wpStatus.functionalWidgets).every(Boolean)
     : versionAtLeast(wpStatus?.connectorVersion, FUNCTIONAL_WIDGETS_CONNECTOR_VERSION);
+  const visualQaReferenceCount = output
+    ? Number(Boolean(output.visualReferences.desktop)) +
+      Number(Boolean(output.visualReferences.mobile))
+    : 0;
+  const visualQaGate = resolveVisualQaDraftGate({
+    enabled: wpTarget === "elementor",
+    referenceCount: visualQaReferenceCount,
+    resultStatuses: visualQaResults.map((result) => result.status),
+    busy: visualQaBusy,
+    error: Boolean(visualQaError),
+    acknowledged: visualQaAcknowledged,
+  });
+  const visualQaComplete = visualQaGate.complete;
+  const visualQaHasFailure = visualQaGate.hasFailure;
+  const visualQaGateRequired = visualQaGate.state !== "off";
+  const visualQaBlocksDraft = visualQaGate.blocksDraft;
 
   function updateFigmaToken(value: string) {
     writeFigmaToken(value);
@@ -272,6 +290,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     setWpResult(null);
     setVisualQaError("");
     setVisualQaResults([]);
+    setVisualQaAcknowledged(false);
 
     try {
       let body: Record<string, unknown>;
@@ -321,6 +340,14 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   async function createWordPressDraft(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!output || !confirmed) return;
+    if (visualQaBlocksDraft) {
+      setWpError(
+        !visualQaComplete
+          ? "Elementor下書きの前にFigma視覚差分を測定してください。"
+          : "重大な視覚差分の確認チェックを入れてから下書きを作成してください。",
+      );
+      return;
+    }
     const credentials = readWordPressCredentials(new FormData(event.currentTarget), {
       baseUrl,
       username,
@@ -448,6 +475,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     setVisualQaBusy(true);
     setVisualQaError("");
     setVisualQaResults([]);
+    setVisualQaAcknowledged(false);
     try {
       const results: VisualQaBrowserResult[] = [];
       for (const [variant, reference] of references) {
@@ -475,7 +503,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.9.0 live</span>
+          <span className="status-pill"><i /> v0.10.0 live</span>
         </nav>
       </header>
 
@@ -795,6 +823,35 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                         <div><dt>全体高差</dt><dd>{result.heightDifferenceRatio > 0 ? "+" : ""}{result.heightDifferenceRatio}%</dd></div>
                         <div><dt>測定寸法</dt><dd>{result.width}×{result.height}</dd></div>
                       </dl>
+                      {(result.status !== "pass" || result.alignment.safeToApply) && (
+                        <div className={`visual-qa-alignment ${result.alignment.safeToApply ? "is-safe" : "is-guarded"}`}>
+                          <div>
+                            <strong>
+                              {result.alignment.safeToApply
+                                ? "全体位置の補正候補"
+                                : "一括位置補正は見送り"}
+                            </strong>
+                            <span>
+                              {result.alignment.confidence === "high"
+                                ? "確度 高"
+                                : result.alignment.confidence === "medium"
+                                  ? "確度 中"
+                                  : "確度 低"}
+                            </span>
+                          </div>
+                          {result.alignment.safeToApply && (
+                            <dl>
+                              <div><dt>X</dt><dd>{result.alignment.offsetX >= 0 ? "+" : ""}{result.alignment.offsetX}px</dd></div>
+                              <div><dt>Y</dt><dd>{result.alignment.offsetY >= 0 ? "+" : ""}{result.alignment.offsetY}px</dd></div>
+                              <div><dt>誤差削減見込</dt><dd>{result.alignment.errorReductionRatio}%</dd></div>
+                            </dl>
+                          )}
+                          <p>{result.alignment.reason}</p>
+                          {result.alignment.safeToApply && (
+                            <small>PC/SPを別々に判定した非破壊の補正候補です。値はレポートJSONにも保存されます。</small>
+                          )}
+                        </div>
+                      )}
                       {result.hotspots.length > 0 && (
                         <div className="visual-qa-hotspots">
                           <strong>差分集中箇所</strong>
@@ -891,6 +948,38 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                   メニュー・フォーム・アコーディオンを動作させるにはConnector v{FUNCTIONAL_WIDGETS_CONNECTOR_VERSION}以上が必要です。<a href="/downloads/figmapress-connector.zip" download>最新版ZIPをダウンロード</a>し、WordPressの「プラグインを追加 → プラグインのアップロード」から一度だけ更新してください。
                 </div>
               )}
+              {visualQaGateRequired && !visualQaComplete && (
+                <div className="visual-qa-gate is-pending" role="status">
+                  <div>
+                    <strong>Elementor下書き前の視覚確認が必要です</strong>
+                    <span>FigmaのPC/SP基準画像と生成結果を比較してから送信します。</span>
+                  </div>
+                  <button disabled={visualQaBusy} onClick={checkVisualQuality} type="button">
+                    {visualQaBusy ? "比較中…" : "視覚差分を測定"}
+                  </button>
+                </div>
+              )}
+              {visualQaGateRequired && visualQaComplete && !visualQaHasFailure && (
+                <div className="visual-qa-gate is-clear" role="status">
+                  <div>
+                    <strong>✓ 視覚品質チェック完了</strong>
+                    <span>PC/SPの重大差分は検出されていません。</span>
+                  </div>
+                </div>
+              )}
+              {visualQaGateRequired && visualQaComplete && visualQaHasFailure && (
+                <label className="visual-qa-gate is-warning">
+                  <input
+                    checked={visualQaAcknowledged}
+                    onChange={(event) => setVisualQaAcknowledged(event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span>
+                    <strong>重大な視覚差分を確認しました</strong>
+                    <small>差分レポートを確認したうえで、調整用のElementor下書きを作成します。</small>
+                  </span>
+                </label>
+              )}
               <label className="consent">
                 <input checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} type="checkbox" />
                 <span>認証情報がこの処理のためだけに一時利用され、保存されないことを確認しました。</span>
@@ -908,7 +997,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                 <span>常に <code>status: draft</code></span>
                 <button
                   className="button button--dark"
-                  disabled={!confirmed || wpBusy || !wpStatus || !wpStatus.connectorInstalled || !wpStatus.canEditPages || (wpTarget === "elementor" && (!wpStatus.elementor.active || !connectorSupportsInteractions))}
+                  disabled={!confirmed || wpBusy || visualQaBlocksDraft || !wpStatus || !wpStatus.connectorInstalled || !wpStatus.canEditPages || (wpTarget === "elementor" && (!wpStatus.elementor.active || !connectorSupportsInteractions))}
                   type="submit"
                 >
                   {wpBusy ? "作成中…" : `${wpTarget === "elementor" ? "Elementor" : "Gutenberg"}下書きを作成 →`}
@@ -958,7 +1047,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.9.0</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.10.0</span></div>
       </footer>
     </main>
   );
