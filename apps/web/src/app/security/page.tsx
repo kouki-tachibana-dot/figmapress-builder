@@ -12,11 +12,11 @@ export default function SecurityPage() {
     >
       <section>
         <h2>認証情報</h2>
-        <p>Figma Tokenは同じタブのセッションストレージだけに保持し、サーバーでは1回のリクエスト中だけ利用します。WordPress Application Passwordは保存せず、ブラウザから対象サイトへの直接接続を優先します。CORSで接続できない場合だけサーバーで1回のリクエスト中に利用し、応答には含めません。Figma Tokenには、短い有効期限と <code>file_content:read</code> だけを設定することを推奨します。</p>
+        <p>Figma Tokenは標準では同じタブのセッションストレージだけに保持します。利用者が明示的に「このブラウザに保存する」を選んだ場合だけローカルストレージへ移し、サーバーでは1回のリクエスト中だけ利用します。WordPress Application Passwordはアプリでは保存せず、ブラウザから対象サイトへの直接接続を優先します。CORSで接続できない場合だけサーバーで1回のリクエスト中に利用し、応答には含めません。Figma Tokenには、短い有効期限と <code>file_content:read</code> だけを設定することを推奨します。</p>
       </section>
       <section>
         <h2>WordPress接続</h2>
-        <p>HTTPSの公開ホストだけを許可します。localhost、プライベートIP、リンクローカル、予約済みIP、外部リダイレクトを拒否します。作成する固定ページは常に <code>status: draft</code> です。Elementor作成はConnectorプラグインで <code>edit_pages</code> 権限、Widget許可リスト、再帰サニタイズを検査します。</p>
+        <p>HTTPSの公開ホストだけを許可します。localhost、プライベートIP、リンクローカル、予約済みIP、外部リダイレクトを拒否します。作成する固定ページは常に <code>status: draft</code> です。Elementor作成はConnectorプラグインで <code>edit_pages</code> 権限、Widget許可リスト、再帰サニタイズを検査します。同じ作成リクエストを再送しても既存の下書きを再利用し、タイムアウト後の重複作成を防ぎます。</p>
       </section>
       <section>
         <h2>画像の永続化</h2>

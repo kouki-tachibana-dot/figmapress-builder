@@ -11,6 +11,11 @@ export interface BrowserWordPressStatus {
   connectorVersion?: string;
   wordpressVersion?: string;
   elementor: { active: boolean; version?: string };
+  functionalWidgets?: {
+    navigation: boolean;
+    contactForm: boolean;
+    accordion: boolean;
+  };
   canEditPages: boolean;
 }
 
@@ -47,6 +52,7 @@ export type BrowserDraftInput =
       slug: string;
       template: BrowserElementorTemplate;
       pageTemplate: "elementor_canvas" | "elementor_header_footer" | "default";
+      requestId: string;
     };
 
 export class WordPressDirectError extends Error {
@@ -216,6 +222,11 @@ export async function probeWordPressDirect(
     wordpressVersion?: unknown;
     canEditPages?: unknown;
     elementor?: { active?: unknown; version?: unknown };
+    functionalWidgets?: {
+      navigation?: unknown;
+      contactForm?: unknown;
+      accordion?: unknown;
+    };
   }>(response);
   return {
     authenticated: true,
@@ -227,6 +238,11 @@ export async function probeWordPressDirect(
       active: status.elementor?.active === true,
       version: typeof status.elementor?.version === "string" ? status.elementor.version : undefined,
     },
+    functionalWidgets: status.functionalWidgets ? {
+      navigation: status.functionalWidgets.navigation === true,
+      contactForm: status.functionalWidgets.contactForm === true,
+      accordion: status.functionalWidgets.accordion === true,
+    } : undefined,
     canEditPages: status.canEditPages === true,
   };
 }
@@ -251,6 +267,7 @@ export async function createWordPressDraftDirect(
           title: input.title,
           slug,
           status: "draft",
+          requestId: input.requestId,
           pageTemplate: input.pageTemplate,
           template: input.template,
         }),

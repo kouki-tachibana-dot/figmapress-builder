@@ -3,7 +3,7 @@
 Figma の構造を、WordPress で扱える Gutenberg ブロックまたはElementorページへ変換する
 オープンソースの Web アプリ＋CLIです。
 
-## v0.5.0 — Figma機能連携Elementor変換
+## v0.6.0 — 実運用品質・再送耐性の強化
 
 **Web版:** [https://figmapress-builder.vercel.app](https://figmapress-builder.vercel.app)
 
@@ -23,6 +23,8 @@ Figma の構造を、WordPress で扱える Gutenberg ブロックまたはEleme
 - Figmaのメニュー、問い合わせフォーム、年表／FAQをElementorの実動Widgetへ変換
 - ナビのモバイルメニュー、フォーム送信、アコーディオン開閉をElementor Proなしで提供
 - Connector導入後の更新をWordPress標準のプラグイン更新画面から実行
+- タイムアウト後に同じ作成処理を再送しても、既存下書きを再利用して重複を防止
+- キャッシュされた問い合わせフォームでも期限切れせず送信可能
 - WordPress Plugin／Theme ZIPのダウンロード
 
 ローカルで実行する場合は `npm install`、`npm run dev:web` の順に実行し、
@@ -30,8 +32,9 @@ Figma の構造を、WordPress で扱える Gutenberg ブロックまたはEleme
 
 ### 認証情報の扱い
 
-Figma Tokenは再入力を省くため同じタブの `sessionStorage` だけに保持し、タブを閉じるか
-画面の「消去」で削除します。WordPress Application Passwordは保持しません。どちらも
+Figma Tokenは標準では同じタブの `sessionStorage` だけに保持します。利用者が
+「このブラウザに保存する」を選んだ場合だけ `localStorage` へ移し、画面の「消去」で削除します。
+共有端末ではブラウザ保存を使用しないでください。WordPress Application Passwordはアプリでは保持しません。どちらも
 サーバー側のデータベース・ファイル・Cookieへ保存しません。APIレスポンスは
 `no-store` です。WordPress接続はHTTPS公開ホストだけを許可し、内部IP、localhost、
 リダイレクトを拒否します。詳細は [SECURITY.md](./SECURITY.md) と

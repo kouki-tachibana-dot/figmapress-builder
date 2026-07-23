@@ -6,15 +6,33 @@
             nav.dataset.figmapressReady = "true";
             var toggle = nav.querySelector(".figmapress-nav__toggle");
             if (!toggle) return;
-            toggle.addEventListener("click", function () {
-                var open = nav.classList.toggle("is-open");
+            var toggleLabel = toggle.querySelector(".screen-reader-text");
+            function setOpen(open, restoreFocus) {
+                nav.classList.toggle("is-open", open);
                 toggle.setAttribute("aria-expanded", open ? "true" : "false");
+                if (toggleLabel) toggleLabel.textContent = open ? "メニューを閉じる" : "メニューを開く";
+                if (restoreFocus) toggle.focus();
+            }
+            toggle.addEventListener("click", function () {
+                setOpen(!nav.classList.contains("is-open"), false);
             });
             nav.querySelectorAll("a").forEach(function (link) {
                 link.addEventListener("click", function () {
-                    nav.classList.remove("is-open");
-                    toggle.setAttribute("aria-expanded", "false");
+                    setOpen(false, false);
                 });
+            });
+            document.addEventListener("click", function (event) {
+                if (nav.classList.contains("is-open") && !nav.contains(event.target)) {
+                    setOpen(false, false);
+                }
+            });
+            document.addEventListener("keydown", function (event) {
+                if (event.key === "Escape" && nav.classList.contains("is-open")) {
+                    setOpen(false, true);
+                }
+            });
+            window.addEventListener("resize", function () {
+                if (window.matchMedia("(min-width: 768px)").matches) setOpen(false, false);
             });
         });
     }
@@ -45,12 +63,16 @@
                 status.textContent = "送信中…";
                 status.classList.remove("is-error");
                 button.disabled = true;
+                form.setAttribute("aria-busy", "true");
+                var controller = typeof AbortController === "function" ? new AbortController() : null;
+                var timeout = controller ? window.setTimeout(function () { controller.abort(); }, 30000) : null;
                 try {
                     var response = await fetch(form.dataset.endpoint, {
                         method: "POST",
                         body: new URLSearchParams(new FormData(form)),
                         credentials: "same-origin",
-                        headers: { "Accept": "application/json" }
+                        headers: { "Accept": "application/json" },
+                        signal: controller ? controller.signal : undefined
                     });
                     var data = await response.json().catch(function () { return {}; });
                     if (!response.ok) throw new Error(data.message || "送信できませんでした。時間をおいて再度お試しください。");
@@ -63,8 +85,12 @@
                     status.textContent = status.dataset.success || data.message || "送信しました。";
                 } catch (error) {
                     status.classList.add("is-error");
-                    status.textContent = error instanceof Error ? error.message : "送信できませんでした。";
+                    status.textContent = error && error.name === "AbortError"
+                        ? "送信確認がタイムアウトしました。重複送信せず、サイト管理者へお問い合わせください。"
+                        : error instanceof Error ? error.message : "送信できませんでした。";
                 } finally {
+                    if (timeout) window.clearTimeout(timeout);
+                    form.removeAttribute("aria-busy");
                     button.disabled = false;
                 }
             });

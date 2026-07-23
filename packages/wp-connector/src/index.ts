@@ -46,6 +46,7 @@ export interface CreateElementorDraftInput {
   slug: string;
   template: ElementorTemplateInput;
   pageTemplate?: "elementor_canvas" | "elementor_header_footer" | "default";
+  requestId: string;
 }
 
 export interface WordPressConnectionStatus {
@@ -55,6 +56,11 @@ export interface WordPressConnectionStatus {
   connectorVersion?: string;
   wordpressVersion?: string;
   elementor: { active: boolean; version?: string };
+  functionalWidgets?: {
+    navigation: boolean;
+    contactForm: boolean;
+    accordion: boolean;
+  };
   canEditPages: boolean;
 }
 
@@ -170,6 +176,11 @@ export async function probeWordPressConnection(
     wordpressVersion?: unknown;
     canEditPages?: unknown;
     elementor?: { active?: unknown; version?: unknown };
+    functionalWidgets?: {
+      navigation?: unknown;
+      contactForm?: unknown;
+      accordion?: unknown;
+    };
   };
   return {
     authenticated: true,
@@ -184,6 +195,11 @@ export async function probeWordPressConnection(
       active: status.elementor?.active === true,
       version: typeof status.elementor?.version === "string" ? status.elementor.version : undefined,
     },
+    functionalWidgets: status.functionalWidgets ? {
+      navigation: status.functionalWidgets.navigation === true,
+      contactForm: status.functionalWidgets.contactForm === true,
+      accordion: status.functionalWidgets.accordion === true,
+    } : undefined,
     canEditPages: status.canEditPages === true,
   };
 }
@@ -253,6 +269,7 @@ export async function createElementorDraftPage(
       title: input.title,
       slug,
       status: "draft",
+      requestId: input.requestId,
       pageTemplate: input.pageTemplate ?? "elementor_canvas",
       template: input.template,
     }),

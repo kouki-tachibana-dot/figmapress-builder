@@ -18,6 +18,14 @@ const updatePath = new URL(
   "../wordpress-plugin/figmapress-connector/includes/update-checker.php",
   import.meta.url,
 );
+const interactionScriptPath = new URL(
+  "../wordpress-plugin/figmapress-connector/assets/elementor-interactions.js",
+  import.meta.url,
+);
+const interactionStylePath = new URL(
+  "../wordpress-plugin/figmapress-connector/assets/elementor-interactions.css",
+  import.meta.url,
+);
 
 test("Connector stores Elementor content before attempting remote image imports", async () => {
   const source = await readFile(restApiPath, "utf8");
@@ -81,7 +89,7 @@ test("Connector accepts and registers functional Elementor widgets", async () =>
     readFile(pluginPath, "utf8"),
     readFile(restApiPath, "utf8"),
   ]);
-  assert.match(plugin, /Version:\s+0\.5\.0/);
+  assert.match(plugin, /Version:\s+0\.6\.0/);
   assert.match(plugin, /elementor\/widgets\/register/);
   for (const widget of ["figmapress-nav", "figmapress-contact-form", "figmapress-accordion"]) {
     assert.match(rest, new RegExp(`'${widget}'`));
@@ -96,6 +104,38 @@ test("public contact form verifies origin, token, rate limit, and stored widget"
   assert.match(source, /figmapress_connector_find_elementor_widget/);
   assert.match(source, /wp_mail\( \$recipient/);
   assert.match(source, /'permission_callback' => '__return_true'/);
+  assert.doesNotMatch(source, /2 \* DAY_IN_SECONDS/);
+  assert.match(source, /Full-page\s+\*\s+\/\/ caches|Full-page/);
+});
+
+test("Connector reuses an existing Elementor draft for the same request identifier", async () => {
+  const source = await readFile(restApiPath, "utf8");
+  const lookup = source.indexOf("'meta_key'               => '_figmapress_request_id'");
+  const insert = source.indexOf("$post_id = wp_insert_post(");
+  const record = source.indexOf("add_post_meta( $post_id, '_figmapress_request_id'");
+
+  assert.ok(lookup > 0, "request identifier lookup must exist");
+  assert.ok(lookup < insert, "existing drafts must be checked before inserting a page");
+  assert.ok(record > insert, "request identifier must be recorded immediately after insertion");
+  assert.match(source, /add_option\( \$request_lock_key, \$lock_value, '', false \)/);
+  assert.match(source, /figmapress_request_in_progress/);
+  assert.match(source, /10 \* MINUTE_IN_SECONDS/);
+  assert.match(source, /'idempotent'\s*=>\s*true/);
+  assert.match(source, /重複ページは作成していません/);
+});
+
+test("functional widgets include keyboard, reduced-motion, and timeout safeguards", async () => {
+  const [script, style] = await Promise.all([
+    readFile(interactionScriptPath, "utf8"),
+    readFile(interactionStylePath, "utf8"),
+  ]);
+  assert.match(script, /event\.key === "Escape"/);
+  assert.match(script, /toggle\.focus\(\)/);
+  assert.match(script, /AbortController/);
+  assert.match(script, /controller\.abort\(\)/);
+  assert.match(script, /aria-busy/);
+  assert.match(style, /prefers-reduced-motion:\s*reduce/);
+  assert.match(style, /focus-visible/);
 });
 
 test("Connector checks the pinned HTTPS manifest for native WordPress updates", async () => {

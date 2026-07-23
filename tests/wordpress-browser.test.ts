@@ -26,12 +26,18 @@ test("browser connection probes the Connector directly with Basic auth", async (
       wordpressVersion: "7.0.1",
       canEditPages: true,
       elementor: { active: true, version: "3.30.0" },
+      functionalWidgets: { navigation: true, contactForm: true, accordion: true },
     });
   });
 
   const status = await probeWordPressDirect(config);
   assert.equal(status.connectorInstalled, true);
   assert.equal(status.canEditPages, true);
+  assert.deepEqual(status.functionalWidgets, {
+    navigation: true,
+    contactForm: true,
+    accordion: true,
+  });
   assert.match(requests[0]?.url ?? "", /figmapress\/v1\/status$/);
   assert.match(requests[0]?.authorization ?? "", /^Basic /);
   assert.equal(requests[0]?.cache, undefined);
@@ -102,6 +108,7 @@ test("browser fallback transport failures are not mislabeled as invalid credenti
   await assert.rejects(
     createWordPressDraftDirect(config, {
       target: "elementor",
+      requestId: "11111111-1111-4111-8111-111111111111",
       title: "ホーム",
       slug: "/",
       pageTemplate: "elementor_canvas",
@@ -154,6 +161,7 @@ test("browser Elementor creation sends one draft request without a status prefli
 
   const result = await createWordPressDraftDirect(config, {
     target: "elementor",
+    requestId: "22222222-2222-4222-8222-222222222222",
     title: "ホーム",
     slug: "/",
     pageTemplate: "elementor_canvas",
@@ -171,4 +179,5 @@ test("browser Elementor creation sends one draft request without a status prefli
   assert.equal(requests.length, 1);
   assert.match(requests[0]?.url ?? "", /figmapress\/v1\/elementor\/pages$/);
   assert.match(requests[0]?.body ?? "", /"status":"draft"/);
+  assert.match(requests[0]?.body ?? "", /"requestId":"22222222-2222-4222-8222-222222222222"/);
 });

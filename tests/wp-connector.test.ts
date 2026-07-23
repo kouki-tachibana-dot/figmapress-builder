@@ -23,6 +23,7 @@ test("WordPress connection probe reports Connector and Elementor versions", asyn
       wordpressVersion: "7.0.1",
       canEditPages: true,
       elementor: { active: true, version: "3.30.0" },
+      functionalWidgets: { navigation: true, contactForm: true, accordion: true },
     });
   });
 
@@ -30,6 +31,11 @@ test("WordPress connection probe reports Connector and Elementor versions", asyn
   assert.equal(status.authenticated, true);
   assert.equal(status.connectorInstalled, true);
   assert.equal(status.elementor.active, true);
+  assert.deepEqual(status.functionalWidgets, {
+    navigation: true,
+    contactForm: true,
+    accordion: true,
+  });
   assert.equal(status.user.name, "editor");
   assert.equal(requests.length, 1);
   assert.match(requests[0] ?? "", /figmapress\/v1\/status/);
@@ -96,6 +102,7 @@ test("Elementor draft creation uses one Connector request and remains draft", as
   });
 
   const result = await createElementorDraftPage(config, {
+    requestId: "33333333-3333-4333-8333-333333333333",
     title: "Elementor Page",
     slug: "/",
     template: {
@@ -122,6 +129,7 @@ test("permission errors are not mislabeled as invalid credentials", async (conte
 
   await assert.rejects(
     createElementorDraftPage(config, {
+      requestId: "44444444-4444-4444-8444-444444444444",
       title: "Forbidden",
       slug: "/",
       template: {

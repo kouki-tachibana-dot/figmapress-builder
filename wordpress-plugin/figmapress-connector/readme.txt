@@ -3,7 +3,7 @@ Contributors: figmapress
 Tags: blocks, figma, gutenberg, elementor
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 0.5.0
+Stable tag: 0.6.0
 License: GPLv2 or later
 
 Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
@@ -15,6 +15,12 @@ Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
    create a draft page containing figmapress/* blocks.
 
 == Changelog ==
+= 0.6.0 =
+* Elementor下書き作成を再送しても重複ページを作らないように改善。
+* キャッシュされた問い合わせフォームでも期限切れにならないように改善。
+* モバイルメニューのEscキー、外側クリック、フォーカス復帰に対応。
+* 問い合わせ送信のタイムアウト表示とアクセシビリティを改善。
+
 = 0.5.0 =
 * Convert Figma navigation layers into a real responsive navigation widget.
 * Convert contact-form visuals into a validated WordPress mail form with anti-spam protections.

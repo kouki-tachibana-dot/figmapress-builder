@@ -32,10 +32,14 @@ function figmapress_connector_submit_contact( WP_REST_Request $request ) {
     $expected    = hash_hmac( 'sha256', $page_id . '|' . $widget_id . '|' . $rendered_at, wp_salt( 'auth' ) );
     if (
         ! $page_id || strlen( $widget_id ) < 6 || ! $rendered_at || ! hash_equals( $expected, $token ) ||
-        $rendered_at > $now + 300 || $rendered_at < $now - ( 2 * DAY_IN_SECONDS )
+        $rendered_at > $now + 300
     ) {
         return new WP_Error( 'figmapress_form_expired', 'フォームを再読み込みしてから送信してください。', array( 'status' => 403 ) );
     }
+    // Do not expire an otherwise valid token based on render time. Full-page
+    // caches can legitimately serve the same form markup for weeks. Widget
+    // existence, the HMAC, same-origin checks, honeypot, and rate limit still
+    // protect the endpoint, and removing the widget invalidates submissions.
     if ( $now - $rendered_at < 2 || '' !== trim( (string) $request->get_param( 'website' ) ) ) {
         return new WP_Error( 'figmapress_form_spam', '送信を受け付けられませんでした。', array( 'status' => 400 ) );
     }

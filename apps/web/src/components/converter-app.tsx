@@ -12,7 +12,9 @@ type SourceMode = "figma" | "json";
 type OutputTarget = "gutenberg" | "elementor";
 
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
-const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.5.0";
+const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
+const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
+const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.6.0";
 
 function versionAtLeast(version: string | undefined, minimum: string): boolean {
   if (!version) return false;
@@ -27,7 +29,23 @@ function versionAtLeast(version: string | undefined, minimum: string): boolean {
 
 function readSessionFigmaToken(): string {
   if (typeof window === "undefined") return "";
-  return window.sessionStorage.getItem(FIGMA_TOKEN_SESSION_KEY) ?? "";
+  try {
+    if (window.localStorage.getItem(FIGMA_TOKEN_PERSIST_KEY) === "true") {
+      return window.localStorage.getItem(FIGMA_TOKEN_LOCAL_KEY) ?? "";
+    }
+    return window.sessionStorage.getItem(FIGMA_TOKEN_SESSION_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function readPersistentTokenFlag(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(FIGMA_TOKEN_PERSIST_KEY) === "true";
+  } catch {
+    return false;
+  }
 }
 
 const tokenListeners = new Set<() => void>();
@@ -35,7 +53,13 @@ const tokenListeners = new Set<() => void>();
 function subscribeSessionFigmaToken(listener: () => void): () => void {
   tokenListeners.add(listener);
   const onStorage = (event: StorageEvent) => {
-    if (event.key === FIGMA_TOKEN_SESSION_KEY) listener();
+    if (
+      event.key === FIGMA_TOKEN_SESSION_KEY ||
+      event.key === FIGMA_TOKEN_LOCAL_KEY ||
+      event.key === FIGMA_TOKEN_PERSIST_KEY
+    ) {
+      listener();
+    }
   };
   window.addEventListener("storage", onStorage);
   return () => {
@@ -44,10 +68,29 @@ function subscribeSessionFigmaToken(listener: () => void): () => void {
   };
 }
 
-function writeSessionFigmaToken(value: string): void {
-  if (value) window.sessionStorage.setItem(FIGMA_TOKEN_SESSION_KEY, value);
-  else window.sessionStorage.removeItem(FIGMA_TOKEN_SESSION_KEY);
+function writeFigmaToken(value: string, persistent = readPersistentTokenFlag()): void {
+  try {
+    if (persistent) {
+      window.localStorage.setItem(FIGMA_TOKEN_PERSIST_KEY, "true");
+      if (value) window.localStorage.setItem(FIGMA_TOKEN_LOCAL_KEY, value);
+      else window.localStorage.removeItem(FIGMA_TOKEN_LOCAL_KEY);
+      window.sessionStorage.removeItem(FIGMA_TOKEN_SESSION_KEY);
+    } else {
+      window.localStorage.removeItem(FIGMA_TOKEN_PERSIST_KEY);
+      window.localStorage.removeItem(FIGMA_TOKEN_LOCAL_KEY);
+      if (value) window.sessionStorage.setItem(FIGMA_TOKEN_SESSION_KEY, value);
+      else window.sessionStorage.removeItem(FIGMA_TOKEN_SESSION_KEY);
+    }
+  } catch {
+    // Storage can be unavailable in hardened or private browsing modes.
+  }
   for (const listener of tokenListeners) listener();
+}
+
+function createRequestId(): string {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
 }
 
 interface ElementorTemplate {
@@ -92,6 +135,11 @@ interface WordPressStatus {
   connectorVersion?: string;
   wordpressVersion?: string;
   elementor: { active: boolean; version?: string };
+  functionalWidgets?: {
+    navigation: boolean;
+    contactForm: boolean;
+    accordion: boolean;
+  };
   canEditPages: boolean;
 }
 
@@ -143,6 +191,11 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     readSessionFigmaToken,
     () => "",
   );
+  const persistFigmaToken = useSyncExternalStore(
+    subscribeSessionFigmaToken,
+    readPersistentTokenFlag,
+    () => false,
+  );
   const [jsonText, setJsonText] = useState(sampleJson);
   const [output, setOutput] = useState<ConversionResult | null>(null);
   const [converting, setConverting] = useState(false);
@@ -154,19 +207,23 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const [wpStatus, setWpStatus] = useState<WordPressStatus | null>(null);
   const [wpTransport, setWpTransport] = useState<"direct" | "proxy" | null>(null);
   const [wpTarget, setWpTarget] = useState<OutputTarget>("elementor");
+  const [draftRequestId, setDraftRequestId] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [username, setUsername] = useState("");
   const [applicationPassword, setApplicationPassword] = useState("");
   const [confirmed, setConfirmed] = useState(false);
 
   const srcDoc = output ? previewDocument(output.previewHtml) : "";
-  const connectorSupportsInteractions = versionAtLeast(
-    wpStatus?.connectorVersion,
-    FUNCTIONAL_WIDGETS_CONNECTOR_VERSION,
-  );
+  const connectorSupportsInteractions = wpStatus?.functionalWidgets
+    ? Object.values(wpStatus.functionalWidgets).every(Boolean)
+    : versionAtLeast(wpStatus?.connectorVersion, FUNCTIONAL_WIDGETS_CONNECTOR_VERSION);
 
   function updateFigmaToken(value: string) {
-    writeSessionFigmaToken(value);
+    writeFigmaToken(value);
+  }
+
+  function updateFigmaTokenPersistence(persistent: boolean) {
+    writeFigmaToken(figmaToken, persistent);
   }
 
   async function convert(event: FormEvent<HTMLFormElement>) {
@@ -197,6 +254,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       });
       const data = await readApi<{ ok: true } & ConversionResult>(response);
       setOutput(data);
+      setDraftRequestId(createRequestId());
       requestAnimationFrame(() => {
         document.getElementById("result")?.scrollIntoView({ behavior: "smooth" });
       });
@@ -234,6 +292,8 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
 
     try {
       const page = output.blueprint.pages[0];
+      const requestId = draftRequestId || createRequestId();
+      if (!draftRequestId) setDraftRequestId(requestId);
       const payload = wpTarget === "elementor"
         ? {
             target: wpTarget,
@@ -242,6 +302,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
             slug: page?.slug || "/",
             template: output.elementorTemplate,
             pageTemplate: "elementor_canvas",
+            requestId,
           }
         : {
             target: wpTarget,
@@ -260,6 +321,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                 slug: payload.slug,
                 template: output.elementorTemplate,
                 pageTemplate: "elementor_canvas",
+                requestId,
               }
             : {
                 target: "gutenberg",
@@ -337,7 +399,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.5.0 live</span>
+          <span className="status-pill"><i /> v0.6.0 live</span>
         </nav>
       </header>
 
@@ -436,11 +498,12 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                     value={fileKeyOrUrl}
                   />
                 </label>
-                <label className="field field--wide">
-                  <span>Figma Personal Access Token</span>
+                <div className="field field--wide">
+                  <label htmlFor="figma-personal-access-token">Figma Personal Access Token</label>
                   <div className="token-input-row">
                     <input
                       autoComplete="off"
+                      id="figma-personal-access-token"
                       onChange={(event) => updateFigmaToken(event.target.value)}
                       placeholder="figd_…"
                       required
@@ -452,9 +515,17 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                     )}
                   </div>
                   <small>
-                    file_content:read 権限が必要です。このタブ内だけに保持し、タブを閉じるか「消去」で削除されます。
+                    file_content:read 権限が必要です。標準ではこのタブ内だけに保持します。
                   </small>
-                </label>
+                  <label className="token-persistence">
+                    <input
+                      checked={persistFigmaToken}
+                      onChange={(event) => updateFigmaTokenPersistence(event.target.checked)}
+                      type="checkbox"
+                    />
+                    <span>このブラウザに保存する（共有端末ではオフ）</span>
+                  </label>
+                </div>
               </div>
             ) : (
               <div className="json-field">
@@ -577,7 +648,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                 </label>
                 <label className="field">
                   <span>Application Password</span>
-                  <input autoComplete="off" name="applicationPassword" onChange={(event) => { setApplicationPassword(event.target.value); setWpStatus(null); setWpTransport(null); }} required type="password" value={applicationPassword} />
+                  <input autoComplete="current-password" name="applicationPassword" onChange={(event) => { setApplicationPassword(event.target.value); setWpStatus(null); setWpTransport(null); }} required type="password" value={applicationPassword} />
                 </label>
               </div>
               <div className="connection-row">
@@ -590,6 +661,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                     <span>WP {wpStatus.wordpressVersion || "確認済み"}</span>
                     <span>Connector {wpStatus.connectorInstalled ? `v${wpStatus.connectorVersion || "installed"}` : "未導入"}</span>
                     <span>Elementor {wpStatus.elementor.active ? `v${wpStatus.elementor.version || "active"}` : "未導入"}</span>
+                    {wpStatus.functionalWidgets && (
+                      <span>機能Widget {Object.values(wpStatus.functionalWidgets).filter(Boolean).length}/3</span>
+                    )}
                     <span>{wpTransport === "direct" ? "ブラウザ直結" : "サーバー経由"}</span>
                   </div>
                 )}
@@ -666,13 +740,13 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <section className="scope-strip">
         <div><span>READY</span><strong>Gutenberg blocks</strong><p>編集可能な6セクション</p></div>
         <div><span>READY</span><strong>Elementor documents</strong><p>機能Widget化・画像永続化</p></div>
-        <div><span>SECURITY</span><strong>Tab-only token</strong><p>サーバー保存なし・下書き限定</p></div>
+        <div><span>SECURITY</span><strong>Local-only token</strong><p>サーバー保存なし・ブラウザ保存を選択可能</p></div>
       </section>
 
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.5.0</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.6.0</span></div>
       </footer>
     </main>
   );
