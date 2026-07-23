@@ -261,31 +261,85 @@ function figmapress_connector_store_elementor_document( $post_id, $content, $pag
         }
     }
 
-    // Retain a direct-meta fallback for older Elementor releases while using
-    // Elementor's document API whenever the active version provides it.
-    if ( ! $saved_with_document_api ) {
+    $expected_elements = figmapress_connector_count_elementor_elements( $content );
+    $stored_data       = figmapress_connector_read_elementor_data( $post_id );
+    $stored_elements   = is_array( $stored_data )
+        ? figmapress_connector_count_elementor_elements( $stored_data )
+        : 0;
+
+    // Document::save() can return true even when Elementor normalizes every
+    // generated element away or its internal metadata write fails. Verify the
+    // result instead of trusting the return value, then preserve the already
+    // sanitized Elementor JSON directly when it is incomplete.
+    $direct_meta_write = null;
+    $encoded_bytes     = 0;
+    if ( $stored_elements !== $expected_elements ) {
+        $encoded_content = wp_json_encode( $content );
+        if ( false === $encoded_content ) {
+            return new WP_Error(
+                'figmapress_elementor_encode_failed',
+                'Elementor data could not be encoded for storage.',
+                array(
+                    'status'           => 500,
+                    'expectedElements' => $expected_elements,
+                )
+            );
+        }
+
+        $encoded_bytes     = strlen( $encoded_content );
+        $direct_meta_write = update_metadata(
+            'post',
+            $post_id,
+            '_elementor_data',
+            wp_slash( $encoded_content )
+        );
         update_post_meta( $post_id, '_elementor_edit_mode', 'builder' );
         update_post_meta( $post_id, '_elementor_template_type', 'wp-page' );
         update_post_meta( $post_id, '_elementor_version', defined( 'ELEMENTOR_VERSION' ) ? ELEMENTOR_VERSION : '' );
-        update_post_meta( $post_id, '_elementor_data', wp_slash( wp_json_encode( $content ) ) );
         update_post_meta( $post_id, '_elementor_page_settings', $page_settings );
+
+        // Some persistent object caches can briefly retain the value written
+        // by Document::save(). Force the verification read back to the DB.
+        wp_cache_delete( $post_id, 'post_meta' );
+        $stored_data     = figmapress_connector_read_elementor_data( $post_id );
+        $stored_elements = is_array( $stored_data )
+            ? figmapress_connector_count_elementor_elements( $stored_data )
+            : 0;
     }
 
     // Elementor reads the template assignment from WordPress post meta, so
     // restore it after Document::save() processes document settings.
     update_post_meta( $post_id, '_wp_page_template', $page_template );
 
-    $stored_json = get_post_meta( $post_id, '_elementor_data', true );
-    $stored_data = is_string( $stored_json ) ? json_decode( $stored_json, true ) : null;
-    if ( ! is_array( $stored_data ) || empty( $stored_data ) ) {
+    if ( ! is_array( $stored_data ) || $stored_elements !== $expected_elements ) {
         return new WP_Error(
             'figmapress_elementor_save_failed',
             'Elementor data could not be stored on this server.',
-            array( 'status' => 500 )
+            array(
+                'status'                => 500,
+                'expectedElements'      => $expected_elements,
+                'storedElements'        => $stored_elements,
+                'documentSaveCompleted' => $saved_with_document_api,
+                'directMetaWrite'       => false !== $direct_meta_write,
+                'encodedBytes'          => $encoded_bytes,
+            )
         );
     }
 
-    return figmapress_connector_count_elementor_elements( $stored_data );
+    return $stored_elements;
+}
+
+function figmapress_connector_read_elementor_data( $post_id ) {
+    $stored_value = get_metadata( 'post', $post_id, '_elementor_data', true );
+    if ( is_array( $stored_value ) ) {
+        return $stored_value;
+    }
+    if ( ! is_string( $stored_value ) || '' === trim( $stored_value ) ) {
+        return null;
+    }
+
+    $decoded = json_decode( $stored_value, true );
+    return is_array( $decoded ) ? $decoded : null;
 }
 
 function figmapress_connector_count_elementor_elements( $elements ) {

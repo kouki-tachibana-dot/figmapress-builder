@@ -3,7 +3,7 @@ Contributors: figmapress
 Tags: blocks, figma, gutenberg, elementor
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 0.4.4
+Stable tag: 0.4.5
 License: GPLv2 or later
 
 Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
@@ -15,6 +15,10 @@ Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
    create a draft page containing figmapress/* blocks.
 
 == Changelog ==
+= 0.4.5 =
+* Verify Elementor's actual stored element count and fall back to direct metadata when its document API reports success without preserving the generated page.
+* Accept both JSON strings and decoded metadata arrays during storage verification.
+
 = 0.4.4 =
 * Save generated pages through Elementor's document API for Elementor 4.x compatibility.
 * Verify the stored Elementor document before importing images and remove failed empty drafts.
