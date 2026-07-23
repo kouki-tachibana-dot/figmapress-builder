@@ -317,6 +317,13 @@ a { color: inherit; }
 .visual-qa-hotspots > strong { font-size: 9px; }
 .visual-qa-hotspots p { align-items: center; background: #fff0ec; border-radius: 8px; color: #7b4a40; display: flex; font-size: 9px; justify-content: space-between; margin: 6px 0 0; padding: 7px 9px; }
 .visual-qa-hotspots p b { color: #a23f2e; }
+.visual-qa-regions { border-top: 1px solid #dde5e2; display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 18px; padding-top: 14px; }
+.visual-qa-regions section > strong { color: #445a62; font-size: 9px; }
+.visual-qa-regions p { align-items: center; background: #edf2f1; border-radius: 8px; display: flex; gap: 8px; justify-content: space-between; margin: 6px 0 0; padding: 8px 9px; }
+.visual-qa-regions p span { display: flex; min-width: 0; flex-direction: column; }
+.visual-qa-regions p b { color: #334b55; font-size: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.visual-qa-regions p small { color: #78868b; font-size: 7px; }
+.visual-qa-regions p em { color: #a24a38; flex: 0 0 auto; font-size: 8px; font-style: normal; font-weight: 800; }
 .visual-qa-alignment { background: #fff4d9; border: 1px solid #ead29b; border-radius: 12px; margin-top: 16px; padding: 13px; }
 .visual-qa-alignment.is-safe { background: #eef8df; border-color: #c7dda1; }
 .visual-qa-alignment > div:first-child { align-items: center; display: flex; justify-content: space-between; }
@@ -457,6 +464,7 @@ footer > div:last-child a, footer > div:last-child span { color: #83969d; font-s
   .download-list { border-left: 0; border-top: 1px solid #e1e5e2; margin-top: 24px; padding: 14px 0 0; }
   .visual-qa-card__head { flex-direction: column; }
   .visual-qa-metrics { grid-template-columns: 1fr; }
+  .visual-qa-regions { grid-template-columns: 1fr; }
   .visual-qa-metrics > div:first-child, .visual-qa-metrics > div:last-child { border-radius: 0; }
   .visual-qa-metrics > div:first-child { border-radius: 10px 10px 0 0; }
   .visual-qa-metrics > div:last-child { border-radius: 0 0 10px 10px; }

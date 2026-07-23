@@ -1,7 +1,10 @@
 import html2canvas from "html2canvas";
 import {
+  analyzeVisualRegions,
   analyzeVisualPixels,
   type VisualQaMetrics,
+  type VisualQaRegionInput,
+  type VisualQaRegionMetrics,
 } from "@/lib/visual-qa";
 
 export interface VisualQaReference {
@@ -16,6 +19,8 @@ export interface VisualQaBrowserResult extends VisualQaMetrics {
   variant: "desktop" | "mobile";
   referenceName: string;
   referenceNodeId: string;
+  sections: VisualQaRegionMetrics[];
+  textNodes: VisualQaRegionMetrics[];
   diffImageUrl: string;
 }
 
@@ -104,6 +109,22 @@ function captureSize(
   return { width, height };
 }
 
+function regionInput(
+  element: HTMLElement,
+): VisualQaRegionInput | null {
+  const rect = element.getBoundingClientRect();
+  const nodeId = element.dataset.figmapressNodeId;
+  if (!nodeId || rect.width <= 0 || rect.height <= 0) return null;
+  return {
+    nodeId,
+    name: element.dataset.figmapressNodeName || nodeId,
+    x: rect.left,
+    y: rect.top,
+    width: rect.width,
+    height: rect.height,
+  };
+}
+
 export async function runVisualQa(
   reference: VisualQaReference,
   sourceDocument: string,
@@ -155,16 +176,36 @@ export async function runVisualQa(
       Array.from(frameDocument.images, (image) => waitForImage(image, 8_000)),
     );
     await frameDocument.fonts?.ready;
-    const visiblePreviewHeights = Array.from(
+    const visiblePreviews = Array.from(
       frameDocument.querySelectorAll<HTMLElement>(".figmapress-figma-preview"),
+    ).filter(
       (element) =>
-        frameDocument.defaultView?.getComputedStyle(element).display === "none"
-          ? 0
-          : element.getBoundingClientRect().height,
-    ).filter((value) => value > 0);
-    const generatedHeight = visiblePreviewHeights.length
-      ? Math.max(...visiblePreviewHeights)
+        frameDocument.defaultView?.getComputedStyle(element).display !== "none"
+        && element.getBoundingClientRect().height > 0,
+    );
+    const visiblePreview = visiblePreviews
+      .slice()
+      .sort(
+        (left, right) =>
+          right.getBoundingClientRect().height - left.getBoundingClientRect().height,
+      )[0];
+    const generatedHeight = visiblePreview
+      ? visiblePreview.getBoundingClientRect().height
       : Math.max(1, frameDocument.body.scrollHeight);
+    const sectionRegions = visiblePreview
+      ? Array.from(visiblePreview.children)
+          .map((element) => regionInput(element as HTMLElement))
+          .filter((region): region is VisualQaRegionInput => region !== null)
+      : [];
+    const textRegions = visiblePreview
+      ? Array.from(
+          visiblePreview.querySelectorAll<HTMLElement>(
+            '[data-figmapress-kind="text"]',
+          ),
+        )
+          .map(regionInput)
+          .filter((region): region is VisualQaRegionInput => region !== null)
+      : [];
 
     const targetCanvas = await html2canvas(frameDocument.documentElement, {
       allowTaint: false,
@@ -204,6 +245,29 @@ export async function runVisualQa(
       24,
       generatedHeight,
     );
+    const sections = analyzeVisualRegions(
+      referencePixels.data,
+      targetPixels.data,
+      width,
+      height,
+      sectionRegions,
+    ).slice(0, 6);
+    const textNodes = analyzeVisualRegions(
+      referencePixels.data,
+      targetPixels.data,
+      width,
+      height,
+      textRegions,
+    ).slice(0, 8);
+    const topTextDifference = textNodes.find(
+      (region) => region.changedPixelRatio >= 8 && region.impactRatio >= 0.01,
+    );
+    const recommendations = topTextDifference
+      ? [
+          ...analysis.metrics.recommendations,
+          `文字「${topTextDifference.name}」の差分影響が大きいため、文字幅・明示改行・行高を優先して確認してください。`,
+        ]
+      : analysis.metrics.recommendations;
     const diffCanvas = document.createElement("canvas");
     diffCanvas.width = width;
     diffCanvas.height = height;
@@ -217,9 +281,12 @@ export async function runVisualQa(
 
     return {
       ...analysis.metrics,
+      recommendations,
       variant,
       referenceName: reference.name,
       referenceNodeId: reference.nodeId,
+      sections,
+      textNodes,
       diffImageUrl: diffCanvas.toDataURL("image/png"),
     };
   } finally {
