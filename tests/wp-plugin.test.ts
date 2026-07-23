@@ -10,7 +10,7 @@ const pluginPath = new URL(
   "../wordpress-plugin/figmapress-connector/figmapress-connector.php",
   import.meta.url,
 );
-const packagePath = new URL("../package.json", import.meta.url);
+const packagePath = new URL("../packages/wp-connector/package.json", import.meta.url);
 const contactPath = new URL(
   "../wordpress-plugin/figmapress-connector/includes/contact-form.php",
   import.meta.url,

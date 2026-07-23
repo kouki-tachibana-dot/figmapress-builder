@@ -7,6 +7,11 @@ import {
   probeWordPressDirect,
 } from "@/lib/wordpress-browser";
 import { readWordPressCredentials } from "@/lib/wordpress-form";
+import {
+  runVisualQa,
+  type VisualQaBrowserResult,
+  type VisualQaReference,
+} from "@/lib/visual-qa-browser";
 
 type SourceMode = "figma" | "json";
 type OutputTarget = "gutenberg" | "elementor";
@@ -141,6 +146,10 @@ interface ConversionResult {
     sectionCount: number;
     sectionTypes: string[];
   };
+  visualReferences: {
+    desktop?: VisualQaReference;
+    mobile?: VisualQaReference;
+  };
 }
 
 interface WordPressResult {
@@ -198,7 +207,7 @@ function downloadText(filename: string, value: string, type: string) {
 function previewDocument(content: string): string {
   return `<!doctype html>
 <html lang="ja"><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https: data:; style-src 'unsafe-inline';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' https: data:; style-src 'unsafe-inline';">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
 *{box-sizing:border-box}body{margin:0;background:#f5f3ed;color:#13212a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.65}
@@ -233,6 +242,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const [wpStatus, setWpStatus] = useState<WordPressStatus | null>(null);
   const [wpTransport, setWpTransport] = useState<"direct" | "proxy" | null>(null);
   const [wpTarget, setWpTarget] = useState<OutputTarget>("elementor");
+  const [visualQaBusy, setVisualQaBusy] = useState(false);
+  const [visualQaError, setVisualQaError] = useState("");
+  const [visualQaResults, setVisualQaResults] = useState<VisualQaBrowserResult[]>([]);
   const [draftRequestId, setDraftRequestId] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [username, setUsername] = useState("");
@@ -258,6 +270,8 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     setError("");
     setOutput(null);
     setWpResult(null);
+    setVisualQaError("");
+    setVisualQaResults([]);
 
     try {
       let body: Record<string, unknown>;
@@ -415,6 +429,42 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     }
   }
 
+  async function checkVisualQuality() {
+    if (!output) return;
+    const references = (
+      [
+        ["desktop", output.visualReferences.desktop],
+        ["mobile", output.visualReferences.mobile],
+      ] as const
+    ).filter(
+      (entry): entry is readonly ["desktop" | "mobile", VisualQaReference] =>
+        Boolean(entry[1]),
+    );
+    if (!references.length) {
+      setVisualQaError("Figma基準画像がありません。Figmaからもう一度変換してください。");
+      return;
+    }
+
+    setVisualQaBusy(true);
+    setVisualQaError("");
+    setVisualQaResults([]);
+    try {
+      const results: VisualQaBrowserResult[] = [];
+      for (const [variant, reference] of references) {
+        results.push(await runVisualQa(reference, srcDoc, variant));
+        setVisualQaResults([...results]);
+      }
+    } catch (caught) {
+      setVisualQaError(
+        caught instanceof Error
+          ? caught.message
+          : "画像比較を完了できませんでした。",
+      );
+    } finally {
+      setVisualQaBusy(false);
+    }
+  }
+
   return (
     <main>
       <header className="site-header">
@@ -425,7 +475,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.8.0 live</span>
+          <span className="status-pill"><i /> v0.9.0 live</span>
         </nav>
       </header>
 
@@ -639,6 +689,19 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                   </div>
                 </div>
               )}
+              {(output.visualReferences.desktop || output.visualReferences.mobile) && (
+                <div className="visual-qa-launch">
+                  <strong>Visual QA</strong>
+                  <p>FigmaのPC/SP基準画像と生成ページを画素単位で比較します。</p>
+                  <button
+                    disabled={visualQaBusy}
+                    onClick={checkVisualQuality}
+                    type="button"
+                  >
+                    {visualQaBusy ? <><span className="spinner" /> 比較中…</> : "視覚差分を測定"}
+                  </button>
+                </div>
+              )}
               {output.warnings.length > 0 && (
                 <div className="warning-list">
                   <strong>確認事項</strong>
@@ -666,6 +729,104 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
               </div>
             </aside>
           </div>
+
+          {(output.visualReferences.desktop || output.visualReferences.mobile) && (
+            <div className="visual-qa-card">
+              <div className="visual-qa-card__head">
+                <div>
+                  <span className="eyebrow">Pixel comparison</span>
+                  <h3>Figma視覚差分レポート</h3>
+                  <p>
+                    赤い箇所ほどFigmaとの差が大きい領域です。構造診断とは別に、位置・色・画像・文字折り返しを実測します。
+                  </p>
+                </div>
+                {visualQaResults.length > 0 && (
+                  <button
+                    onClick={() => downloadText(
+                      "visual-quality-report.json",
+                      JSON.stringify(
+                        visualQaResults.map((result) =>
+                          Object.fromEntries(
+                            Object.entries(result).filter(([key]) => key !== "diffImageUrl"),
+                          ),
+                        ),
+                        null,
+                        2,
+                      ),
+                      "application/json",
+                    )}
+                    type="button"
+                  >
+                    レポートJSON ↓
+                  </button>
+                )}
+              </div>
+              {visualQaError && (
+                <div className="alert alert--error" role="alert">{visualQaError}</div>
+              )}
+              {visualQaBusy && visualQaResults.length === 0 && (
+                <div className="visual-qa-progress" role="status">
+                  <span className="spinner" /> 長いページを縮小して比較しています…
+                </div>
+              )}
+              {visualQaResults.length > 0 && (
+                <div className="visual-qa-results">
+                  {visualQaResults.map((result) => (
+                    <article
+                      className={`visual-qa-result is-${result.status}`}
+                      key={result.variant}
+                    >
+                      <div className="visual-qa-result__score">
+                        <strong>{result.score}</strong>
+                        <span>
+                          <b>{result.variant === "desktop" ? "PC" : "スマホ"}</b>
+                          <small>
+                            {result.status === "pass"
+                              ? "視覚品質 良好"
+                              : result.status === "review"
+                                ? "要微調整"
+                                : "要改善"}
+                          </small>
+                        </span>
+                      </div>
+                      <dl className="visual-qa-metrics">
+                        <div><dt>差分面積</dt><dd>{result.changedPixelRatio}%</dd></div>
+                        <div><dt>平均色差</dt><dd>{result.meanColorError}</dd></div>
+                        <div><dt>全体高差</dt><dd>{result.heightDifferenceRatio > 0 ? "+" : ""}{result.heightDifferenceRatio}%</dd></div>
+                        <div><dt>測定寸法</dt><dd>{result.width}×{result.height}</dd></div>
+                      </dl>
+                      {result.hotspots.length > 0 && (
+                        <div className="visual-qa-hotspots">
+                          <strong>差分集中箇所</strong>
+                          {result.hotspots.map((hotspot) => (
+                            <p key={`${hotspot.startPercent}-${hotspot.endPercent}`}>
+                              <span>{hotspot.label}</span>
+                              <b>{hotspot.changedPixelRatio}%</b>
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                      <ul className="visual-qa-recommendations">
+                        {result.recommendations.map((recommendation) => (
+                          <li key={recommendation}>{recommendation}</li>
+                        ))}
+                      </ul>
+                      <details className="visual-qa-diff">
+                        <summary>差分ヒートマップを見る</summary>
+                        {/* Generated in-browser as a data URL; Next Image cannot optimize it. */}
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          alt={`${result.variant === "desktop" ? "PC" : "スマホ"}版の視覚差分ヒートマップ`}
+                          loading="lazy"
+                          src={result.diffImageUrl}
+                        />
+                      </details>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="wordpress-card">
             <div className="wordpress-card__intro">
@@ -797,7 +958,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.8.0</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.9.0</span></div>
       </footer>
     </main>
   );

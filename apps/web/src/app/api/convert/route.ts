@@ -1,7 +1,10 @@
 import { z } from "zod";
 import type { MockFigmaFile } from "@figmapress/figma-parser";
 import { convertFile } from "@/lib/converter";
-import { fetchFigmaFile } from "@/lib/figma-api";
+import {
+  fetchFigmaFile,
+  type FigmaVisualReferences,
+} from "@/lib/figma-api";
 import {
   RequestError,
   clientIp,
@@ -42,6 +45,7 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     let output;
+    let visualReferences: FigmaVisualReferences = {};
     if (parsed.data.mode === "figma") {
       const fetched = await fetchFigmaFile(
         parsed.data.fileKeyOrUrl,
@@ -54,6 +58,7 @@ export async function POST(request: Request): Promise<Response> {
         fetched.warnings,
         fetched.renderedNodeUrls,
       );
+      visualReferences = fetched.visualReferences;
     } else {
       try {
         output = await convertFile(parsed.data.data as MockFigmaFile, {
@@ -65,7 +70,7 @@ export async function POST(request: Request): Promise<Response> {
       }
     }
 
-    return jsonResponse({ ok: true, ...output });
+    return jsonResponse({ ok: true, ...output, visualReferences });
   } catch (error) {
     return errorResponse(error);
   }

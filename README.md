@@ -3,7 +3,7 @@
 Figma の構造を、WordPress で扱える Gutenberg ブロックまたはElementorページへ変換する
 オープンソースの Web アプリ＋CLIです。
 
-## v0.8.0 — Auto Layout変換と品質診断
+## v0.9.0 — Figma Visual QA
 
 **Web版:** [https://figmapress-builder.vercel.app](https://figmapress-builder.vercel.app)
 
@@ -20,6 +20,9 @@ Figma の構造を、WordPress で扱える Gutenberg ブロックまたはEleme
 - Figma Auto Layoutの方向、間隔、余白、整列、折返し、伸縮をElementor Flexboxの通常フローへ変換
 - 変換後にレイヤー構造、編集可能文字、Auto Layout、レスポンシブ、実動パーツを自動診断
 - 品質診断結果を画面で確認し、`quality-report.json` として保存
+- FigmaのPC／スマホ基準画像と生成ページを同一寸法で画素比較
+- 視覚一致スコア、差分面積、平均色差、ページ内の差分集中箇所を自動算出
+- PC／スマホ別の差分ヒートマップと改善提案を画面表示し、JSONとして保存
 - `PC-page` と `SP-page` を自動検出し、ElementorでPC／タブレット用とスマホ用を安全に切り替え
 - スマホ版の画像トリミング、文字位置、セクション順をPC版の縮小ではなくFigmaどおりに保持
 - スマホヘッダーへPC版のメニュー項目を引き継ぎ、CTAを残した実動メニューへ変換
