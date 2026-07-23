@@ -593,6 +593,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                   下書き #{wpResult.id} を作成しました。
                   {wpResult.editLink && <a href={wpResult.editLink} rel="noreferrer" target="_blank"> WordPressで編集 ↗</a>}
                   {typeof wpResult.importedMedia === "number" && <span>（画像 {wpResult.importedMedia}件を保存）</span>}
+                  {wpResult.warnings?.map((warning) => <span key={warning}> {warning}</span>)}
                 </div>
               )}
               <div className="wp-footer">
