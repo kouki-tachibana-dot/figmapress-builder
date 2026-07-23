@@ -10,6 +10,7 @@ const pluginPath = new URL(
   "../wordpress-plugin/figmapress-connector/figmapress-connector.php",
   import.meta.url,
 );
+const packagePath = new URL("../package.json", import.meta.url);
 const contactPath = new URL(
   "../wordpress-plugin/figmapress-connector/includes/contact-form.php",
   import.meta.url,
@@ -91,11 +92,15 @@ test("Connector ensures Elementor Containers are available before creating a pag
 });
 
 test("Connector accepts and registers functional Elementor widgets", async () => {
-  const [plugin, rest] = await Promise.all([
+  const [plugin, rest, packageSource] = await Promise.all([
     readFile(pluginPath, "utf8"),
     readFile(restApiPath, "utf8"),
+    readFile(packagePath, "utf8"),
   ]);
-  assert.match(plugin, /Version:\s+0\.7\.0/);
+  const packageVersion = (JSON.parse(packageSource) as { version: string }).version;
+  const escapedVersion = packageVersion.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  assert.match(plugin, new RegExp(`Version:\\s+${escapedVersion}`));
+  assert.match(plugin, new RegExp(`FIGMAPRESS_CONNECTOR_VERSION', '${escapedVersion}'`));
   assert.match(plugin, /elementor\/widgets\/register/);
   for (const widget of ["figmapress-nav", "figmapress-contact-form", "figmapress-accordion"]) {
     assert.match(rest, new RegExp(`'${widget}'`));
