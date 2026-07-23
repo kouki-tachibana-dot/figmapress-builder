@@ -4,7 +4,14 @@ import {
   analyzeVisualRegions,
   analyzeVisualPixels,
   resolveVisualQaDraftGate,
+  shouldKeepVisualCorrections,
 } from "../apps/web/src/lib/visual-qa.ts";
+import {
+  applyElementorVisualCorrections,
+  applyPreviewVisualCorrections,
+  normalizeElementorVisualCorrections,
+  type ElementorTemplate,
+} from "@figmapress/elementor-renderer";
 
 function solidPixels(
   width: number,
@@ -238,5 +245,162 @@ test("Elementor visual QA gate blocks only incomplete or unacknowledged failures
   assert.deepEqual(
     { state: gutenberg.state, blocksDraft: gutenberg.blocksDraft },
     { state: "off", blocksDraft: false },
+  );
+});
+
+test("safe visual corrections become viewport-scaled Elementor transforms", () => {
+  const template: ElementorTemplate = {
+    title: "Responsive page",
+    type: "page",
+    version: "0.4",
+    page_settings: {},
+    content: [
+      {
+        id: "desktop",
+        elType: "container",
+        isInner: false,
+        settings: {
+          css_classes: "figmapress-layout figmapress-layout--desktop",
+        },
+        elements: [
+          {
+            id: "hero",
+            elType: "container",
+            isInner: true,
+            settings: {},
+            elements: [],
+          },
+        ],
+      },
+      {
+        id: "mobile",
+        elType: "container",
+        isInner: false,
+        settings: {
+          css_classes: "figmapress-layout figmapress-layout--mobile",
+        },
+        elements: [
+          {
+            id: "mobile-hero",
+            elType: "container",
+            isInner: true,
+            settings: {},
+            elements: [],
+          },
+        ],
+      },
+    ],
+  };
+  const corrections = [
+    {
+      variant: "desktop" as const,
+      offsetX: -5,
+      offsetY: 3,
+      captureWidth: 800,
+      confidence: "high" as const,
+      errorReductionRatio: 26.4,
+    },
+    {
+      variant: "mobile" as const,
+      offsetX: 2,
+      offsetY: -4,
+      captureWidth: 400,
+      confidence: "medium" as const,
+      errorReductionRatio: 14,
+    },
+  ];
+
+  const corrected = applyElementorVisualCorrections(template, corrections);
+  assert.notEqual(corrected, template);
+  assert.equal(
+    corrected.content[0]?.elements[0]?.settings._transform_translate_popover,
+    "transform",
+  );
+  assert.deepEqual(
+    corrected.content[0]?.elements[0]?.settings._transform_translateX_effect,
+    { unit: "custom", size: "-0.625vw", sizes: [] },
+  );
+  assert.deepEqual(
+    corrected.content[0]?.elements[0]?.settings._transform_translateY_effect,
+    { unit: "custom", size: "0.375vw", sizes: [] },
+  );
+  assert.deepEqual(
+    corrected.content[1]?.elements[0]?.settings._transform_translateY_effect,
+    { unit: "custom", size: "-1vw", sizes: [] },
+  );
+  assert.equal(
+    (
+      corrected.page_settings.figmapress_visual_corrections as Array<{
+        variant: string;
+      }>
+    )[1]?.variant,
+    "mobile",
+  );
+
+  const preview = applyPreviewVisualCorrections(
+    '<div class="figmapress-figma-preview" data-figmapress-layout="desktop"></div>',
+    corrections,
+  );
+  assert.match(preview, /data-figmapress-visual-corrections/);
+  assert.match(preview, /--figmapress-qa-transform:translate\(-0\.625vw,0\.375vw\)!important/);
+  assert.match(preview, /data-figmapress-layout="mobile"/);
+});
+
+test("unsafe or oversized visual corrections are ignored without mutation", () => {
+  const invalid = normalizeElementorVisualCorrections([
+    {
+      variant: "desktop",
+      offsetX: 24,
+      offsetY: 0,
+      captureWidth: 800,
+      confidence: "high",
+      errorReductionRatio: 40,
+    },
+    {
+      variant: "mobile",
+      offsetX: 2,
+      offsetY: 1,
+      captureWidth: 440,
+      confidence: "medium",
+      errorReductionRatio: 4,
+    },
+  ]);
+  assert.deepEqual(invalid, []);
+  assert.equal(
+    applyPreviewVisualCorrections("<div>unchanged</div>", []),
+    "<div>unchanged</div>",
+  );
+});
+
+test("visual correction rollback guard keeps only measured improvements", () => {
+  const before = [
+    { variant: "desktop" as const, score: 80, changedPixelRatio: 20 },
+    { variant: "mobile" as const, score: 86, changedPixelRatio: 12 },
+  ];
+  assert.equal(
+    shouldKeepVisualCorrections(
+      before,
+      [
+        { variant: "desktop", score: 84, changedPixelRatio: 16 },
+        { variant: "mobile", score: 86, changedPixelRatio: 12 },
+      ],
+      ["desktop"],
+    ),
+    true,
+  );
+  assert.equal(
+    shouldKeepVisualCorrections(
+      before,
+      [
+        { variant: "desktop", score: 79.7, changedPixelRatio: 20.4 },
+        { variant: "mobile", score: 86, changedPixelRatio: 12 },
+      ],
+      ["desktop"],
+    ),
+    false,
+  );
+  assert.equal(
+    shouldKeepVisualCorrections(before, before, ["desktop"]),
+    false,
   );
 });

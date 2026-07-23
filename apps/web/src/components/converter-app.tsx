@@ -2,6 +2,12 @@
 
 import { useState, useSyncExternalStore, type ChangeEvent, type FormEvent, type MouseEvent } from "react";
 import {
+  applyElementorVisualCorrections,
+  applyPreviewVisualCorrections,
+  type ElementorTemplate,
+  type ElementorVisualCorrection,
+} from "@figmapress/elementor-renderer";
+import {
   WordPressDirectError,
   createWordPressDraftDirect,
   probeWordPressDirect,
@@ -12,7 +18,10 @@ import {
   type VisualQaBrowserResult,
   type VisualQaReference,
 } from "@/lib/visual-qa-browser";
-import { resolveVisualQaDraftGate } from "@/lib/visual-qa";
+import {
+  resolveVisualQaDraftGate,
+  shouldKeepVisualCorrections,
+} from "@/lib/visual-qa";
 
 type SourceMode = "figma" | "json";
 type OutputTarget = "gutenberg" | "elementor";
@@ -97,14 +106,6 @@ function createRequestId(): string {
   if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
-}
-
-interface ElementorTemplate {
-  title: string;
-  type: "page";
-  version: "0.4";
-  page_settings: Record<string, unknown>;
-  content: unknown[];
 }
 
 interface ConversionResult {
@@ -195,6 +196,43 @@ const sectionLabels: Record<string, string> = {
   "section/contact": "お問い合わせ",
 };
 
+function safeVisualCorrections(
+  results: VisualQaBrowserResult[],
+): ElementorVisualCorrection[] {
+  return results.flatMap((result) => {
+    if (
+      !result.alignment.safeToApply
+      || result.alignment.confidence === "low"
+    ) {
+      return [];
+    }
+    return [{
+      variant: result.variant,
+      offsetX: result.alignment.offsetX,
+      offsetY: result.alignment.offsetY,
+      captureWidth: result.width,
+      confidence: result.alignment.confidence,
+      errorReductionRatio: result.alignment.errorReductionRatio,
+    }];
+  });
+}
+
+function visualScoreMap(
+  results: VisualQaBrowserResult[],
+): Partial<Record<"desktop" | "mobile", number>> {
+  return Object.fromEntries(
+    results.map((result) => [result.variant, result.score]),
+  );
+}
+
+function serializableVisualQaResults(results: VisualQaBrowserResult[]) {
+  return results.map((result) =>
+    Object.fromEntries(
+      Object.entries(result).filter(([key]) => key !== "diffImageUrl"),
+    ),
+  );
+}
+
 async function readApi<T>(response: Response): Promise<T> {
   const data = (await response.json()) as { ok?: boolean; error?: string } & T;
   if (!response.ok || data.ok === false) {
@@ -254,6 +292,10 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const [visualQaError, setVisualQaError] = useState("");
   const [visualQaResults, setVisualQaResults] = useState<VisualQaBrowserResult[]>([]);
   const [visualQaAcknowledged, setVisualQaAcknowledged] = useState(false);
+  const [visualQaCorrections, setVisualQaCorrections] = useState<ElementorVisualCorrection[]>([]);
+  const [visualQaBaselineScores, setVisualQaBaselineScores] = useState<
+    Partial<Record<"desktop" | "mobile", number>>
+  >({});
   const [draftRequestId, setDraftRequestId] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [username, setUsername] = useState("");
@@ -280,6 +322,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const visualQaHasFailure = visualQaGate.hasFailure;
   const visualQaGateRequired = visualQaGate.state !== "off";
   const visualQaBlocksDraft = visualQaGate.blocksDraft;
+  const visualQaCorrectionCandidates = safeVisualCorrections(visualQaResults);
 
   function updateFigmaToken(value: string) {
     writeFigmaToken(value);
@@ -298,6 +341,8 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     setVisualQaError("");
     setVisualQaResults([]);
     setVisualQaAcknowledged(false);
+    setVisualQaCorrections([]);
+    setVisualQaBaselineScores({});
 
     try {
       let body: Record<string, unknown>;
@@ -463,12 +508,13 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     }
   }
 
-  async function checkVisualQuality() {
-    if (!output) return;
+  async function measureVisualQuality(
+    targetOutput: ConversionResult,
+  ): Promise<VisualQaBrowserResult[] | null> {
     const references = (
       [
-        ["desktop", output.visualReferences.desktop],
-        ["mobile", output.visualReferences.mobile],
+        ["desktop", targetOutput.visualReferences.desktop],
+        ["mobile", targetOutput.visualReferences.mobile],
       ] as const
     ).filter(
       (entry): entry is readonly ["desktop" | "mobile", VisualQaReference] =>
@@ -476,7 +522,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     );
     if (!references.length) {
       setVisualQaError("Figma基準画像がありません。Figmaからもう一度変換してください。");
-      return;
+      return null;
     }
 
     setVisualQaBusy(true);
@@ -485,19 +531,79 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     setVisualQaAcknowledged(false);
     try {
       const results: VisualQaBrowserResult[] = [];
+      const sourceDocument = previewDocument(targetOutput.previewHtml);
       for (const [variant, reference] of references) {
-        results.push(await runVisualQa(reference, srcDoc, variant));
+        results.push(await runVisualQa(reference, sourceDocument, variant));
         setVisualQaResults([...results]);
       }
+      return results;
     } catch (caught) {
       setVisualQaError(
         caught instanceof Error
           ? caught.message
           : "画像比較を完了できませんでした。",
       );
+      return null;
     } finally {
       setVisualQaBusy(false);
     }
+  }
+
+  async function checkVisualQuality() {
+    if (!output) return;
+    await measureVisualQuality(output);
+  }
+
+  async function applySafeVisualCorrections() {
+    if (
+      !output
+      || visualQaBusy
+      || visualQaCorrections.length > 0
+      || !visualQaCorrectionCandidates.length
+    ) {
+      return;
+    }
+
+    const baselineOutput = output;
+    const baselineResults = visualQaResults;
+    const corrections = visualQaCorrectionCandidates;
+    const correctedOutput: ConversionResult = {
+      ...output,
+      elementorTemplate: applyElementorVisualCorrections(
+        output.elementorTemplate,
+        corrections,
+      ),
+      previewHtml: applyPreviewVisualCorrections(
+        output.previewHtml,
+        corrections,
+      ),
+    };
+    setOutput(correctedOutput);
+    const correctedResults = await measureVisualQuality(correctedOutput);
+    const keepCorrection = correctedResults
+      ? shouldKeepVisualCorrections(
+          baselineResults,
+          correctedResults,
+          corrections.map((correction) => correction.variant),
+        )
+      : false;
+
+    if (!keepCorrection) {
+      setOutput(baselineOutput);
+      setVisualQaResults(baselineResults);
+      setVisualQaCorrections([]);
+      setVisualQaBaselineScores({});
+      if (correctedResults) {
+        setVisualQaError(
+          "位置補正で実測スコアが改善しなかったため、生成データを自動的に元へ戻しました。",
+        );
+      }
+      return;
+    }
+
+    setVisualQaCorrections(corrections);
+    setVisualQaBaselineScores(visualScoreMap(baselineResults));
+    setVisualQaError("");
   }
 
   return (
@@ -510,7 +616,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.11.0 live</span>
+          <span className="status-pill"><i /> v0.12.0 live</span>
         </nav>
       </header>
 
@@ -733,7 +839,11 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                     onClick={checkVisualQuality}
                     type="button"
                   >
-                    {visualQaBusy ? <><span className="spinner" /> 比較中…</> : "視覚差分を測定"}
+                    {visualQaBusy
+                      ? <><span className="spinner" /> 比較中…</>
+                      : visualQaCorrections.length
+                        ? "補正後を再測定"
+                        : "視覚差分を測定"}
                   </button>
                 </div>
               )}
@@ -776,28 +886,63 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                   </p>
                 </div>
                 {visualQaResults.length > 0 && (
-                  <button
-                    onClick={() => downloadText(
-                      "visual-quality-report.json",
-                      JSON.stringify(
-                        visualQaResults.map((result) =>
-                          Object.fromEntries(
-                            Object.entries(result).filter(([key]) => key !== "diffImageUrl"),
-                          ),
-                        ),
-                        null,
-                        2,
-                      ),
-                      "application/json",
+                  <div className="visual-qa-card__actions">
+                    {visualQaCorrectionCandidates.length > 0 && visualQaCorrections.length === 0 && (
+                      <button
+                        disabled={visualQaBusy}
+                        onClick={applySafeVisualCorrections}
+                        type="button"
+                      >
+                        安全補正を適用して再測定
+                      </button>
                     )}
-                    type="button"
-                  >
-                    レポートJSON ↓
-                  </button>
+                    <button
+                      onClick={() => downloadText(
+                        "visual-quality-report.json",
+                        JSON.stringify(
+                          {
+                            version: "1.2",
+                            correctionsApplied: visualQaCorrections,
+                            baselineScores: visualQaBaselineScores,
+                            results: serializableVisualQaResults(visualQaResults),
+                          },
+                          null,
+                          2,
+                        ),
+                        "application/json",
+                      )}
+                      type="button"
+                    >
+                      レポートJSON ↓
+                    </button>
+                  </div>
                 )}
               </div>
               {visualQaError && (
                 <div className="alert alert--error" role="alert">{visualQaError}</div>
+              )}
+              {visualQaCorrections.length > 0 && (
+                <div className="visual-qa-correction-summary" role="status">
+                  <strong>✓ 安全な全体位置補正を適用し、改善を実測しました</strong>
+                  <div>
+                    {visualQaCorrections.map((correction) => {
+                      const afterScore = visualQaResults.find(
+                        (result) => result.variant === correction.variant,
+                      )?.score;
+                      return (
+                        <span key={correction.variant}>
+                          <b>{correction.variant === "desktop" ? "PC" : "スマホ"}</b>
+                          X {correction.offsetX >= 0 ? "+" : ""}{correction.offsetX}px /
+                          Y {correction.offsetY >= 0 ? "+" : ""}{correction.offsetY}px
+                          <em>
+                            score {visualQaBaselineScores[correction.variant] ?? "—"} → {afterScore ?? "—"}
+                          </em>
+                        </span>
+                      );
+                    })}
+                  </div>
+                  <small>Elementor標準Transformへ反映済みです。再測定で悪化する補正は自動的に取り消されます。</small>
+                </div>
               )}
               {visualQaBusy && visualQaResults.length === 0 && (
                 <div className="visual-qa-progress" role="status">
@@ -1092,7 +1237,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.11.0</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.12.0</span></div>
       </footer>
     </main>
   );

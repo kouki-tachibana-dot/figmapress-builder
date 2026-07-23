@@ -757,7 +757,7 @@ function previewNode(
   const attributes = previewNodeAttributes(node);
   const assetUrl = visualUrl(node, context.assets);
   if (assetUrl) {
-    return `<img alt="${escapeAttribute(node.name)}" ${attributes} data-figmapress-kind="visual" src="${escapeAttribute(assetUrl)}" style="${position};object-fit:fill;${previewRadius(node)}" />`;
+    return `<img alt="${escapeAttribute(node.name)}" ${attributes} data-figmapress-kind="visual" src="${escapeAttribute(assetUrl)}" style="${position};object-fit:fill;${previewRadius(node)}${previewTransform(node)}" />`;
   }
 
   const backgroundUrl = ownImageUrl(node, context.assets.imageUrls ?? {});
@@ -777,12 +777,12 @@ function previewNode(
     const content = runs.length > 1
       ? runs.map((run) => runHtml(run, context)).join("").replace(/\n/g, "<br>")
       : escapeHtml(node.characters ?? "").replace(/\n/g, "<br>");
-    return `<div ${attributes} data-figmapress-kind="text" style="${position};box-sizing:border-box;color:${escapeAttribute(solidColor(style.fills ?? node.fills) ?? "#111111")};display:flex;flex-direction:column;font-family:${escapeAttribute(cssFont(style.fontFamily))};font-size:calc(var(--figma-unit) * ${round(fontSize)});font-style:${style.italic ? "italic" : "normal"};font-weight:${round(style.fontWeight ?? 400)};hyphens:none;justify-content:${textVerticalAlign(style.textAlignVertical)};letter-spacing:calc(var(--figma-unit) * ${round(style.letterSpacing ?? 0)});line-break:strict;line-height:${round(textLineHeight(style, runs, fontSize) / fontSize)};max-width:100%;overflow:${textOverflow(node)};overflow-wrap:normal;text-align:${textAlign(style.textAlignHorizontal)};text-decoration:${textDecoration(style.textDecoration)};text-orientation:mixed;text-transform:${textTransform(style.textCase)};white-space:${textWhiteSpace(node)};word-break:${textWhiteSpace(node) === "pre" ? "keep-all" : "normal"};writing-mode:horizontal-tb;${previewRotation(node)}${opacity}"><span style="display:block;max-width:100%">${content}</span></div>`;
+    return `<div ${attributes} data-figmapress-kind="text" style="${position};box-sizing:border-box;color:${escapeAttribute(solidColor(style.fills ?? node.fills) ?? "#111111")};display:flex;flex-direction:column;font-family:${escapeAttribute(cssFont(style.fontFamily))};font-size:calc(var(--figma-unit) * ${round(fontSize)});font-style:${style.italic ? "italic" : "normal"};font-weight:${round(style.fontWeight ?? 400)};hyphens:none;justify-content:${textVerticalAlign(style.textAlignVertical)};letter-spacing:calc(var(--figma-unit) * ${round(style.letterSpacing ?? 0)});line-break:strict;line-height:${round(textLineHeight(style, runs, fontSize) / fontSize)};max-width:100%;overflow:${textOverflow(node)};overflow-wrap:normal;text-align:${textAlign(style.textAlignHorizontal)};text-decoration:${textDecoration(style.textDecoration)};text-orientation:mixed;text-transform:${textTransform(style.textCase)};white-space:${textWhiteSpace(node)};word-break:${textWhiteSpace(node) === "pre" ? "keep-all" : "normal"};writing-mode:horizontal-tb;${previewTransform(node)}${opacity}"><span style="display:block;max-width:100%">${content}</span></div>`;
   }
 
   const children = (node.children ?? []).map((child) => previewNode(child, bounds, node, context)).join("");
   if (!children && !background && !border) return "";
-  return `<div aria-label="${escapeAttribute(node.name)}" ${attributes} data-figmapress-kind="container" style="${position};${previewAutoLayout(node)}${background}${border}${previewRadius(node)}${overflow}${opacity}">${children}</div>`;
+  return `<div aria-label="${escapeAttribute(node.name)}" ${attributes} data-figmapress-kind="container" style="${position};${previewAutoLayout(node)}${background}${border}${previewRadius(node)}${overflow}${previewTransform(node)}${opacity}">${children}</div>`;
 }
 
 function previewNodeAttributes(node: FigmaNode): string {
@@ -953,7 +953,7 @@ function applyTypographyFlags(settings: ElementorSettings, style: FigmaTypeStyle
 
 function applyRotation(settings: ElementorSettings, node: FigmaNode): void {
   if (!node.rotation || Math.abs(node.rotation) < 0.001) return;
-  settings._transform_rotate_popover = "yes";
+  settings._transform_rotate_popover = "transform";
   settings._transform_rotateZ_effect = size(node.rotation, "deg");
 }
 
@@ -1138,8 +1138,9 @@ function dimensions(
   };
 }
 
-function previewRotation(node: FigmaNode): string {
-  return node.rotation ? `transform:rotate(${round(node.rotation)}deg);transform-origin:center;` : "";
+function previewTransform(node: FigmaNode): string {
+  const rotation = node.rotation ? ` rotate(${round(node.rotation)}deg)` : "";
+  return `--figmapress-qa-transform:translate(0px,0px);transform:var(--figmapress-qa-transform)${rotation};transform-origin:center;`;
 }
 
 function positive(value: number | undefined): value is number {
