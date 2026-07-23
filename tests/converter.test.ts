@@ -514,3 +514,106 @@ test("Figma interaction layers become functional Elementor widgets", async () =>
   assert.equal(form?.settings._element_id, "contact");
   assert.ok(elements.some((element) => element.settings._element_id === "thoughts"));
 });
+
+test("Figma Auto Layout becomes normal-flow Elementor Flexbox with a quality report", async () => {
+  const file: MockFigmaFile = {
+    document: {
+      id: "0:0",
+      name: "Auto Layout campaign",
+      type: "DOCUMENT",
+      children: [{
+        id: "1:0",
+        name: "Page",
+        type: "CANVAS",
+        children: [{
+          id: "2:0",
+          name: "PC-page",
+          type: "FRAME",
+          layoutMode: "VERTICAL",
+          primaryAxisAlignItems: "MIN",
+          counterAxisAlignItems: "CENTER",
+          itemSpacing: 24,
+          paddingTop: 40,
+          paddingRight: 40,
+          paddingBottom: 40,
+          paddingLeft: 40,
+          absoluteBoundingBox: { x: 0, y: 0, width: 1200, height: 800 },
+          children: [{
+            id: "3:0",
+            name: "Feature row",
+            type: "FRAME",
+            layoutMode: "HORIZONTAL",
+            primaryAxisAlignItems: "SPACE_BETWEEN",
+            counterAxisAlignItems: "CENTER",
+            layoutAlign: "STRETCH",
+            layoutSizingHorizontal: "FILL",
+            itemSpacing: 20,
+            absoluteBoundingBox: { x: 40, y: 40, width: 1120, height: 120 },
+            children: [
+              {
+                id: "4:0",
+                name: "Title",
+                type: "TEXT",
+                characters: "Auto Layout見出し",
+                absoluteBoundingBox: { x: 40, y: 80, width: 360, height: 44 },
+                style: { fontSize: 32, fontWeight: 700, lineHeightPx: 44 },
+              },
+              {
+                id: "4:1",
+                name: "Description",
+                type: "TEXT",
+                characters: "通常フローで配置",
+                layoutGrow: 1,
+                absoluteBoundingBox: { x: 420, y: 84, width: 740, height: 36 },
+                style: { fontSize: 22, fontWeight: 400, lineHeightPx: 36 },
+              },
+            ],
+          }],
+        }],
+      }],
+    },
+  };
+
+  const result = await convertFile(file);
+  const root = result.elementorTemplate.content[0];
+  const row = root?.elements[0];
+  const [title, description] = row?.elements ?? [];
+
+  assert.equal(root?.settings.flex_direction, "column");
+  assert.deepEqual(root?.settings.flex_gap, {
+    column: "2",
+    row: "2",
+    isLinked: true,
+    unit: "vw",
+    size: 2,
+  });
+  assert.deepEqual(root?.settings.padding, {
+    unit: "vw",
+    top: "3.333",
+    right: "3.333",
+    bottom: "3.333",
+    left: "3.333",
+    isLinked: true,
+  });
+  assert.equal(row?.settings.position, undefined);
+  assert.equal(row?.settings.flex_direction, "row");
+  assert.equal(row?.settings.flex_justify_content, "space-between");
+  assert.equal(row?.settings.flex_align_items, "center");
+  assert.equal(title?.settings._position, undefined);
+  assert.equal(description?.settings._position, undefined);
+  assert.equal(description?.settings._flex_grow, "1");
+  assert.match(result.previewHtml, /display:flex;flex-direction:column/);
+  assert.match(result.previewHtml, /position:relative/);
+  assert.doesNotMatch(result.previewHtml, /Auto Layout見出し[^]*position:absolute/);
+
+  assert.equal(result.qualityReport?.score, 100);
+  assert.equal(result.qualityReport?.grade, "A");
+  assert.equal(result.qualityReport?.readyForDraft, true);
+  assert.equal(result.qualityReport?.metrics.autoLayoutFrames, 2);
+  assert.equal(result.qualityReport?.metrics.mappedAutoLayoutFrames, 2);
+  assert.equal(result.qualityReport?.metrics.editableTextNodes, 2);
+  assert.equal(
+    result.qualityReport?.checks.find((check) => check.id === "auto-layout")?.status,
+    "pass",
+  );
+});
