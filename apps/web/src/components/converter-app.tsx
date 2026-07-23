@@ -127,6 +127,13 @@ interface ConversionResult {
       autoLayoutFrames: number;
       mappedAutoLayoutFrames: number;
       absoluteLayoutNodes: number;
+      typography: {
+        horizontalTextNodes: number;
+        wrappingTextNodes: number;
+        explicitLineBreakTextNodes: number;
+        mixedStyleTextNodes: number;
+        truncatedTextNodes: number;
+      };
       functionalWidgets: {
         navigation: number;
         contactForm: number;
@@ -503,7 +510,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.10.0 live</span>
+          <span className="status-pill"><i /> v0.11.0 live</span>
         </nav>
       </header>
 
@@ -765,7 +772,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                   <span className="eyebrow">Pixel comparison</span>
                   <h3>Figma視覚差分レポート</h3>
                   <p>
-                    赤い箇所ほどFigmaとの差が大きい領域です。構造診断とは別に、位置・色・画像・文字折り返しを実測します。
+                    赤い箇所ほどFigmaとの差が大きい領域です。位置・色・画像・文字折り返しをPC/SP別、セクション別、文字要素別に実測します。
                   </p>
                 </div>
                 {visualQaResults.length > 0 && (
@@ -861,6 +868,44 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                               <b>{hotspot.changedPixelRatio}%</b>
                             </p>
                           ))}
+                        </div>
+                      )}
+                      {(result.sections.length > 0 || result.textNodes.length > 0) && (
+                        <div className="visual-qa-regions">
+                          {result.sections.some((region) => region.changedPixelRatio > 0) && (
+                            <section>
+                              <strong>セクション別の差分影響</strong>
+                              {result.sections
+                                .filter((region) => region.changedPixelRatio > 0)
+                                .slice(0, 4)
+                                .map((region) => (
+                                  <p key={region.nodeId}>
+                                    <span>
+                                      <b>{region.name}</b>
+                                      <small>領域内差分 {region.changedPixelRatio}%</small>
+                                    </span>
+                                    <em>全体影響 {region.impactRatio}%</em>
+                                  </p>
+                                ))}
+                            </section>
+                          )}
+                          {result.textNodes.some((region) => region.changedPixelRatio > 0) && (
+                            <section>
+                              <strong>文字要素別の差分影響</strong>
+                              {result.textNodes
+                                .filter((region) => region.changedPixelRatio > 0)
+                                .slice(0, 5)
+                                .map((region) => (
+                                  <p key={region.nodeId}>
+                                    <span>
+                                      <b>{region.name}</b>
+                                      <small>文字領域差分 {region.changedPixelRatio}%</small>
+                                    </span>
+                                    <em>全体影響 {region.impactRatio}%</em>
+                                  </p>
+                                ))}
+                            </section>
+                          )}
                         </div>
                       )}
                       <ul className="visual-qa-recommendations">
@@ -1047,7 +1092,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.10.0</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.11.0</span></div>
       </footer>
     </main>
   );

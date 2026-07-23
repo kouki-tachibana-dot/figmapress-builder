@@ -11,7 +11,13 @@ import type {
 export type QualityCheckStatus = "pass" | "info" | "warning";
 
 export interface FigmaQualityCheck {
-  id: "structure" | "editable-text" | "auto-layout" | "responsive" | "interactions";
+  id:
+    | "structure"
+    | "editable-text"
+    | "typography"
+    | "auto-layout"
+    | "responsive"
+    | "interactions";
   label: string;
   status: QualityCheckStatus;
   detail: string;
@@ -30,6 +36,13 @@ export interface FigmaQualityReport {
     autoLayoutFrames: number;
     mappedAutoLayoutFrames: number;
     absoluteLayoutNodes: number;
+    typography: {
+      horizontalTextNodes: number;
+      wrappingTextNodes: number;
+      explicitLineBreakTextNodes: number;
+      mixedStyleTextNodes: number;
+      truncatedTextNodes: number;
+    };
     functionalWidgets: {
       navigation: number;
       contactForm: number;
@@ -53,7 +66,24 @@ export function createFigmaQualityReport(
   const unboundedNodes = visibleNodes.length - boundedNodes.length;
   const editableTextNodes = boundedNodes.filter((node) =>
     node.type === "TEXT" && typeof node.characters === "string",
-  ).length;
+  );
+  const typography = {
+    horizontalTextNodes: editableTextNodes.length,
+    wrappingTextNodes: editableTextNodes.filter((node) =>
+      node.textAutoResize === "HEIGHT"
+      || node.textAutoResize === "NONE"
+      || node.textAutoResize === "TRUNCATE",
+    ).length,
+    explicitLineBreakTextNodes: editableTextNodes.filter((node) =>
+      node.characters?.includes("\n"),
+    ).length,
+    mixedStyleTextNodes: editableTextNodes.filter((node) =>
+      Boolean(node.characterStyleOverrides?.length && node.styleOverrideTable),
+    ).length,
+    truncatedTextNodes: editableTextNodes.filter((node) =>
+      node.textAutoResize === "TRUNCATE",
+    ).length,
+  };
   const autoLayoutFrames = boundedNodes.filter(isAutoLayout).length;
   const absoluteLayoutNodes = boundedEntries.filter(({ node, parent }) =>
     node !== roots.desktop
@@ -77,10 +107,18 @@ export function createFigmaQualityReport(
     {
       id: "editable-text",
       label: "編集可能テキスト",
-      status: editableTextNodes > 0 ? "pass" : "info",
-      detail: editableTextNodes > 0
-        ? `${editableTextNodes}テキストをElementor上で編集可能`
+      status: editableTextNodes.length > 0 ? "pass" : "info",
+      detail: editableTextNodes.length > 0
+        ? `${editableTextNodes.length}テキストをElementor上で編集可能`
         : "編集可能なテキストレイヤーはありません",
+    },
+    {
+      id: "typography",
+      label: "文字配置",
+      status: editableTextNodes.length > 0 ? "pass" : "info",
+      detail: editableTextNodes.length > 0
+        ? `横書き${typography.horizontalTextNodes}・折返し${typography.wrappingTextNodes}・明示改行${typography.explicitLineBreakTextNodes}・混在スタイル${typography.mixedStyleTextNodes}を保持`
+        : "文字配置の変換対象はありません",
     },
     {
       id: "auto-layout",
@@ -117,10 +155,11 @@ export function createFigmaQualityReport(
       responsiveVariants: roots.mobile ? 2 : 1,
       visibleNodes: visibleNodes.length,
       boundedNodes: boundedNodes.length,
-      editableTextNodes,
+      editableTextNodes: editableTextNodes.length,
       autoLayoutFrames,
       mappedAutoLayoutFrames: autoLayoutFrames,
       absoluteLayoutNodes,
+      typography,
       functionalWidgets,
     },
     checks,

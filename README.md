@@ -3,7 +3,7 @@
 Figma の構造を、WordPress で扱える Gutenberg ブロックまたはElementorページへ変換する
 オープンソースの Web アプリ＋CLIです。
 
-## v0.10.0 — Visual QA Quality Gate
+## v0.11.0 — Section & Typography Visual QA
 
 **Web版:** [https://figmapress-builder.vercel.app](https://figmapress-builder.vercel.app)
 
@@ -23,6 +23,7 @@ Figma の構造を、WordPress で扱える Gutenberg ブロックまたはEleme
 - FigmaのPC／スマホ基準画像と生成ページを同一寸法で画素比較
 - 視覚一致スコア、差分面積、平均色差、ページ内の差分集中箇所を自動算出
 - PC／スマホ別の差分ヒートマップと改善提案を画面表示し、JSONとして保存
+- 差分をセクション／文字要素単位で再計測し、ページ全体への影響が大きい順に表示
 - PC／スマホ別に全体位置ずれの補正候補、確度、推定誤差削減率を自動判定
 - ページ高の不一致や局所差分を単純な全体移動と誤認しない安全判定
 - Elementor下書き前にVisual QAを必須化し、重大差分がある場合は明示確認してから送信
@@ -30,7 +31,8 @@ Figma の構造を、WordPress で扱える Gutenberg ブロックまたはEleme
 - スマホ版の画像トリミング、文字位置、セクション順をPC版の縮小ではなくFigmaどおりに保持
 - スマホヘッダーへPC版のメニュー項目を引き継ぎ、CTAを残した実動メニューへ変換
 - 1920px基準の文字・高さ・画像を画面幅へ連続追従し、日本語の縦書き化と位置ずれを防止
-- Figmaの折返し指定、混在文字サイズ、縦位置、回転を保持
+- Elementorの編集画面と生成プレビューの両方で横書き、改行、文字ボックス高、切り詰めを保持
+- Figmaの折返し指定、明示改行、混在文字サイズ、縦位置、回転を保持
 - 写真・マスク・ベクターをFigmaレンダーAPIから取得し、文字は編集可能なWidgetとして保持
 - Figmaのメニュー、問い合わせフォーム、年表／FAQをElementorの実動Widgetへ変換
 - ナビのモバイルメニュー、フォーム送信、アコーディオン開閉をElementor Proなしで提供

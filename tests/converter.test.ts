@@ -208,6 +208,15 @@ test("real Figma bounds produce a high-fidelity editable Elementor document", as
                   style: { fontFamily: "Noto Sans JP", fontSize: 24, lineHeightPx: 38 },
                 },
                 {
+                  id: "3:5",
+                  name: "Truncated notice",
+                  type: "TEXT",
+                  characters: "長い文章を固定高で安全に省略します。",
+                  textAutoResize: "TRUNCATE",
+                  absoluteBoundingBox: { x: 180, y: 590, width: 420, height: 60 },
+                  style: { fontFamily: "Noto Sans JP", fontSize: 20, lineHeightPx: 30 },
+                },
+                {
                   id: "3:1",
                   name: "Portrait",
                   type: "RECTANGLE",
@@ -261,20 +270,43 @@ test("real Figma bounds produce a high-fidelity editable Elementor document", as
     String(element.settings.editor).includes("font-size:3.75vw"),
   );
   const fixedParagraph = elements.find((element) => String(element.settings.editor).includes("固定幅の文章"));
+  const truncatedNotice = elements.find((element) => String(element.settings.editor).includes("固定高で安全"));
   const portrait = elements.find((element) => element.widgetType === "image");
   assert.match(String(heading?.settings.editor), /white-space:pre/);
+  assert.match(String(heading?.settings.editor), /writing-mode:horizontal-tb/);
+  assert.match(String(heading?.settings.editor), /line-break:strict/);
+  assert.equal(heading?.settings.css_classes, "figmapress-text figmapress-text--horizontal");
   assert.deepEqual(heading?.settings.typography_font_size, { unit: "vw", size: 3.333, sizes: [] });
   assert.deepEqual(punctuation?.settings._transform_rotateZ_effect, { unit: "deg", size: 7.54, sizes: [] });
   assert.deepEqual(mixedHeading?.settings.typography_font_size, { unit: "vw", size: 4.375, sizes: [] });
-  assert.match(String(mixedHeading?.settings.editor), /<span style="display:block"><span/);
+  assert.match(String(mixedHeading?.settings.editor), /<span style="display:block;max-width:100%"><span/);
   assert.match(String(mixedHeading?.settings.editor), /font-size:3\.75vw/);
   assert.match(String(mixedHeading?.settings.editor), /font-size:4\.375vw/);
   assert.match(String(fixedParagraph?.settings.editor), /white-space:pre-wrap/);
+  assert.match(String(fixedParagraph?.settings.editor), /height:5\.208vw/);
+  assert.match(String(fixedParagraph?.settings.editor), /overflow:visible/);
+  assert.match(String(truncatedNotice?.settings.editor), /white-space:pre-wrap/);
+  assert.match(String(truncatedNotice?.settings.editor), /height:3\.125vw/);
+  assert.match(String(truncatedNotice?.settings.editor), /overflow:hidden/);
   assert.equal((portrait?.settings.image as { url?: string })?.url, "https://images.example/portrait-rendered.png");
   assert.deepEqual(portrait?.settings.height, { unit: "vw", size: 36.458, sizes: [] });
   assert.equal(portrait?.settings._position, "absolute");
   assert.match(result.previewHtml, /明石をずーっと元気なまちに/);
+  assert.match(result.previewHtml, /data-figmapress-node-name="Main heading"/);
+  assert.match(result.previewHtml, /data-figmapress-kind="text"/);
+  assert.match(result.previewHtml, /writing-mode:horizontal-tb/);
   assert.match(result.previewHtml, /portrait-rendered\.png/);
+  assert.deepEqual(result.qualityReport?.metrics.typography, {
+    horizontalTextNodes: 5,
+    wrappingTextNodes: 2,
+    explicitLineBreakTextNodes: 0,
+    mixedStyleTextNodes: 1,
+    truncatedTextNodes: 1,
+  });
+  assert.equal(
+    result.qualityReport?.checks.find((check) => check.id === "typography")?.status,
+    "pass",
+  );
   assert.ok(result.warnings.some((warning) => warning.includes("高忠実度モード")));
 });
 

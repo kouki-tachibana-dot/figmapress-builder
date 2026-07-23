@@ -47,6 +47,27 @@ export interface VisualQaHotspot {
   label: string;
 }
 
+export interface VisualQaRegionInput {
+  nodeId: string;
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface VisualQaRegionMetrics {
+  nodeId: string;
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  changedPixelRatio: number;
+  meanColorError: number;
+  impactRatio: number;
+}
+
 export interface VisualQaAlignment {
   offsetX: number;
   offsetY: number;
@@ -82,6 +103,25 @@ interface BandAccumulator {
   pixels: number;
   changed: number;
   colorError: number;
+}
+
+function validatePixelBuffers(
+  reference: Uint8ClampedArray,
+  target: Uint8ClampedArray,
+  width: number,
+  height: number,
+): void {
+  const expectedLength = width * height * 4;
+  if (
+    !Number.isInteger(width) ||
+    !Number.isInteger(height) ||
+    width <= 0 ||
+    height <= 0 ||
+    reference.length !== expectedLength ||
+    target.length !== expectedLength
+  ) {
+    throw new Error("比較画像の寸法が一致していません。");
+  }
 }
 
 function round(value: number, digits = 1): number {
@@ -357,6 +397,62 @@ function recommendationsFor(
   return recommendations;
 }
 
+export function analyzeVisualRegions(
+  reference: Uint8ClampedArray,
+  target: Uint8ClampedArray,
+  width: number,
+  height: number,
+  regions: VisualQaRegionInput[],
+  threshold = 24,
+): VisualQaRegionMetrics[] {
+  validatePixelBuffers(reference, target, width, height);
+  const pagePixels = width * height;
+  return regions
+    .map((region): VisualQaRegionMetrics | null => {
+      const startX = clamp(Math.floor(region.x), 0, width);
+      const startY = clamp(Math.floor(region.y), 0, height);
+      const endX = clamp(Math.ceil(region.x + region.width), 0, width);
+      const endY = clamp(Math.ceil(region.y + region.height), 0, height);
+      if (endX <= startX || endY <= startY) return null;
+
+      let pixels = 0;
+      let changed = 0;
+      let colorError = 0;
+      for (let y = startY; y < endY; y += 1) {
+        for (let x = startX; x < endX; x += 1) {
+          const offset = (y * width + x) * 4;
+          const pixelError =
+            (
+              Math.abs(reference[offset] - target[offset]) +
+              Math.abs(reference[offset + 1] - target[offset + 1]) +
+              Math.abs(reference[offset + 2] - target[offset + 2]) +
+              Math.abs(reference[offset + 3] - target[offset + 3])
+            ) / 4;
+          pixels += 1;
+          colorError += pixelError;
+          if (pixelError > threshold) changed += 1;
+        }
+      }
+
+      return {
+        nodeId: region.nodeId,
+        name: region.name,
+        x: startX,
+        y: startY,
+        width: endX - startX,
+        height: endY - startY,
+        changedPixelRatio: round((changed / pixels) * 100),
+        meanColorError: round(colorError / pixels),
+        impactRatio: round((changed / pagePixels) * 100, 2),
+      };
+    })
+    .filter((region): region is VisualQaRegionMetrics => region !== null)
+    .sort((left, right) =>
+      right.impactRatio - left.impactRatio ||
+      right.changedPixelRatio - left.changedPixelRatio,
+    );
+}
+
 export function analyzeVisualPixels(
   reference: Uint8ClampedArray,
   target: Uint8ClampedArray,
@@ -365,17 +461,8 @@ export function analyzeVisualPixels(
   threshold = 24,
   generatedHeight = height,
 ): VisualQaAnalysis {
+  validatePixelBuffers(reference, target, width, height);
   const expectedLength = width * height * 4;
-  if (
-    !Number.isInteger(width) ||
-    !Number.isInteger(height) ||
-    width <= 0 ||
-    height <= 0 ||
-    reference.length !== expectedLength ||
-    target.length !== expectedLength
-  ) {
-    throw new Error("比較画像の寸法が一致していません。");
-  }
 
   const bandCount = 10;
   const bands: BandAccumulator[] = Array.from(

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  analyzeVisualRegions,
   analyzeVisualPixels,
   resolveVisualQaDraftGate,
 } from "../apps/web/src/lib/visual-qa.ts";
@@ -97,6 +98,39 @@ test("visual QA locates a concentrated difference near the page bottom", () => {
   assert.equal(analysis.metrics.hotspots[0]?.startPercent, 90);
   assert.match(analysis.metrics.hotspots[0]?.label ?? "", /下部/);
   assert.ok(analysis.metrics.brightnessDelta < 0);
+});
+
+test("visual QA ranks named sections and text boxes by page impact", () => {
+  const width = 20;
+  const height = 100;
+  const reference = solidPixels(width, height, 255, 255, 255);
+  const target = reference.slice();
+  for (let row = 80; row < height; row += 1) {
+    for (let column = 0; column < width; column += 1) {
+      const offset = (row * width + column) * 4;
+      target[offset] = 0;
+      target[offset + 1] = 0;
+      target[offset + 2] = 0;
+    }
+  }
+
+  const regions = analyzeVisualRegions(
+    reference,
+    target,
+    width,
+    height,
+    [
+      { nodeId: "hero", name: "FV/Hero Sec", x: 0, y: 0, width: 20, height: 50 },
+      { nodeId: "footer", name: "Footer/Footer Sec", x: 0, y: 75, width: 20, height: 25 },
+      { nodeId: "footer-copy", name: "Footer message", x: 2, y: 80, width: 16, height: 10 },
+    ],
+  );
+
+  assert.equal(regions[0]?.nodeId, "footer");
+  assert.equal(regions[0]?.changedPixelRatio, 80);
+  assert.equal(regions[0]?.impactRatio, 20);
+  assert.equal(regions.at(-1)?.nodeId, "hero");
+  assert.equal(regions.at(-1)?.impactRatio, 0);
 });
 
 test("visual QA rejects pixel buffers with mismatched dimensions", () => {

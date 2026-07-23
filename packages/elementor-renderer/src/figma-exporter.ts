@@ -569,6 +569,7 @@ function textElement(
   const lineHeight = textLineHeight(style, richRuns, fontSize);
   const settings: ElementorSettings = {
     ...widgetPosition(node, bounds, parentBounds, parentNode),
+    css_classes: "figmapress-text figmapress-text--horizontal",
     text_color: solidColor(style.fills ?? node.fills) ?? "#111111",
     typography_typography: "custom",
     typography_font_family: style.fontFamily ?? "Arial",
@@ -584,7 +585,7 @@ function textElement(
   const content = richRuns.map((run) => runHtml(run, context)).join("").replace(/\n/g, "<br>");
   const whiteSpace = textWhiteSpace(node);
   const verticalAlign = textVerticalAlign(style.textAlignVertical);
-  settings.editor = `<div style="display:flex;flex-direction:column;justify-content:${verticalAlign};margin:0;min-height:${canvasCss(bounds.height, context)};overflow:visible;overflow-wrap:normal;white-space:${whiteSpace};word-break:${whiteSpace === "pre" ? "keep-all" : "normal"}"><span style="display:block">${content}</span></div>`;
+  settings.editor = `<div data-figmapress-text-box="${escapeAttribute(node.id)}" style="box-sizing:border-box;display:flex;flex-direction:column;font-family:${escapeAttribute(cssFont(style.fontFamily))};hyphens:none;justify-content:${verticalAlign};line-break:strict;margin:0;max-width:100%;${textBoxHeight(node, bounds, context)}overflow:${textOverflow(node)};overflow-wrap:normal;text-orientation:mixed;white-space:${whiteSpace};width:100%;word-break:${whiteSpace === "pre" ? "keep-all" : "normal"};writing-mode:horizontal-tb"><span style="display:block;max-width:100%">${content}</span></div>`;
   return widget(context.ids, node.id, "text-editor", settings);
 }
 
@@ -753,9 +754,10 @@ function previewNode(
   const bounds = node.absoluteBoundingBox;
   if (node.visible === false || !bounds || bounds.width <= 0 || bounds.height <= 0) return "";
   const position = previewPosition(node, bounds, parentBounds, parentNode);
+  const attributes = previewNodeAttributes(node);
   const assetUrl = visualUrl(node, context.assets);
   if (assetUrl) {
-    return `<img alt="${escapeAttribute(node.name)}" src="${escapeAttribute(assetUrl)}" style="${position};object-fit:fill;${previewRadius(node)}" />`;
+    return `<img alt="${escapeAttribute(node.name)}" ${attributes} data-figmapress-kind="visual" src="${escapeAttribute(assetUrl)}" style="${position};object-fit:fill;${previewRadius(node)}" />`;
   }
 
   const backgroundUrl = ownImageUrl(node, context.assets.imageUrls ?? {});
@@ -775,12 +777,16 @@ function previewNode(
     const content = runs.length > 1
       ? runs.map((run) => runHtml(run, context)).join("").replace(/\n/g, "<br>")
       : escapeHtml(node.characters ?? "").replace(/\n/g, "<br>");
-    return `<div style="${position};color:${escapeAttribute(solidColor(style.fills ?? node.fills) ?? "#111111")};display:flex;flex-direction:column;font-family:${escapeAttribute(cssFont(style.fontFamily))};font-size:calc(var(--figma-unit) * ${round(fontSize)});font-style:${style.italic ? "italic" : "normal"};font-weight:${round(style.fontWeight ?? 400)};justify-content:${textVerticalAlign(style.textAlignVertical)};letter-spacing:calc(var(--figma-unit) * ${round(style.letterSpacing ?? 0)});line-height:${round(textLineHeight(style, runs, fontSize) / fontSize)};overflow:visible;overflow-wrap:normal;text-align:${textAlign(style.textAlignHorizontal)};text-decoration:${textDecoration(style.textDecoration)};text-transform:${textTransform(style.textCase)};white-space:${textWhiteSpace(node)};word-break:${textWhiteSpace(node) === "pre" ? "keep-all" : "normal"};${previewRotation(node)}${opacity}"><span style="display:block">${content}</span></div>`;
+    return `<div ${attributes} data-figmapress-kind="text" style="${position};box-sizing:border-box;color:${escapeAttribute(solidColor(style.fills ?? node.fills) ?? "#111111")};display:flex;flex-direction:column;font-family:${escapeAttribute(cssFont(style.fontFamily))};font-size:calc(var(--figma-unit) * ${round(fontSize)});font-style:${style.italic ? "italic" : "normal"};font-weight:${round(style.fontWeight ?? 400)};hyphens:none;justify-content:${textVerticalAlign(style.textAlignVertical)};letter-spacing:calc(var(--figma-unit) * ${round(style.letterSpacing ?? 0)});line-break:strict;line-height:${round(textLineHeight(style, runs, fontSize) / fontSize)};max-width:100%;overflow:${textOverflow(node)};overflow-wrap:normal;text-align:${textAlign(style.textAlignHorizontal)};text-decoration:${textDecoration(style.textDecoration)};text-orientation:mixed;text-transform:${textTransform(style.textCase)};white-space:${textWhiteSpace(node)};word-break:${textWhiteSpace(node) === "pre" ? "keep-all" : "normal"};writing-mode:horizontal-tb;${previewRotation(node)}${opacity}"><span style="display:block;max-width:100%">${content}</span></div>`;
   }
 
   const children = (node.children ?? []).map((child) => previewNode(child, bounds, node, context)).join("");
   if (!children && !background && !border) return "";
-  return `<div aria-label="${escapeAttribute(node.name)}" style="${position};${previewAutoLayout(node)}${background}${border}${previewRadius(node)}${overflow}${opacity}">${children}</div>`;
+  return `<div aria-label="${escapeAttribute(node.name)}" ${attributes} data-figmapress-kind="container" style="${position};${previewAutoLayout(node)}${background}${border}${previewRadius(node)}${overflow}${opacity}">${children}</div>`;
+}
+
+function previewNodeAttributes(node: FigmaNode): string {
+  return `data-figmapress-node-id="${escapeAttribute(node.id)}" data-figmapress-node-name="${escapeAttribute(node.name)}"`;
 }
 
 function previewPosition(
@@ -1015,8 +1021,30 @@ function textVerticalAlign(value: FigmaTypeStyle["textAlignVertical"]): string {
 }
 
 function textWhiteSpace(node: FigmaNode): "pre" | "pre-wrap" {
-  if (node.textAutoResize === "HEIGHT" || node.textAutoResize === "NONE") return "pre-wrap";
+  if (
+    node.textAutoResize === "HEIGHT"
+    || node.textAutoResize === "NONE"
+    || node.textAutoResize === "TRUNCATE"
+  ) {
+    return "pre-wrap";
+  }
   return "pre";
+}
+
+function textOverflow(node: FigmaNode): "hidden" | "visible" {
+  return node.textAutoResize === "TRUNCATE" ? "hidden" : "visible";
+}
+
+function textBoxHeight(
+  node: FigmaNode,
+  bounds: FigmaBounds,
+  context: RenderContext,
+): string {
+  const property =
+    node.textAutoResize === "NONE" || node.textAutoResize === "TRUNCATE"
+      ? "height"
+      : "min-height";
+  return `${property}:${canvasCss(bounds.height, context)};`;
 }
 
 function textFontSize(style: FigmaTypeStyle, runs: RichRun[], bounds: FigmaBounds): number {
@@ -1045,8 +1073,26 @@ function textDecoration(value: FigmaTypeStyle["textDecoration"]): string {
 }
 
 function cssFont(value: string | undefined): string {
-  if (!value) return "Arial, sans-serif";
-  return `'${value.replace(/['\\]/g, "")}', Arial, sans-serif`;
+  const primary = value?.replace(/['\\]/g, "").trim();
+  const families = [
+    primary,
+    "Noto Sans JP",
+    "Hiragino Kaku Gothic ProN",
+    "Yu Gothic",
+    "Meiryo",
+    "Arial",
+    "sans-serif",
+  ].filter((family, index, values): family is string =>
+    Boolean(family)
+    && values.findIndex(
+      (candidate) => candidate?.toLowerCase() === family?.toLowerCase(),
+    ) === index,
+  );
+  return families
+    .map((family) =>
+      family.includes(" ") ? `'${family}'` : family,
+    )
+    .join(",");
 }
 
 function size(value: number, unit = "px"): Record<string, unknown> {
