@@ -22,6 +22,9 @@ interface RenderContext {
   root: FigmaNode;
   rootBounds: FigmaBounds;
   assets: FigmaRenderAssets;
+  variant: "single" | "desktop" | "mobile";
+  anchorSuffix: string;
+  fallbackMenuTexts: FigmaNode[];
 }
 
 interface RichRun {
@@ -54,19 +57,41 @@ class ElementIdFactory {
   }
 }
 
-export function findFigmaDesignRoot(file: MockFigmaFile): FigmaNode | null {
-  const canvases = (file.document.children ?? []).filter((node) => node.type === "CANVAS");
-  for (const canvas of canvases) {
-    const candidates = (canvas.children ?? []).filter((node) =>
-      node.visible !== false && validBounds(node.absoluteBoundingBox),
-    );
-    if (candidates.length === 1) return candidates[0] ?? null;
-  }
+export interface FigmaResponsiveRoots {
+  desktop: FigmaNode | null;
+  mobile: FigmaNode | null;
+}
 
+export function findFigmaResponsiveRoots(file: MockFigmaFile): FigmaResponsiveRoots {
+  const canvases = (file.document.children ?? []).filter((node) => node.type === "CANVAS");
   const candidates = canvases.flatMap((canvas) =>
     (canvas.children ?? []).filter((node) => node.visible !== false && validBounds(node.absoluteBoundingBox)),
   );
-  return candidates.sort((left, right) => area(right) - area(left))[0] ?? null;
+  const desktopNamed = candidates
+    .filter((node) => responsiveFrameKind(node) === "desktop")
+    .sort((left, right) => area(right) - area(left));
+  const mobileNamed = candidates
+    .filter((node) => responsiveFrameKind(node) === "mobile")
+    .sort((left, right) => area(right) - area(left));
+  const desktop = desktopNamed[0]
+    ?? candidates
+      .filter((node) => responsiveFrameKind(node) !== "mobile")
+      .sort((left, right) => area(right) - area(left))[0]
+    ?? candidates.sort((left, right) => area(right) - area(left))[0]
+    ?? null;
+  const mobile = desktop
+    ? mobileNamed.find((node) => node.id !== desktop.id) ?? null
+    : null;
+  return { desktop, mobile };
+}
+
+export function findFigmaDesignRoot(file: MockFigmaFile): FigmaNode | null {
+  return findFigmaResponsiveRoots(file).desktop;
+}
+
+export function hasFigmaResponsiveLayout(file: MockFigmaFile): boolean {
+  const roots = findFigmaResponsiveRoots(file);
+  return Boolean(roots.desktop && roots.mobile);
 }
 
 export function hasFigmaLayout(file: MockFigmaFile): boolean {
@@ -92,21 +117,46 @@ export class FigmaElementorExporter {
     title: string,
     assets: FigmaRenderAssets = {},
   ): ElementorTemplate {
-    const root = findFigmaDesignRoot(file);
+    const roots = findFigmaResponsiveRoots(file);
+    const root = roots.desktop;
     if (!root?.absoluteBoundingBox) {
       throw new Error("Figmaの選択ノードにレイアウト座標がありません。");
     }
 
-    const rootBounds = root.absoluteBoundingBox;
-    const context: RenderContext = {
-      ids: new ElementIdFactory(),
-      root,
-      rootBounds,
-      assets,
-    };
-    const children = (root.children ?? [])
-      .map((node) => renderElement(node, rootBounds, context))
-      .filter((element): element is ElementorElement => element !== null);
+    const ids = new ElementIdFactory();
+    const fallbackMenuTexts = navigationMenuTexts(root);
+    const responsive = Boolean(roots.mobile?.absoluteBoundingBox);
+    const content: ElementorElement[] = [
+      renderRootElement(
+        root,
+        createRenderContext(
+          ids,
+          root,
+          assets,
+          responsive ? "desktop" : "single",
+          responsive ? "-desktop" : "",
+          fallbackMenuTexts,
+        ),
+        responsive ? { hide_mobile: "hidden-mobile" } : {},
+      ),
+    ];
+    if (roots.mobile?.absoluteBoundingBox) {
+      content.push(renderRootElement(
+        roots.mobile,
+        createRenderContext(
+          ids,
+          roots.mobile,
+          assets,
+          "mobile",
+          "-mobile",
+          fallbackMenuTexts,
+        ),
+        {
+          hide_desktop: "hidden-desktop",
+          hide_tablet: "hidden-tablet",
+        },
+      ));
+    }
 
     return {
       title,
@@ -117,20 +167,7 @@ export class FigmaElementorExporter {
         background_color: solidColor(root.fills) ?? "#FFFFFF",
         hide_title: "yes",
       },
-      content: [{
-        id: context.ids.create(`${root.id}:root`),
-        elType: "container",
-        isInner: false,
-        settings: {
-          ...baseContainerSettings(root, context),
-          content_width: "full",
-          width: size(100, "%"),
-          min_height: canvasSize(rootBounds.height, context),
-          html_tag: "main",
-          overflow: root.clipsContent === false ? "" : "hidden",
-        },
-        elements: children,
-      }],
+      content,
     };
   }
 }
@@ -139,17 +176,96 @@ export function renderFigmaPreview(
   file: MockFigmaFile,
   assets: FigmaRenderAssets = {},
 ): string | null {
-  const root = findFigmaDesignRoot(file);
+  const roots = findFigmaResponsiveRoots(file);
+  const root = roots.desktop;
   const rootBounds = root?.absoluteBoundingBox;
   if (!root || !rootBounds) return null;
-  const context: RenderContext = {
-    ids: new ElementIdFactory(),
+  const ids = new ElementIdFactory();
+  const fallbackMenuTexts = navigationMenuTexts(root);
+  const responsive = Boolean(roots.mobile?.absoluteBoundingBox);
+  const desktop = previewRoot(
     root,
-    rootBounds,
+    createRenderContext(
+      ids,
+      root,
+      assets,
+      responsive ? "desktop" : "single",
+      responsive ? "-desktop" : "",
+      fallbackMenuTexts,
+    ),
+    responsive ? " figmapress-figma-preview--desktop" : "",
+  );
+  if (!roots.mobile?.absoluteBoundingBox) return desktop;
+  const mobile = previewRoot(
+    roots.mobile,
+    createRenderContext(
+      ids,
+      roots.mobile,
+      assets,
+      "mobile",
+      "-mobile",
+      fallbackMenuTexts,
+    ),
+    " figmapress-figma-preview--mobile",
+  );
+  return `<div class="figmapress-responsive-preview">${desktop}${mobile}</div>`;
+}
+
+function createRenderContext(
+  ids: ElementIdFactory,
+  root: FigmaNode,
+  assets: FigmaRenderAssets,
+  variant: RenderContext["variant"],
+  anchorSuffix: string,
+  fallbackMenuTexts: FigmaNode[],
+): RenderContext {
+  return {
+    ids,
+    root,
+    rootBounds: root.absoluteBoundingBox as FigmaBounds,
     assets,
+    variant,
+    anchorSuffix,
+    fallbackMenuTexts,
   };
+}
+
+function renderRootElement(
+  root: FigmaNode,
+  context: RenderContext,
+  visibility: ElementorSettings,
+): ElementorElement {
+  const rootBounds = context.rootBounds;
+  const children = (root.children ?? [])
+    .map((node) => renderElement(node, rootBounds, context))
+    .filter((element): element is ElementorElement => element !== null);
+  return {
+    id: context.ids.create(`${root.id}:root`),
+    elType: "container",
+    isInner: false,
+    settings: {
+      ...baseContainerSettings(root, context),
+      ...visibility,
+      _element_id: anchorId("top", context),
+      css_classes: `figmapress-layout figmapress-layout--${context.variant}`,
+      content_width: "full",
+      width: size(100, "%"),
+      min_height: canvasSize(rootBounds.height, context),
+      html_tag: "main",
+      overflow: root.clipsContent === false ? "" : "hidden",
+    },
+    elements: children,
+  };
+}
+
+function previewRoot(
+  root: FigmaNode,
+  context: RenderContext,
+  className: string,
+): string {
+  const rootBounds = context.rootBounds;
   const background = solidColor(root.fills) ?? "#FFFFFF";
-  return `<div class="figmapress-figma-preview" style="--figma-unit:calc(100cqw / ${round(rootBounds.width)});aspect-ratio:${round(rootBounds.width)}/${round(rootBounds.height)};background:${escapeAttribute(background)}">${(root.children ?? []).map((node) => previewNode(node, rootBounds, context)).join("")}</div>`;
+  return `<div class="figmapress-figma-preview${className}" data-figmapress-layout="${context.variant}" style="--figma-unit:calc(100cqw / ${round(rootBounds.width)});aspect-ratio:${round(rootBounds.width)}/${round(rootBounds.height)};background:${escapeAttribute(background)}">${(root.children ?? []).map((node) => previewNode(node, rootBounds, context)).join("")}</div>`;
 }
 
 function renderElement(
@@ -190,7 +306,7 @@ function renderElement(
       ...baseContainerSettings(node, context),
       ...containerPosition(bounds, parentBounds, context),
       html_tag: htmlTag(node),
-      ...sectionAnchorSettings(node),
+      ...sectionAnchorSettings(node, context),
     },
     elements: children,
   };
@@ -202,10 +318,8 @@ function navigationElement(
   parentBounds: FigmaBounds,
   context: RenderContext,
 ): ElementorElement | null {
-  const menuTexts = descendants(node)
-    .filter((child) => child.type === "TEXT" && /(?:menu.?item|nav.?item|メニュー)/i.test(child.name))
-    .filter((child) => child.characters?.trim() && child.absoluteBoundingBox)
-    .sort((left, right) => (left.absoluteBoundingBox?.x ?? 0) - (right.absoluteBoundingBox?.x ?? 0));
+  const localMenuTexts = navigationMenuTexts(node);
+  const menuTexts = localMenuTexts.length >= 2 ? localMenuTexts : context.fallbackMenuTexts;
   const explicitlyNamed = /(?:\{wp:nav\}|header.*(?:sec|section)|navigation)/i.test(node.name);
   if (!explicitlyNamed || menuTexts.length < 2) return null;
 
@@ -219,15 +333,17 @@ function navigationElement(
 
   return widget(context.ids, node.id, "figmapress-nav", {
     ...widgetPosition(bounds, parentBounds),
-    _element_id: "site-navigation",
+    _element_id: anchorId("site-navigation", context),
+    layout_variant: context.variant,
     logo: logoUrl ? { url: logoUrl, id: "", alt: "サイトロゴ", source: "library" } : undefined,
     items: menuTexts.map((item, index) => ({
       _id: hashId(`${item.id}:menu:${index}`),
       label: item.characters?.trim() ?? "",
-      url: { url: menuAnchor(item.characters ?? ""), is_external: "", nofollow: "" },
+      url: { url: menuAnchor(item.characters ?? "", context), is_external: "", nofollow: "" },
     })),
     cta_label: ctaText?.characters?.trim() || "お問い合わせ",
-    cta_url: { url: "#contact", is_external: "", nofollow: "" },
+    cta_url: { url: anchorHref("contact", context), is_external: "", nofollow: "" },
+    home_url: { url: anchorHref("top", context), is_external: "", nofollow: "" },
     background_color: solidColor(background?.fills) ?? "rgba(255,255,255,0.92)",
     accent_color: solidColor(topBar?.fills) ?? "#D10B2C",
     text_color: solidColor(menuTexts[0]?.fills) ?? "#202020",
@@ -278,7 +394,7 @@ function contactFormElement(
 
   return widget(context.ids, node.id, "figmapress-contact-form", {
     ...widgetPosition(bounds, parentBounds),
-    _element_id: "contact",
+    _element_id: anchorId("contact", context),
     title,
     name_label: exact(/^(?:お名前|氏名|name)$/i, "お名前"),
     email_label: exact(/メールアドレス|e-?mail/i, "メールアドレス"),
@@ -382,23 +498,53 @@ function isInsideInteractionBounds(node: FigmaNode, interaction: FigmaBounds): b
     && centerY >= interaction.y && centerY <= interaction.y + interaction.height;
 }
 
-function menuAnchor(label: string): string {
-  if (/想い|thought|message/i.test(label)) return "#thoughts";
-  if (/政策|policy|policies/i.test(label)) return "#policies";
-  if (/活動報告|activit|report/i.test(label)) return "#activities";
-  if (/プロフィール|profile/i.test(label)) return "#profile";
-  if (/相談|問合|contact/i.test(label)) return "#contact";
-  return `#${slug(label) || "section"}`;
+function navigationMenuTexts(node: FigmaNode): FigmaNode[] {
+  return descendants(node)
+    .filter((child) => child.type === "TEXT" && /(?:menu.?item|nav.?item|メニュー)/i.test(child.name))
+    .filter((child) => child.characters?.trim() && child.absoluteBoundingBox)
+    .sort((left, right) => {
+      const y = (left.absoluteBoundingBox?.y ?? 0) - (right.absoluteBoundingBox?.y ?? 0);
+      return Math.abs(y) > 12
+        ? y
+        : (left.absoluteBoundingBox?.x ?? 0) - (right.absoluteBoundingBox?.x ?? 0);
+    });
 }
 
-function sectionAnchorSettings(node: FigmaNode): ElementorSettings {
+function menuAnchor(label: string, context: RenderContext): string {
+  if (/想い|thought|message/i.test(label)) return anchorHref("thoughts", context);
+  if (/政策|policy|policies/i.test(label)) return anchorHref("policies", context);
+  if (/活動報告|activit|report/i.test(label)) return anchorHref("activities", context);
+  if (/プロフィール|profile/i.test(label)) return anchorHref("profile", context);
+  if (/相談|問合|contact/i.test(label)) return anchorHref("contact", context);
+  return anchorHref(slug(label) || "section", context);
+}
+
+function anchorId(value: string, context: RenderContext): string {
+  return `${value}${context.anchorSuffix}`;
+}
+
+function anchorHref(value: string, context: RenderContext): string {
+  return `#${anchorId(value, context)}`;
+}
+
+function sectionAnchorSettings(node: FigmaNode, context: RenderContext): ElementorSettings {
   const name = node.name;
-  if (!/(?:sec|section|contact|profile|政策|活動|想い|プロフィール|お問い合わせ)/i.test(name)) return {};
-  if (/thought|message|想い/i.test(name)) return { _element_id: "thoughts" };
-  if (/policy|policies|政策/i.test(name)) return { _element_id: "policies" };
-  if (/activit|report|活動/i.test(name)) return { _element_id: "activities" };
-  if (/profile|プロフィール/i.test(name)) return { _element_id: "profile" };
-  if (/contact|相談|問合/i.test(name)) return { _element_id: "contact" };
+  if (/thought|message|想い|voice|現場の声/i.test(name)) return { _element_id: anchorId("thoughts", context) };
+  if (/policy|policies|政策/i.test(name)) return { _element_id: anchorId("policies", context) };
+  if (/activit|report|活動報告|news/i.test(name)) return { _element_id: anchorId("activities", context) };
+  if (/profile|プロフィール/i.test(name)) return { _element_id: anchorId("profile", context) };
+  if (/contact|相談|問合/i.test(name)) return { _element_id: anchorId("contact", context) };
+  if (!/^(?:group|frame|section)\b/i.test(name)) return {};
+  const copy = descendants(node)
+    .filter((child) => child.type === "TEXT" && child.characters?.trim())
+    .slice(0, 80)
+    .map((child) => child.characters)
+    .join(" ");
+  if (/thought|message|想い|voice|現場の声/i.test(copy)) return { _element_id: anchorId("thoughts", context) };
+  if (/policy|policies|政策/i.test(copy)) return { _element_id: anchorId("policies", context) };
+  if (/activit|report|活動報告|news/i.test(copy)) return { _element_id: anchorId("activities", context) };
+  if (/profile|プロフィール/i.test(copy)) return { _element_id: anchorId("profile", context) };
+  if (/contact|相談|問合/i.test(copy)) return { _element_id: anchorId("contact", context) };
   return {};
 }
 
@@ -834,6 +980,17 @@ function percent(value: number, total: number): number {
 
 function validBounds(bounds: FigmaBounds | undefined): bounds is FigmaBounds {
   return Boolean(bounds && bounds.width > 0 && bounds.height > 0);
+}
+
+function responsiveFrameKind(node: FigmaNode): "desktop" | "mobile" | null {
+  const bounds = node.absoluteBoundingBox;
+  if (!bounds) return null;
+  const name = node.name.toLowerCase();
+  const desktopName = /(?:^|[\/_\s-])(?:pc|desktop)(?:$|[\/_\s-])|デスクトップ/.test(name);
+  const mobileName = /(?:^|[\/_\s-])(?:sp|mobile|phone)(?:$|[\/_\s-])|スマホ/.test(name);
+  if (desktopName && bounds.width >= 768) return "desktop";
+  if (mobileName && bounds.width <= 768) return "mobile";
+  return null;
 }
 
 function area(node: FigmaNode): number {

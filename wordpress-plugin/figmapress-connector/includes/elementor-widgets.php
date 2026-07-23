@@ -98,6 +98,21 @@ final class FigmaPress_Nav_Widget extends FigmaPress_Widget_Base {
                 'default' => array( 'url' => '#contact' ),
             )
         );
+        $this->add_control(
+            'home_url',
+            array(
+                'label'   => esc_html__( 'ロゴリンク', 'figmapress-connector' ),
+                'type'    => \Elementor\Controls_Manager::URL,
+                'default' => array( 'url' => '#top' ),
+            )
+        );
+        $this->add_control(
+            'layout_variant',
+            array(
+                'type'    => \Elementor\Controls_Manager::HIDDEN,
+                'default' => 'single',
+            )
+        );
         $this->end_controls_section();
 
         $this->start_controls_section(
@@ -129,16 +144,21 @@ final class FigmaPress_Nav_Widget extends FigmaPress_Widget_Base {
         $items      = isset( $settings['items'] ) && is_array( $settings['items'] ) ? $settings['items'] : array();
         $logo       = isset( $settings['logo']['url'] ) ? $settings['logo']['url'] : '';
         $cta_url    = isset( $settings['cta_url']['url'] ) ? $settings['cta_url']['url'] : '#contact';
+        $home_url   = isset( $settings['home_url']['url'] ) ? $settings['home_url']['url'] : '#top';
+        $is_mobile  = isset( $settings['layout_variant'] ) && 'mobile' === $settings['layout_variant'];
         $menu_id    = 'figmapress-menu-' . $this->get_id();
         $background = figmapress_connector_css_color( isset( $settings['background_color'] ) ? $settings['background_color'] : '', '#FFFFFF' );
         $accent     = figmapress_connector_css_color( isset( $settings['accent_color'] ) ? $settings['accent_color'] : '', '#D10B2C' );
         $text       = figmapress_connector_css_color( isset( $settings['text_color'] ) ? $settings['text_color'] : '', '#202020' );
         ?>
-        <nav class="figmapress-nav" aria-label="<?php esc_attr_e( 'メインナビゲーション', 'figmapress-connector' ); ?>" style="--figmapress-nav-bg:<?php echo esc_attr( $background ); ?>;--figmapress-accent:<?php echo esc_attr( $accent ); ?>;--figmapress-text:<?php echo esc_attr( $text ); ?>">
+        <nav class="figmapress-nav<?php echo $is_mobile ? ' figmapress-nav--mobile' : ''; ?>" aria-label="<?php esc_attr_e( 'メインナビゲーション', 'figmapress-connector' ); ?>" style="--figmapress-nav-bg:<?php echo esc_attr( $background ); ?>;--figmapress-accent:<?php echo esc_attr( $accent ); ?>;--figmapress-text:<?php echo esc_attr( $text ); ?>">
             <?php if ( $logo ) : ?>
-                <a class="figmapress-nav__logo" href="#top" aria-label="<?php esc_attr_e( 'ページ先頭', 'figmapress-connector' ); ?>"><img src="<?php echo esc_url( $logo ); ?>" alt="<?php esc_attr_e( 'サイトロゴ', 'figmapress-connector' ); ?>"></a>
+                <a class="figmapress-nav__logo" href="<?php echo esc_url( $home_url ); ?>" aria-label="<?php esc_attr_e( 'ページ先頭', 'figmapress-connector' ); ?>"><img src="<?php echo esc_url( $logo ); ?>" alt="<?php esc_attr_e( 'サイトロゴ', 'figmapress-connector' ); ?>"></a>
             <?php endif; ?>
             <button class="figmapress-nav__toggle" type="button" aria-controls="<?php echo esc_attr( $menu_id ); ?>" aria-expanded="false"><span></span><span></span><span></span><span class="screen-reader-text"><?php esc_html_e( 'メニューを開く', 'figmapress-connector' ); ?></span></button>
+            <?php if ( $is_mobile && ! empty( $settings['cta_label'] ) ) : ?>
+                <a class="figmapress-nav__mobile-cta" href="<?php echo esc_url( $cta_url ); ?>"><?php echo esc_html( $settings['cta_label'] ); ?></a>
+            <?php endif; ?>
             <div class="figmapress-nav__panel" id="<?php echo esc_attr( $menu_id ); ?>">
                 <ul class="figmapress-nav__items">
                     <?php foreach ( $items as $item ) :

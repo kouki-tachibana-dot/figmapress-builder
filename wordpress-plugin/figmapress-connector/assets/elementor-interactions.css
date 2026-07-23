@@ -1,7 +1,7 @@
 .elementor-widget-figmapress-nav,
 .elementor-widget-figmapress-nav > .elementor-widget-container {
     height: 100%;
-    min-height: 72px;
+    min-height: 0;
     width: 100%;
 }
 
@@ -80,6 +80,7 @@
 
 .figmapress-nav a:focus-visible,
 .figmapress-nav__toggle:focus-visible,
+.figmapress-nav__mobile-cta:focus-visible,
 .figmapress-accordion summary:focus-visible {
     outline: 3px solid color-mix(in srgb, var(--figmapress-accent, #d10b2c) 38%, transparent);
     outline-offset: 3px;
@@ -97,6 +98,10 @@
 }
 
 .figmapress-nav__toggle {
+    display: none;
+}
+
+.figmapress-nav__mobile-cta {
     display: none;
 }
 
@@ -314,7 +319,17 @@ html {
 #policies,
 #activities,
 #profile,
-#contact {
+#contact,
+#thoughts-desktop,
+#policies-desktop,
+#activities-desktop,
+#profile-desktop,
+#contact-desktop,
+#thoughts-mobile,
+#policies-mobile,
+#activities-mobile,
+#profile-mobile,
+#contact-mobile {
     scroll-margin-top: 90px;
 }
 
@@ -386,6 +401,48 @@ html {
         border-radius: 8px;
         min-height: 48px;
         padding: 10px 18px;
+    }
+
+    .figmapress-nav--mobile {
+        border-top-width: 8px;
+        min-height: 53px;
+    }
+
+    .figmapress-nav--mobile .figmapress-nav__logo {
+        margin-left: 30px;
+        padding: 5px 0;
+    }
+
+    .figmapress-nav--mobile .figmapress-nav__logo img {
+        height: 28px;
+        max-width: 79px;
+    }
+
+    .figmapress-nav--mobile .figmapress-nav__toggle {
+        gap: 4px;
+        margin: 0 3px 0 auto;
+        padding: 8px;
+        width: 40px;
+    }
+
+    .figmapress-nav--mobile .figmapress-nav__mobile-cta {
+        align-items: center;
+        background: var(--figmapress-accent, #d10b2c);
+        border-radius: 0 0 0 10px;
+        color: #fff;
+        display: flex;
+        flex: 0 0 117px;
+        font-size: 10px;
+        font-weight: 700;
+        justify-content: center;
+        letter-spacing: .05em;
+        padding: 4px 8px;
+        text-align: center;
+        text-decoration: none;
+    }
+
+    .figmapress-nav--mobile .figmapress-nav__panel .figmapress-nav__cta {
+        display: none;
     }
 
     .figmapress-contact {

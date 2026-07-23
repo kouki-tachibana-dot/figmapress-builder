@@ -3,7 +3,7 @@
 Figma の構造を、WordPress で扱える Gutenberg ブロックまたはElementorページへ変換する
 オープンソースの Web アプリ＋CLIです。
 
-## v0.6.0 — 実運用品質・再送耐性の強化
+## v0.7.0 — Figmaスマホ版の端末別レイアウト変換
 
 **Web版:** [https://figmapress-builder.vercel.app](https://figmapress-builder.vercel.app)
 
@@ -17,6 +17,9 @@ Figma の構造を、WordPress で扱える Gutenberg ブロックまたはEleme
 - HTTPSのWordPressサイトへGutenberg／Elementor下書き固定ページを作成
 - Figma画像をWordPressメディアライブラリへ取り込み、期限切れを防止
 - Figmaの座標・サイズ・文字スタイルをElementorへ直接反映
+- `PC-page` と `SP-page` を自動検出し、ElementorでPC／タブレット用とスマホ用を安全に切り替え
+- スマホ版の画像トリミング、文字位置、セクション順をPC版の縮小ではなくFigmaどおりに保持
+- スマホヘッダーへPC版のメニュー項目を引き継ぎ、CTAを残した実動メニューへ変換
 - 1920px基準の文字・高さ・画像を画面幅へ連続追従し、日本語の縦書き化と位置ずれを防止
 - Figmaの折返し指定、混在文字サイズ、縦位置、回転を保持
 - 写真・マスク・ベクターをFigmaレンダーAPIから取得し、文字は編集可能なWidgetとして保持
@@ -44,7 +47,7 @@ Figma Tokenは標準では同じタブの `sessionStorage` だけに保持しま
 
 - Figma OAuthは未実装で、現時点では利用者自身のPersonal Access Tokenが必要
 - Elementor高忠実度変換は任意のレイヤー名に対応。Gutenberg変換では `section/*` または Hero / Services / Features / FAQ / CTA / Contact の意味が分かる名前を推奨
-- PCフレームだけを選択した場合、Elementor出力もPCデザインを基準に縮小する。独立したモバイル構成の自動統合は対象外
+- 同一Figmaページに `PC` / `Desktop` と `SP` / `Mobile` の名前を含むトップレベルフレームを配置すると端末別に自動統合。スマホフレームがない場合はPCデザインを画面幅へ連続追従
 - WordPressへの送信は固定ページの `draft` 作成だけ
 - Elementor Pro専用Widget、Theme Builder、WooCommerce、Popupは対象外（ナビ・フォーム・アコーディオンはConnector独自Widgetで対応）
 

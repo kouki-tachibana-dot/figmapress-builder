@@ -278,6 +278,144 @@ test("real Figma bounds produce a high-fidelity editable Elementor document", as
   assert.ok(result.warnings.some((warning) => warning.includes("高忠実度モード")));
 });
 
+test("paired PC and SP frames become device-specific Elementor layouts", async () => {
+  const text = (
+    id: string,
+    name: string,
+    characters: string,
+    x: number,
+    y: number,
+    width = 120,
+    height = 28,
+    fontSize = 18,
+  ) => ({
+    id,
+    name,
+    type: "TEXT",
+    characters,
+    absoluteBoundingBox: { x, y, width, height },
+    style: { fontSize, fontWeight: 700 },
+  });
+  const file: MockFigmaFile = {
+    document: {
+      id: "0:0",
+      name: "Responsive campaign",
+      type: "DOCUMENT",
+      children: [{
+        id: "1:0",
+        name: "Page",
+        type: "CANVAS",
+        children: [
+          {
+            id: "46:12",
+            name: "PC-page",
+            type: "FRAME",
+            absoluteBoundingBox: { x: 0, y: 0, width: 1920, height: 1600 },
+            children: [
+              {
+                id: "10:0",
+                name: "Header/Header Sec",
+                type: "FRAME",
+                absoluteBoundingBox: { x: 0, y: 0, width: 1920, height: 100 },
+                children: [
+                  text("10:1", "Header/Menu-Item", "想い", 1000, 40),
+                  text("10:2", "Header/Menu-Item", "政策", 1160, 40),
+                  text("10:3", "Header/Menu-Item", "活動報告", 1320, 40),
+                  text("10:4", "Header/Menu-Item", "プロフィール", 1500, 40),
+                  text("10:5", "Comp/Button-HeaderCTA/text", "ご相談はこちら", 1700, 40, 160),
+                ],
+              },
+              {
+                id: "20:0",
+                name: "Sec/Thoughts Sec",
+                type: "FRAME",
+                absoluteBoundingBox: { x: 0, y: 100, width: 1920, height: 600 },
+                children: [text("20:1", "Heading", "PCの想い", 120, 180, 500, 80, 64)],
+              },
+            ],
+          },
+          {
+            id: "46:210",
+            name: "SP-page",
+            type: "FRAME",
+            absoluteBoundingBox: { x: 2100, y: 0, width: 440, height: 1000 },
+            children: [
+              {
+                id: "50:0",
+                name: "Header/Header Sec",
+                type: "FRAME",
+                absoluteBoundingBox: { x: 2100, y: 0, width: 440, height: 53 },
+                children: [
+                  text("50:1", "Comp/Button-HeaderCTA/text", "ご相談はこちら", 2423, 20, 100, 20, 10),
+                ],
+              },
+              {
+                id: "60:0",
+                name: "SP/Voice",
+                type: "FRAME",
+                absoluteBoundingBox: { x: 2100, y: 53, width: 440, height: 447 },
+                children: [text("60:1", "Heading", "スマホの想い", 2130, 100, 380, 50, 24)],
+              },
+              {
+                id: "65:0",
+                name: "Group 131",
+                type: "FRAME",
+                absoluteBoundingBox: { x: 2100, y: 500, width: 440, height: 500 },
+                children: [text("65:1", "Heading", "明石市をもっと元気なまちにする政策", 2130, 540, 380, 50, 24)],
+              },
+            ],
+          },
+          {
+            id: "70:0",
+            name: "SP_Comp/Carousel",
+            type: "FRAME",
+            absoluteBoundingBox: { x: 2700, y: 0, width: 1172, height: 440 },
+          },
+        ],
+      }],
+    },
+  };
+
+  const result = await convertFile(file);
+  assert.equal(result.elementorTemplate.content.length, 2);
+  const [desktopRoot, mobileRoot] = result.elementorTemplate.content;
+  assert.equal(desktopRoot?.settings.hide_mobile, "hidden-mobile");
+  assert.equal(desktopRoot?.settings._element_id, "top-desktop");
+  assert.equal(mobileRoot?.settings.hide_desktop, "hidden-desktop");
+  assert.equal(mobileRoot?.settings.hide_tablet, "hidden-tablet");
+  assert.equal(mobileRoot?.settings._element_id, "top-mobile");
+  assert.deepEqual(mobileRoot?.settings.min_height, { unit: "vw", size: 227.273, sizes: [] });
+
+  const flatten = (root: typeof desktopRoot): NonNullable<typeof desktopRoot>[] => {
+    const elements: NonNullable<typeof desktopRoot>[] = [];
+    const visit = (items: NonNullable<typeof desktopRoot>[]) => {
+      for (const item of items) {
+        elements.push(item);
+        visit(item.elements);
+      }
+    };
+    if (root) visit(root.elements);
+    return elements;
+  };
+  const desktopElements = flatten(desktopRoot);
+  const mobileElements = flatten(mobileRoot);
+  const desktopNav = desktopElements.find((element) => element.widgetType === "figmapress-nav");
+  const mobileNav = mobileElements.find((element) => element.widgetType === "figmapress-nav");
+  const mobileHeading = mobileElements.find((element) =>
+    String(element.settings.editor).includes("スマホの想い"),
+  );
+  assert.equal(desktopNav?.settings.layout_variant, "desktop");
+  assert.equal(mobileNav?.settings.layout_variant, "mobile");
+  assert.equal((desktopNav?.settings.items as Array<{ url: { url: string } }>)[0]?.url.url, "#thoughts-desktop");
+  assert.equal((mobileNav?.settings.items as Array<{ url: { url: string } }>)[0]?.url.url, "#thoughts-mobile");
+  assert.equal((mobileNav?.settings.home_url as { url: string }).url, "#top-mobile");
+  assert.ok(mobileElements.some((element) => element.settings._element_id === "policies-mobile"));
+  assert.deepEqual(mobileHeading?.settings.typography_font_size, { unit: "vw", size: 5.455, sizes: [] });
+  assert.match(result.previewHtml, /figmapress-figma-preview--desktop/);
+  assert.match(result.previewHtml, /figmapress-figma-preview--mobile/);
+  assert.ok(result.warnings.some((warning) => warning.includes("PC版とスマホ版")));
+});
+
 test("Figma interaction layers become functional Elementor widgets", async () => {
   const text = (id: string, name: string, characters: string, x: number, y: number, width = 120, height = 28) => ({
     id,

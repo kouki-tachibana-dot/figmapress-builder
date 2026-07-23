@@ -6,7 +6,7 @@ import type {
 import { RequestError } from "./request-security";
 
 const FIGMA_FILE_KEY = /^[A-Za-z0-9_-]{6,160}$/;
-const MAX_FIGMA_RESPONSE_BYTES = 12_000_000;
+const MAX_FIGMA_RESPONSE_BYTES = 24_000_000;
 
 export interface FigmaFetchResult {
   file: MockFigmaFile;
@@ -178,6 +178,40 @@ const FIGMA_RENDER_GROUP_TYPES = new Set([
 ]);
 const MAX_RENDERED_NODES = 120;
 
+function findNodeById(node: FigmaNode, id: string): FigmaNode | null {
+  if (node.id === id) return node;
+  for (const child of node.children ?? []) {
+    const match = findNodeById(child, id);
+    if (match) return match;
+  }
+  return null;
+}
+
+function responsiveFrameKind(node: FigmaNode): "desktop" | "mobile" | null {
+  const bounds = node.absoluteBoundingBox;
+  if (!bounds) return null;
+  const name = node.name.toLowerCase();
+  const desktopName = /(?:^|[\/_\s-])(?:pc|desktop)(?:$|[\/_\s-])|デスクトップ/.test(name);
+  const mobileName = /(?:^|[\/_\s-])(?:sp|mobile|phone)(?:$|[\/_\s-])|スマホ/.test(name);
+  if (desktopName && bounds.width >= 768) return "desktop";
+  if (mobileName && bounds.width <= 768) return "mobile";
+  return null;
+}
+
+function responsivePageRoots(document: FigmaNode): {
+  desktop: FigmaNode | null;
+  mobile: FigmaNode | null;
+} {
+  const candidates = (document.children ?? [])
+    .filter((node) => node.type === "CANVAS")
+    .flatMap((canvas) => canvas.children ?? [])
+    .filter((node) => node.visible !== false && node.absoluteBoundingBox);
+  return {
+    desktop: candidates.find((node) => responsiveFrameKind(node) === "desktop") ?? null,
+    mobile: candidates.find((node) => responsiveFrameKind(node) === "mobile") ?? null,
+  };
+}
+
 function hasText(node: FigmaNode): boolean {
   if (node.type === "TEXT" && node.characters?.trim()) return true;
   return (node.children ?? []).some(hasText);
@@ -204,20 +238,31 @@ function hasComplexVisual(node: FigmaNode): boolean {
  */
 export function collectRenderedNodeIds(document: FigmaNode): string[] {
   const ids: string[] = [];
-  const visit = (node: FigmaNode): void => {
-    if (node.visible === false || ids.length >= MAX_RENDERED_NODES) return;
+  const seen = new Set<string>();
+  const visit = (node: FigmaNode, limit: number): void => {
+    if (node.visible === false || ids.length >= limit) return;
     const bounds = node.absoluteBoundingBox;
     const renderGroup = FIGMA_RENDER_GROUP_TYPES.has(node.type)
       && !hasText(node)
       && hasComplexVisual(node);
     const renderLeaf = FIGMA_RENDERABLE_TYPES.has(node.type) || hasOwnImageFill(node);
     if (bounds && bounds.width > 0 && bounds.height > 0 && (renderGroup || renderLeaf)) {
-      ids.push(node.id);
+      if (!seen.has(node.id)) {
+        ids.push(node.id);
+        seen.add(node.id);
+      }
       return;
     }
-    for (const child of node.children ?? []) visit(child);
+    for (const child of node.children ?? []) visit(child, limit);
   };
-  visit(document);
+  const responsive = responsivePageRoots(document);
+  if (responsive.desktop && responsive.mobile) {
+    const desktopLimit = Math.floor(MAX_RENDERED_NODES / 2);
+    visit(responsive.desktop, desktopLimit);
+    visit(responsive.mobile, MAX_RENDERED_NODES);
+  } else {
+    visit(document, MAX_RENDERED_NODES);
+  }
   return ids;
 }
 
@@ -273,12 +318,12 @@ export async function fetchFigmaFile(
   const reference = extractFigmaReference(fileKeyOrUrl);
   const key = reference.fileKey;
   const headers = { "X-Figma-Token": token.trim(), Accept: "application/json" };
-  const init: RequestInit = {
+  const requestInit = (): RequestInit => ({
     headers,
     cache: "no-store",
     redirect: "error",
     signal: AbortSignal.timeout(20_000),
-  };
+  });
 
   let fileResponse: Response;
   try {
@@ -286,14 +331,14 @@ export async function fetchFigmaFile(
     if (reference.nodeId) query.set("ids", reference.nodeId);
     fileResponse = await fetch(
       `https://api.figma.com/v1/files/${encodeURIComponent(key)}?${query.toString()}`,
-      init,
+      requestInit(),
     );
   } catch {
     throw new RequestError("Figma APIへの接続がタイムアウトしました。", 504);
   }
   if (!fileResponse.ok) throw figmaError(fileResponse.status);
 
-  const data = await readLimitedJson(fileResponse);
+  let data = await readLimitedJson(fileResponse);
   if (!isRecord(data) || !isRecord(data.document)) {
     throw new RequestError("Figmaファイルにdocumentデータがありません。", 422);
   }
@@ -301,11 +346,35 @@ export async function fetchFigmaFile(
   const warnings: string[] = reference.nodeId
     ? [`Figmaノード ${reference.nodeId} を変換対象として読み込みました。`]
     : [];
+  const selectedNode = reference.nodeId
+    ? findNodeById((data as RawFigmaFile).document, reference.nodeId)
+    : null;
+  if (selectedNode && responsiveFrameKind(selectedNode)) {
+    try {
+      const companionQuery = new URLSearchParams({ depth: "12" });
+      const companionResponse = await fetch(
+        `https://api.figma.com/v1/files/${encodeURIComponent(key)}?${companionQuery.toString()}`,
+        requestInit(),
+      );
+      if (companionResponse.ok) {
+        const companionData = await readLimitedJson(companionResponse);
+        if (isRecord(companionData) && isRecord(companionData.document)) {
+          const roots = responsivePageRoots((companionData as RawFigmaFile).document);
+          if (roots.desktop && roots.mobile) {
+            data = companionData;
+            warnings.push("同じFigmaページのPC版とスマホ版を自動検出しました。");
+          }
+        }
+      }
+    } catch {
+      warnings.push("スマホ版フレームを追加取得できなかったため、選択した画面のみ変換しました。");
+    }
+  }
   let imageUrls: Record<string, string> = {};
   try {
     const imageResponse = await fetch(
       `https://api.figma.com/v1/files/${encodeURIComponent(key)}/images`,
-      init,
+      requestInit(),
     );
     if (imageResponse.ok) {
       const imageData = await readLimitedJson(imageResponse);
@@ -326,13 +395,14 @@ export async function fetchFigmaFile(
   const renderedNodeUrls = await fetchRenderedNodeUrls(
     key,
     (data as RawFigmaFile).document,
-    init,
+    requestInit(),
     warnings,
   );
+  const normalizedData = data as RawFigmaFile;
 
   return {
-    file: normalizeFigmaFile(data as RawFigmaFile),
-    fileName: typeof data.name === "string" ? data.name : "FigmaPress Page",
+    file: normalizeFigmaFile(normalizedData),
+    fileName: typeof normalizedData.name === "string" ? normalizedData.name : "FigmaPress Page",
     imageUrls,
     renderedNodeUrls,
     warnings,
