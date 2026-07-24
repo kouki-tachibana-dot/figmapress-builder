@@ -3,7 +3,7 @@ Contributors: figmapress
 Tags: blocks, figma, gutenberg, elementor
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 0.11.0
+Stable tag: 0.12.0
 License: GPLv2 or later
 
 Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
@@ -15,6 +15,12 @@ Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
    create a draft page containing figmapress/* blocks.
 
 == Changelog ==
+= 0.12.0 =
+* Figmaレイヤーの透明度、複数の外側／内側シャドウ、レイヤーぼかし、背景ぼかしを再現。
+* Elementor標準の編集可能なシャドウ設定も同時保存。
+* 構造化された色・座標・半径だけを受け付け、任意CSSの実行を防止。
+* 実ページVisual QAでもプレビューと同じ複数効果を描画。
+
 = 0.11.0 =
 * Figmaの線形・放射グラデーションを角度、中心、半径、最大8色のストップまで再現。
 * Elementor標準の編集可能なグラデーション設定も同時保存。
