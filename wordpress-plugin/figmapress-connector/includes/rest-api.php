@@ -178,6 +178,8 @@ function figmapress_connector_rest_status() {
             ),
             'functionalWidgets' => array(
                 'navigation'  => class_exists( 'FigmaPress_Nav_Widget' ),
+                'links'       => class_exists( 'FigmaPress_Link_Widget' ),
+                'carousel'    => class_exists( 'FigmaPress_Carousel_Widget' ),
                 'contactForm' => class_exists( 'FigmaPress_Contact_Form_Widget' ),
                 'accordion'   => class_exists( 'FigmaPress_Accordion_Widget' ),
             ),
@@ -819,6 +821,8 @@ function figmapress_connector_sanitize_elementor_elements( $elements, &$count ) 
         'button',
         'image',
         'figmapress-nav',
+        'figmapress-link',
+        'figmapress-carousel',
         'figmapress-contact-form',
         'figmapress-accordion',
     );
@@ -932,6 +936,21 @@ function figmapress_connector_localize_elementor_images( &$elements, $post_id, &
         }
         if ( 'widget' === $element['elType'] && 'figmapress-nav' === ( isset( $element['widgetType'] ) ? $element['widgetType'] : '' ) && isset( $element['settings']['logo'] ) ) {
             figmapress_connector_localize_image_setting( $element['settings']['logo'], $post_id, $warnings, $imported_media, $deadline, $localized_images );
+        }
+        if ( 'widget' === $element['elType'] && 'figmapress-carousel' === ( isset( $element['widgetType'] ) ? $element['widgetType'] : '' ) ) {
+            if ( isset( $element['settings']['items'] ) && is_array( $element['settings']['items'] ) ) {
+                foreach ( $element['settings']['items'] as &$carousel_item ) {
+                    if ( isset( $carousel_item['image'] ) ) {
+                        figmapress_connector_localize_image_setting( $carousel_item['image'], $post_id, $warnings, $imported_media, $deadline, $localized_images );
+                    }
+                }
+                unset( $carousel_item );
+            }
+            foreach ( array( 'previous_icon', 'next_icon' ) as $icon_key ) {
+                if ( isset( $element['settings'][ $icon_key ] ) ) {
+                    figmapress_connector_localize_image_setting( $element['settings'][ $icon_key ], $post_id, $warnings, $imported_media, $deadline, $localized_images );
+                }
+            }
         }
         if ( 'container' === $element['elType'] && isset( $element['settings']['background_image'] ) ) {
             figmapress_connector_localize_image_setting( $element['settings']['background_image'], $post_id, $warnings, $imported_media, $deadline, $localized_images );

@@ -13,6 +13,8 @@ export interface BrowserWordPressStatus {
   elementor: { active: boolean; version?: string };
   functionalWidgets?: {
     navigation: boolean;
+    links?: boolean;
+    carousel?: boolean;
     contactForm: boolean;
     accordion: boolean;
   };
@@ -249,6 +251,8 @@ export async function probeWordPressDirect(
     elementor?: { active?: unknown; version?: unknown };
     functionalWidgets?: {
       navigation?: unknown;
+      links?: unknown;
+      carousel?: unknown;
       contactForm?: unknown;
       accordion?: unknown;
     };
@@ -273,6 +277,12 @@ export async function probeWordPressDirect(
     },
     functionalWidgets: status.functionalWidgets ? {
       navigation: status.functionalWidgets.navigation === true,
+      ...(status.functionalWidgets.links !== undefined
+        ? { links: status.functionalWidgets.links === true }
+        : {}),
+      ...(status.functionalWidgets.carousel !== undefined
+        ? { carousel: status.functionalWidgets.carousel === true }
+        : {}),
       contactForm: status.functionalWidgets.contactForm === true,
       accordion: status.functionalWidgets.accordion === true,
     } : undefined,

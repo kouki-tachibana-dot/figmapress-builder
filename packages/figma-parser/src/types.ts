@@ -71,6 +71,18 @@ export interface FigmaEffect {
   blendMode?: string;
 }
 
+export interface FigmaPrototypeAction {
+  type?: string;
+  url?: string;
+  destinationId?: string;
+  navigation?: string;
+  openInNewTab?: boolean;
+}
+
+export interface FigmaInteraction {
+  actions?: FigmaPrototypeAction[];
+}
+
 export interface FigmaNodeBase {
   id: string;
   name: string;
@@ -124,7 +136,7 @@ export interface FigmaNodeBase {
     type?: string;
     value?: string | boolean;
   }>;
-  interactions?: Array<Record<string, unknown>>;
+  interactions?: FigmaInteraction[];
   children?: FigmaNode[];
 }
 

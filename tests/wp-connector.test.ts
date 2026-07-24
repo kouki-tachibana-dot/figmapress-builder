@@ -25,7 +25,13 @@ test("WordPress connection probe reports Connector and Elementor versions", asyn
       wordpressVersion: "7.0.1",
       canEditPages: true,
       elementor: { active: true, version: "3.30.0" },
-      functionalWidgets: { navigation: true, contactForm: true, accordion: true },
+      functionalWidgets: {
+        navigation: true,
+        links: true,
+        carousel: true,
+        contactForm: true,
+        accordion: true,
+      },
       visualQa: {
         snapshot: true,
         documentUpdate: true,
@@ -43,6 +49,8 @@ test("WordPress connection probe reports Connector and Elementor versions", asyn
   assert.equal(status.elementor.active, true);
   assert.deepEqual(status.functionalWidgets, {
     navigation: true,
+    links: true,
+    carousel: true,
     contactForm: true,
     accordion: true,
   });

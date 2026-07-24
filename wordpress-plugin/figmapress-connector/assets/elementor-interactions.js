@@ -52,6 +52,143 @@
         });
     }
 
+    function initCarousels(scope) {
+        scope.querySelectorAll(".figmapress-carousel:not([data-figmapress-ready])").forEach(function (carousel) {
+            carousel.dataset.figmapressReady = "true";
+            var viewport = carousel.querySelector(".figmapress-carousel__viewport");
+            var track = carousel.querySelector(".figmapress-carousel__track");
+            var slides = Array.prototype.slice.call(carousel.querySelectorAll(".figmapress-carousel__slide"));
+            var previous = carousel.querySelector(".figmapress-carousel__button--previous");
+            var next = carousel.querySelector(".figmapress-carousel__button--next");
+            var dots = carousel.querySelector(".figmapress-carousel__dots");
+            var status = carousel.querySelector(".figmapress-carousel__status");
+            if (!viewport || !track || !previous || !next || !slides.length) return;
+
+            var index = 0;
+            var pointerStart = null;
+            var autoplayTimer = null;
+            var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+            var loop = carousel.dataset.loop === "true";
+            var autoplay = carousel.dataset.autoplay === "true";
+
+            function perView() {
+                var configured = window.matchMedia("(max-width: 767px)").matches
+                    ? Number(carousel.dataset.mobilePerView || 1)
+                    : Number(carousel.dataset.perView || 3);
+                return Math.max(1, Math.min(slides.length, Number.isFinite(configured) ? Math.round(configured) : 1));
+            }
+
+            function lastIndex() {
+                return Math.max(0, slides.length - perView());
+            }
+
+            function rebuildDots(maximum) {
+                if (!dots) return;
+                if (dots.children.length === maximum + 1) return;
+                dots.textContent = "";
+                for (var dotIndex = 0; dotIndex <= maximum; dotIndex += 1) {
+                    var dot = document.createElement("button");
+                    dot.type = "button";
+                    dot.className = "figmapress-carousel__dot";
+                    dot.dataset.index = String(dotIndex);
+                    dot.setAttribute("aria-label", String(dotIndex + 1) + "番目のスライドへ");
+                    dot.addEventListener("click", function (event) {
+                        var target = event.currentTarget;
+                        goTo(Number(target.dataset.index || 0), true);
+                    });
+                    dots.appendChild(dot);
+                }
+            }
+
+            function update(announce) {
+                var visible = perView();
+                var maximum = lastIndex();
+                index = Math.max(0, Math.min(index, maximum));
+                carousel.style.setProperty("--figmapress-per-view", String(visible));
+                track.style.transform = "translate3d(-" + (index * 100 / visible) + "%,0,0)";
+                slides.forEach(function (slide, slideIndex) {
+                    var shown = slideIndex >= index && slideIndex < index + visible;
+                    slide.setAttribute("aria-hidden", shown ? "false" : "true");
+                    slide.querySelectorAll("a,button,input,select,textarea").forEach(function (control) {
+                        if (shown) control.removeAttribute("tabindex");
+                        else control.setAttribute("tabindex", "-1");
+                    });
+                });
+                previous.disabled = maximum === 0 || (!loop && index === 0);
+                next.disabled = maximum === 0 || (!loop && index === maximum);
+                rebuildDots(maximum);
+                if (dots) {
+                    dots.querySelectorAll(".figmapress-carousel__dot").forEach(function (dot, dotIndex) {
+                        var current = dotIndex === index;
+                        dot.classList.toggle("is-active", current);
+                        if (current) dot.setAttribute("aria-current", "true");
+                        else dot.removeAttribute("aria-current");
+                    });
+                }
+                if (announce && status) {
+                    status.textContent = (index + 1) + "枚目から" + Math.min(slides.length, index + visible) + "枚目を表示中";
+                }
+            }
+
+            function goTo(nextIndex, announce) {
+                var maximum = lastIndex();
+                if (loop && maximum > 0) {
+                    if (nextIndex < 0) nextIndex = maximum;
+                    if (nextIndex > maximum) nextIndex = 0;
+                }
+                index = Math.max(0, Math.min(nextIndex, maximum));
+                update(announce);
+            }
+
+            function stopAutoplay() {
+                if (autoplayTimer) window.clearInterval(autoplayTimer);
+                autoplayTimer = null;
+            }
+
+            function startAutoplay() {
+                stopAutoplay();
+                if (!autoplay || reduceMotion.matches || lastIndex() === 0 || document.hidden) return;
+                autoplayTimer = window.setInterval(function () { goTo(index + 1, false); }, 5000);
+            }
+
+            previous.addEventListener("click", function () { goTo(index - 1, true); });
+            next.addEventListener("click", function () { goTo(index + 1, true); });
+            carousel.addEventListener("keydown", function (event) {
+                if (event.key === "ArrowLeft") {
+                    event.preventDefault();
+                    goTo(index - 1, true);
+                }
+                if (event.key === "ArrowRight") {
+                    event.preventDefault();
+                    goTo(index + 1, true);
+                }
+            });
+            viewport.addEventListener("pointerdown", function (event) {
+                if (event.pointerType === "mouse" && event.button !== 0) return;
+                pointerStart = event.clientX;
+            });
+            viewport.addEventListener("pointerup", function (event) {
+                if (pointerStart === null) return;
+                var distance = event.clientX - pointerStart;
+                pointerStart = null;
+                if (Math.abs(distance) < 40) return;
+                goTo(index + (distance < 0 ? 1 : -1), true);
+            });
+            viewport.addEventListener("pointercancel", function () { pointerStart = null; });
+            carousel.addEventListener("mouseenter", stopAutoplay);
+            carousel.addEventListener("mouseleave", startAutoplay);
+            carousel.addEventListener("focusin", stopAutoplay);
+            carousel.addEventListener("focusout", startAutoplay);
+            window.addEventListener("resize", function () { update(false); });
+            document.addEventListener("visibilitychange", startAutoplay);
+            if (typeof reduceMotion.addEventListener === "function") {
+                reduceMotion.addEventListener("change", startAutoplay);
+            }
+            update(false);
+            startAutoplay();
+        });
+    }
+
     function initForms(scope) {
         scope.querySelectorAll(".figmapress-contact__form:not([data-figmapress-ready])").forEach(function (form) {
             form.dataset.figmapressReady = "true";
@@ -101,6 +238,7 @@
         var root = scope && scope.querySelectorAll ? scope : document;
         initNavigation(root);
         initAccordions(root);
+        initCarousels(root);
         initForms(root);
     }
 
@@ -112,7 +250,7 @@
 
     window.addEventListener("elementor/frontend/init", function () {
         if (!window.elementorFrontend || !window.elementorFrontend.hooks) return;
-        ["figmapress-nav", "figmapress-contact-form", "figmapress-accordion"].forEach(function (name) {
+        ["figmapress-nav", "figmapress-link", "figmapress-carousel", "figmapress-contact-form", "figmapress-accordion"].forEach(function (name) {
             window.elementorFrontend.hooks.addAction("frontend/element_ready/" + name + ".default", function (element) {
                 init(element && element[0] ? element[0] : document);
             });

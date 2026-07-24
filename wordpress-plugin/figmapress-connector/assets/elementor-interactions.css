@@ -5,9 +5,27 @@
     width: 100%;
 }
 
+.elementor-widget-figmapress-link,
+.elementor-widget-figmapress-link > .elementor-widget-container,
+.elementor-widget-figmapress-link .figmapress-link {
+    height: 100%;
+    min-height: 0;
+    width: 100%;
+}
+
+.elementor-widget-figmapress-link {
+    inset: 0 !important;
+    z-index: 20;
+}
+
+.figmapress-link {
+    display: block;
+}
+
 .figmapress-nav,
 .figmapress-contact,
-.figmapress-accordion {
+.figmapress-accordion,
+.figmapress-carousel {
     box-sizing: border-box;
     color: var(--figmapress-text, #202020);
     font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", sans-serif;
@@ -15,7 +33,8 @@
 
 .figmapress-nav *,
 .figmapress-contact *,
-.figmapress-accordion * {
+.figmapress-accordion *,
+.figmapress-carousel * {
     box-sizing: border-box;
 }
 
@@ -234,6 +253,125 @@
     color: #9d1429;
 }
 
+.figmapress-carousel {
+    min-height: 100%;
+    padding: 0 clamp(36px, 3.2vw, 62px) 34px;
+    position: relative;
+    width: 100%;
+}
+
+.figmapress-carousel__viewport {
+    overflow: hidden;
+    touch-action: pan-y;
+    width: 100%;
+}
+
+.figmapress-carousel__track {
+    display: flex;
+    margin: 0;
+    padding: 0;
+    transform: translate3d(0, 0, 0);
+    transition: transform .42s cubic-bezier(.2, .7, .2, 1);
+    will-change: transform;
+}
+
+.figmapress-carousel__slide {
+    flex: 0 0 calc(100% / var(--figmapress-per-view, 3));
+    margin: 0;
+    min-width: 0;
+    padding: 0 clamp(5px, .5vw, 10px);
+}
+
+.figmapress-carousel__slide img {
+    display: block;
+    height: auto;
+    max-width: none;
+    object-fit: cover;
+    width: 100%;
+}
+
+.figmapress-carousel__slide h3 {
+    color: inherit;
+    font-size: clamp(13px, .9vw, 17px);
+    line-height: 1.5;
+    margin: 10px 0 0;
+    text-align: center;
+}
+
+.figmapress-carousel__item-link {
+    color: inherit;
+    display: block;
+    text-decoration: none;
+}
+
+.figmapress-carousel__item-link:focus-visible,
+.figmapress-carousel__button:focus-visible,
+.figmapress-carousel__dot:focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--figmapress-accent, #d10b2c) 36%, transparent);
+    outline-offset: 3px;
+}
+
+.figmapress-carousel__button {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    color: var(--figmapress-accent, #d10b2c);
+    cursor: pointer;
+    display: flex;
+    font-size: 50px;
+    height: 52px;
+    justify-content: center;
+    padding: 4px;
+    position: absolute;
+    top: calc(50% - 40px);
+    transform: translateY(-50%);
+    width: 36px;
+}
+
+.figmapress-carousel__button--previous {
+    left: 0;
+}
+
+.figmapress-carousel__button--next {
+    right: 0;
+}
+
+.figmapress-carousel__button img {
+    display: block;
+    height: 100%;
+    object-fit: contain;
+    width: 100%;
+}
+
+.figmapress-carousel__button:disabled {
+    cursor: default;
+    opacity: .25;
+}
+
+.figmapress-carousel__dots {
+    align-items: center;
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 22px;
+}
+
+.figmapress-carousel__dot {
+    background: color-mix(in srgb, var(--figmapress-accent, #d10b2c) 25%, transparent);
+    border: 0;
+    border-radius: 999px;
+    cursor: pointer;
+    height: 8px;
+    padding: 0;
+    transition: background-color .2s ease, width .2s ease;
+    width: 8px;
+}
+
+.figmapress-carousel__dot.is-active {
+    background: var(--figmapress-accent, #d10b2c);
+    width: 28px;
+}
+
 .figmapress-accordion {
     background: var(--figmapress-panel, #fff);
     border: 1px solid var(--figmapress-accent, #d50327);
@@ -313,6 +451,11 @@ html {
     .figmapress-accordion__icon::after {
         transition: none;
     }
+
+    .figmapress-carousel__track,
+    .figmapress-carousel__dot {
+        transition: none;
+    }
 }
 
 #thoughts,
@@ -334,6 +477,15 @@ html {
 }
 
 @media (max-width: 767px) {
+    .figmapress-carousel {
+        padding-left: 30px;
+        padding-right: 30px;
+    }
+
+    .figmapress-carousel__button {
+        width: 28px;
+    }
+
     .figmapress-nav {
         border-top-width: 6px;
         min-height: 72px;

@@ -11,7 +11,9 @@ export interface ElementorElement {
     | "image"
     | "figmapress-nav"
     | "figmapress-contact-form"
-    | "figmapress-accordion";
+    | "figmapress-accordion"
+    | "figmapress-carousel"
+    | "figmapress-link";
   settings: ElementorSettings;
   elements: ElementorElement[];
 }
