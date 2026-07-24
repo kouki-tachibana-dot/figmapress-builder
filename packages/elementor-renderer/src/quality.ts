@@ -15,6 +15,7 @@ export interface FigmaQualityCheck {
     | "structure"
     | "editable-text"
     | "typography"
+    | "gradients"
     | "auto-layout"
     | "responsive"
     | "interactions";
@@ -42,6 +43,11 @@ export interface FigmaQualityReport {
       explicitLineBreakTextNodes: number;
       mixedStyleTextNodes: number;
       truncatedTextNodes: number;
+    };
+    gradients: {
+      visible: number;
+      mapped: number;
+      multiStop: number;
     };
     functionalWidgets: {
       navigation: number;
@@ -85,6 +91,17 @@ export function createFigmaQualityReport(
     ).length,
   };
   const autoLayoutFrames = boundedNodes.filter(isAutoLayout).length;
+  const gradientNodes = boundedNodes.filter(hasVisibleGradient);
+  const mappedGradientNodes = gradientNodes.filter(hasMappedGradient);
+  const gradients = {
+    visible: gradientNodes.length,
+    mapped: mappedGradientNodes.length,
+    multiStop: mappedGradientNodes.filter((node) =>
+      (node.fills?.find((paint) =>
+        paint.visible !== false && paint.type.toUpperCase().startsWith("GRADIENT_")
+      )?.gradientStops?.length ?? 0) > 2,
+    ).length,
+  };
   const absoluteLayoutNodes = boundedEntries.filter(({ node, parent }) =>
     node !== roots.desktop
     && node !== roots.mobile
@@ -94,7 +111,11 @@ export function createFigmaQualityReport(
   const functionalWidgetTotal =
     functionalWidgets.navigation + functionalWidgets.contactForm + functionalWidgets.accordion;
   const boundedRatio = visibleNodes.length > 0 ? boundedNodes.length / visibleNodes.length : 0;
-  const score = Math.max(0, Math.min(100, Math.round(70 + boundedRatio * 30)));
+  const gradientRatio = gradients.visible > 0 ? gradients.mapped / gradients.visible : 1;
+  const score = Math.max(
+    0,
+    Math.min(100, Math.round(65 + boundedRatio * 25 + gradientRatio * 10)),
+  );
   const checks: FigmaQualityCheck[] = [
     {
       id: "structure",
@@ -119,6 +140,18 @@ export function createFigmaQualityReport(
       detail: editableTextNodes.length > 0
         ? `横書き${typography.horizontalTextNodes}・折返し${typography.wrappingTextNodes}・明示改行${typography.explicitLineBreakTextNodes}・混在スタイル${typography.mixedStyleTextNodes}を保持`
         : "文字配置の変換対象はありません",
+    },
+    {
+      id: "gradients",
+      label: "グラデーション",
+      status: gradients.visible === 0
+        ? "info"
+        : gradients.mapped === gradients.visible ? "pass" : "warning",
+      detail: gradients.visible === 0
+        ? "グラデーションの変換対象はありません"
+        : gradients.mapped === gradients.visible
+          ? `${gradients.mapped}グラデーションを再現（複数色${gradients.multiStop}）`
+          : `${gradients.visible - gradients.mapped}グラデーションは未対応形式`,
     },
     {
       id: "auto-layout",
@@ -160,6 +193,7 @@ export function createFigmaQualityReport(
       mappedAutoLayoutFrames: autoLayoutFrames,
       absoluteLayoutNodes,
       typography,
+      gradients,
       functionalWidgets,
     },
     checks,
@@ -183,6 +217,24 @@ function validBounds(node: FigmaNode): boolean {
 
 function isAutoLayout(node: FigmaNode | null): boolean {
   return node?.layoutMode === "HORIZONTAL" || node?.layoutMode === "VERTICAL";
+}
+
+function hasVisibleGradient(node: FigmaNode): boolean {
+  return node.fills?.some((paint) =>
+    paint.visible !== false && paint.type.toUpperCase().startsWith("GRADIENT_")
+  ) === true;
+}
+
+function hasMappedGradient(node: FigmaNode): boolean {
+  if (node.type === "TEXT") return false;
+  const paint = node.fills?.find((candidate) =>
+    candidate.visible !== false
+    && ["GRADIENT_LINEAR", "GRADIENT_RADIAL"].includes(candidate.type.toUpperCase()),
+  );
+  return Boolean(
+    paint?.gradientHandlePositions?.length === 3
+    && (paint.gradientStops?.length ?? 0) >= 2,
+  );
 }
 
 function countFunctionalWidgets(elements: ElementorElement[]): {

@@ -90,6 +90,7 @@ export interface WordPressConnectionStatus {
     documentUpdate: boolean;
     revisions: boolean;
     webfonts?: boolean;
+    gradients?: boolean;
   };
   canEditPages: boolean;
 }
@@ -216,6 +217,7 @@ export async function probeWordPressConnection(
       documentUpdate?: unknown;
       revisions?: unknown;
       webfonts?: unknown;
+      gradients?: unknown;
     };
   };
   return {
@@ -241,6 +243,7 @@ export async function probeWordPressConnection(
       documentUpdate: status.visualQa.documentUpdate === true,
       revisions: status.visualQa.revisions === true,
       webfonts: status.visualQa.webfonts === true,
+      gradients: status.visualQa.gradients === true,
     } : undefined,
     canEditPages: status.canEditPages === true,
   };

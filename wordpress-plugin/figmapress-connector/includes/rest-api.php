@@ -186,6 +186,7 @@ function figmapress_connector_rest_status() {
                 'documentUpdate' => true,
                 'revisions'      => true,
                 'webfonts'       => true,
+                'gradients'      => true,
             ),
         )
     );
