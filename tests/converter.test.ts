@@ -296,7 +296,10 @@ test("real Figma bounds produce a high-fidelity editable Elementor document", as
   assert.match(result.previewHtml, /data-figmapress-node-name="Main heading"/);
   assert.match(result.previewHtml, /data-figmapress-kind="text"/);
   assert.match(result.previewHtml, /writing-mode:horizontal-tb/);
-  assert.match(result.previewHtml, /transform:var\(--figmapress-qa-transform\) rotate\(7\.54deg\)/);
+  assert.match(
+    result.previewHtml,
+    /transform:var\(--figmapress-qa-global-transform\) var\(--figmapress-qa-local-transform\) rotate\(7\.54deg\)/,
+  );
   assert.match(result.previewHtml, /portrait-rendered\.png/);
   assert.deepEqual(result.qualityReport?.metrics.typography, {
     horizontalTextNodes: 5,
@@ -414,6 +417,7 @@ test("paired PC and SP frames become device-specific Elementor layouts", async (
   assert.equal(result.elementorTemplate.content.length, 2);
   const [desktopRoot, mobileRoot] = result.elementorTemplate.content;
   assert.equal(desktopRoot?.settings.hide_mobile, "hidden-mobile");
+  assert.equal(desktopRoot?.settings.figmapress_node_id, "46:12");
   assert.equal(desktopRoot?.settings._element_id, "top-desktop");
   assert.equal(mobileRoot?.settings.hide_desktop, "hidden-desktop");
   assert.equal(mobileRoot?.settings.hide_tablet, "hidden-tablet");
@@ -439,6 +443,7 @@ test("paired PC and SP frames become device-specific Elementor layouts", async (
     String(element.settings.editor).includes("スマホの想い"),
   );
   assert.equal(desktopNav?.settings.layout_variant, "desktop");
+  assert.equal(desktopNav?.settings.figmapress_node_id, "10:0");
   assert.equal(mobileNav?.settings.layout_variant, "mobile");
   assert.equal((desktopNav?.settings.items as Array<{ url: { url: string } }>)[0]?.url.url, "#thoughts-desktop");
   assert.equal((mobileNav?.settings.items as Array<{ url: { url: string } }>)[0]?.url.url, "#thoughts-mobile");

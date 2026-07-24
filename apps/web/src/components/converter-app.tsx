@@ -2,8 +2,11 @@
 
 import { useState, useSyncExternalStore, type ChangeEvent, type FormEvent, type MouseEvent } from "react";
 import {
+  applyElementorSectionVisualCorrections,
   applyElementorVisualCorrections,
+  applyPreviewSectionVisualCorrections,
   applyPreviewVisualCorrections,
+  type ElementorSectionVisualCorrection,
   type ElementorTemplate,
   type ElementorVisualCorrection,
 } from "@figmapress/elementor-renderer";
@@ -20,6 +23,7 @@ import {
 } from "@/lib/visual-qa-browser";
 import {
   resolveVisualQaDraftGate,
+  shouldKeepSectionVisualCorrections,
   shouldKeepVisualCorrections,
 } from "@/lib/visual-qa";
 
@@ -217,6 +221,29 @@ function safeVisualCorrections(
   });
 }
 
+function safeSectionVisualCorrections(
+  results: VisualQaBrowserResult[],
+): ElementorSectionVisualCorrection[] {
+  return results.flatMap((result) => {
+    const region = result.sections.find(
+      (section) =>
+        section.alignment?.safeToApply
+        && section.alignment.confidence !== "low",
+    );
+    if (!region?.alignment || region.alignment.confidence === "low") return [];
+    return [{
+      variant: result.variant,
+      nodeId: region.nodeId,
+      nodeName: region.name,
+      offsetX: region.alignment.offsetX,
+      offsetY: region.alignment.offsetY,
+      captureWidth: result.width,
+      confidence: region.alignment.confidence,
+      errorReductionRatio: region.alignment.errorReductionRatio,
+    }];
+  });
+}
+
 function visualScoreMap(
   results: VisualQaBrowserResult[],
 ): Partial<Record<"desktop" | "mobile", number>> {
@@ -293,6 +320,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const [visualQaResults, setVisualQaResults] = useState<VisualQaBrowserResult[]>([]);
   const [visualQaAcknowledged, setVisualQaAcknowledged] = useState(false);
   const [visualQaCorrections, setVisualQaCorrections] = useState<ElementorVisualCorrection[]>([]);
+  const [visualQaSectionCorrections, setVisualQaSectionCorrections] = useState<
+    ElementorSectionVisualCorrection[]
+  >([]);
   const [visualQaBaselineScores, setVisualQaBaselineScores] = useState<
     Partial<Record<"desktop" | "mobile", number>>
   >({});
@@ -323,6 +353,10 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const visualQaGateRequired = visualQaGate.state !== "off";
   const visualQaBlocksDraft = visualQaGate.blocksDraft;
   const visualQaCorrectionCandidates = safeVisualCorrections(visualQaResults);
+  const visualQaSectionCorrectionCandidates =
+    visualQaCorrectionCandidates.length > 0 && visualQaCorrections.length === 0
+      ? []
+      : safeSectionVisualCorrections(visualQaResults);
 
   function updateFigmaToken(value: string) {
     writeFigmaToken(value);
@@ -342,6 +376,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     setVisualQaResults([]);
     setVisualQaAcknowledged(false);
     setVisualQaCorrections([]);
+    setVisualQaSectionCorrections([]);
     setVisualQaBaselineScores({});
 
     try {
@@ -606,6 +641,59 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     setVisualQaError("");
   }
 
+  async function applySafeSectionVisualCorrections() {
+    if (
+      !output
+      || visualQaBusy
+      || visualQaSectionCorrections.length > 0
+      || !visualQaSectionCorrectionCandidates.length
+    ) {
+      return;
+    }
+
+    const baselineOutput = output;
+    const baselineResults = visualQaResults;
+    const corrections = visualQaSectionCorrectionCandidates;
+    const correctedOutput: ConversionResult = {
+      ...output,
+      elementorTemplate: applyElementorSectionVisualCorrections(
+        output.elementorTemplate,
+        corrections,
+      ),
+      previewHtml: applyPreviewSectionVisualCorrections(
+        output.previewHtml,
+        corrections,
+      ),
+    };
+    setOutput(correctedOutput);
+    const correctedResults = await measureVisualQuality(correctedOutput);
+    const keepCorrection = correctedResults
+      ? shouldKeepSectionVisualCorrections(
+          baselineResults,
+          correctedResults,
+          corrections.map((correction) => ({
+            variant: correction.variant,
+            nodeId: correction.nodeId,
+          })),
+        )
+      : false;
+
+    if (!keepCorrection) {
+      setOutput(baselineOutput);
+      setVisualQaResults(baselineResults);
+      setVisualQaSectionCorrections([]);
+      if (correctedResults) {
+        setVisualQaError(
+          "セクション補正で対象領域が改善しなかったため、生成データを自動的に元へ戻しました。",
+        );
+      }
+      return;
+    }
+
+    setVisualQaSectionCorrections(corrections);
+    setVisualQaError("");
+  }
+
   return (
     <main>
       <header className="site-header">
@@ -616,7 +704,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.12.0 live</span>
+          <span className="status-pill"><i /> v0.13.0 live</span>
         </nav>
       </header>
 
@@ -896,13 +984,23 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                         安全補正を適用して再測定
                       </button>
                     )}
+                    {visualQaSectionCorrectionCandidates.length > 0 && visualQaSectionCorrections.length === 0 && (
+                      <button
+                        disabled={visualQaBusy}
+                        onClick={applySafeSectionVisualCorrections}
+                        type="button"
+                      >
+                        セクション補正を適用して再測定
+                      </button>
+                    )}
                     <button
                       onClick={() => downloadText(
                         "visual-quality-report.json",
                         JSON.stringify(
                           {
-                            version: "1.2",
+                            version: "1.3",
                             correctionsApplied: visualQaCorrections,
+                            sectionCorrectionsApplied: visualQaSectionCorrections,
                             baselineScores: visualQaBaselineScores,
                             results: serializableVisualQaResults(visualQaResults),
                           },
@@ -942,6 +1040,22 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                     })}
                   </div>
                   <small>Elementor標準Transformへ反映済みです。再測定で悪化する補正は自動的に取り消されます。</small>
+                </div>
+              )}
+              {visualQaSectionCorrections.length > 0 && (
+                <div className="visual-qa-correction-summary" role="status">
+                  <strong>✓ セクション単位の位置補正を適用し、改善を実測しました</strong>
+                  <div>
+                    {visualQaSectionCorrections.map((correction) => (
+                      <span key={`${correction.variant}:${correction.nodeId}`}>
+                        <b>{correction.variant === "desktop" ? "PC" : "スマホ"} / {correction.nodeName}</b>
+                        X {correction.offsetX >= 0 ? "+" : ""}{correction.offsetX}px /
+                        Y {correction.offsetY >= 0 ? "+" : ""}{correction.offsetY}px
+                        <em>領域誤差削減 {correction.errorReductionRatio}%</em>
+                      </span>
+                    ))}
+                  </div>
+                  <small>FigmaノードIDが一致するElementor要素だけに反映済みです。対象領域が改善しない補正は自動的に取り消されます。</small>
                 </div>
               )}
               {visualQaBusy && visualQaResults.length === 0 && (
@@ -1028,6 +1142,12 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                                     <span>
                                       <b>{region.name}</b>
                                       <small>領域内差分 {region.changedPixelRatio}%</small>
+                                      {region.alignment?.safeToApply && (
+                                        <small>
+                                          補正候補 X {region.alignment.offsetX >= 0 ? "+" : ""}{region.alignment.offsetX}px /
+                                          Y {region.alignment.offsetY >= 0 ? "+" : ""}{region.alignment.offsetY}px
+                                        </small>
+                                      )}
                                     </span>
                                     <em>全体影響 {region.impactRatio}%</em>
                                   </p>
@@ -1237,7 +1357,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.12.0</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.13.0</span></div>
       </footer>
     </main>
   );
