@@ -85,7 +85,7 @@ export async function convertFile(
     : new ElementorExporter().toTemplate(blueprint);
   const fidelityPreview = fidelityLayout ? renderFigmaPreview(file, fidelityAssets) : null;
   const qualityReport = fidelityLayout
-    ? createFigmaQualityReport(file, elementorTemplate)
+    ? createFigmaQualityReport(file, elementorTemplate, fidelityAssets)
     : null;
   const warnings = [...new Set([
     ...initialWarnings,
