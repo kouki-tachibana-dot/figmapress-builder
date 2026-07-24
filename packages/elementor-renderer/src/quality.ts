@@ -3,6 +3,7 @@ import type {
   MockFigmaFile,
 } from "@figmapress/figma-parser";
 import { findFigmaResponsiveRoots } from "./figma-exporter";
+import type { FigmaRenderAssets } from "./figma-exporter";
 import type {
   ElementorElement,
   ElementorTemplate,
@@ -15,6 +16,7 @@ export interface FigmaQualityCheck {
     | "structure"
     | "editable-text"
     | "typography"
+    | "images"
     | "gradients"
     | "effects"
     | "auto-layout"
@@ -45,6 +47,14 @@ export interface FigmaQualityReport {
       mixedStyleTextNodes: number;
       truncatedTextNodes: number;
     };
+    images: {
+      visible: number;
+      mapped: number;
+      exactRendered: number;
+      nativeFit: number;
+      adjusted: number;
+      masks: number;
+    };
     gradients: {
       visible: number;
       mapped: number;
@@ -70,6 +80,7 @@ export interface FigmaQualityReport {
 export function createFigmaQualityReport(
   file: MockFigmaFile,
   template: ElementorTemplate,
+  assets: FigmaRenderAssets = {},
 ): FigmaQualityReport {
   const roots = findFigmaResponsiveRoots(file);
   const designRoots = [roots.desktop, roots.mobile].filter((node): node is FigmaNode => Boolean(node));
@@ -97,6 +108,20 @@ export function createFigmaQualityReport(
     ).length,
     truncatedTextNodes: editableTextNodes.filter((node) =>
       node.textAutoResize === "TRUNCATE",
+    ).length,
+  };
+  const renderedIds = new Set(Object.keys(assets.renderedNodeUrls ?? {}));
+  const imageEntries = designRoots.flatMap((root) =>
+    collectImageEntries(root, renderedIds, assets.imageUrls ?? {})
+  );
+  const images = {
+    visible: imageEntries.length,
+    mapped: imageEntries.filter((entry) => entry.mapped).length,
+    exactRendered: imageEntries.filter((entry) => entry.exactRendered).length,
+    nativeFit: imageEntries.filter((entry) => entry.mapped && !entry.exactRendered).length,
+    adjusted: imageEntries.filter((entry) => adjustedImagePaint(entry.paint)).length,
+    masks: boundedNodes.filter((node) =>
+      node.isMask || /(?:^|\s)mask(?:\s|$)/i.test(node.name)
     ).length,
   };
   const autoLayoutFrames = boundedNodes.filter(isAutoLayout).length;
@@ -167,6 +192,18 @@ export function createFigmaQualityReport(
         : "文字配置の変換対象はありません",
     },
     {
+      id: "images",
+      label: "画像・マスク",
+      status: images.visible === 0
+        ? "info"
+        : images.mapped === images.visible ? "pass" : "warning",
+      detail: images.visible === 0
+        ? "画像の変換対象はありません"
+        : images.mapped === images.visible
+          ? `${images.mapped}画像を再現（正確な切り抜き${images.exactRendered}・標準フィット${images.nativeFit}・マスク${images.masks}）`
+          : `${images.visible - images.mapped}画像は切り抜き・フィルターの正確な描画を取得できませんでした`,
+    },
+    {
       id: "gradients",
       label: "グラデーション",
       status: gradients.visible === 0
@@ -230,6 +267,7 @@ export function createFigmaQualityReport(
       mappedAutoLayoutFrames: autoLayoutFrames,
       absoluteLayoutNodes,
       typography,
+      images,
       gradients,
       effects,
       functionalWidgets,
@@ -251,6 +289,53 @@ function flatten(root: FigmaNode): Array<{ node: FigmaNode; parent: FigmaNode | 
 function validBounds(node: FigmaNode): boolean {
   const bounds = node.absoluteBoundingBox;
   return Boolean(bounds && bounds.width > 0 && bounds.height > 0);
+}
+
+interface ImageQualityEntry {
+  paint: NonNullable<FigmaNode["fills"]>[number];
+  exactRendered: boolean;
+  mapped: boolean;
+}
+
+function collectImageEntries(
+  root: FigmaNode,
+  renderedIds: Set<string>,
+  imageUrls: Record<string, string>,
+): ImageQualityEntry[] {
+  const result: ImageQualityEntry[] = [];
+  const visit = (node: FigmaNode, renderedAncestor: boolean): void => {
+    if (node.visible === false) return;
+    const exactRendered = renderedAncestor || renderedIds.has(node.id);
+    for (const paint of node.fills ?? []) {
+      if (paint.visible === false || paint.type !== "IMAGE") continue;
+      const hasNativeImage = Boolean(paint.imageRef && imageUrls[paint.imageRef]);
+      result.push({
+        paint,
+        exactRendered,
+        mapped: exactRendered || (hasNativeImage && nativeImageFitSupported(paint)),
+      });
+    }
+    for (const child of node.children ?? []) visit(child, exactRendered);
+  };
+  visit(root, false);
+  return result;
+}
+
+function adjustedImagePaint(paint: NonNullable<FigmaNode["fills"]>[number]): boolean {
+  const filters = Object.values(paint.filters ?? {}).some((value) =>
+    typeof value === "number" && Math.abs(value) > 0.0001
+  );
+  return paint.scaleMode === "STRETCH"
+    || paint.scaleMode === "TILE"
+    || Boolean(paint.imageTransform)
+    || Boolean(paint.rotation)
+    || filters;
+}
+
+function nativeImageFitSupported(paint: NonNullable<FigmaNode["fills"]>[number]): boolean {
+  if (adjustedImagePaint(paint)) return false;
+  const mode = paint.scaleMode?.toUpperCase();
+  return !mode || mode === "FILL" || mode === "FIT";
 }
 
 function isAutoLayout(node: FigmaNode | null): boolean {

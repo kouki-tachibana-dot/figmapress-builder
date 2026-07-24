@@ -30,6 +30,18 @@ export interface FigmaPaint {
   opacity?: number;
   imageRef?: string;
   scaleMode?: string;
+  imageTransform?: [[number, number, number], [number, number, number]];
+  scalingFactor?: number;
+  rotation?: number;
+  filters?: {
+    exposure?: number;
+    contrast?: number;
+    saturation?: number;
+    temperature?: number;
+    tint?: number;
+    highlights?: number;
+    shadows?: number;
+  };
   gradientHandlePositions?: [FigmaVector, FigmaVector, FigmaVector];
   gradientStops?: FigmaColorStop[];
   visible?: boolean;
@@ -81,6 +93,8 @@ export interface FigmaNodeBase {
   characterStyleOverrides?: number[];
   styleOverrideTable?: Record<string, FigmaTypeStyle>;
   styles?: Record<string, string>;
+  isMask?: boolean;
+  maskType?: "ALPHA" | "VECTOR" | "LUMINANCE";
   layoutMode?: "HORIZONTAL" | "VERTICAL" | "NONE";
   layoutWrap?: "NO_WRAP" | "WRAP";
   primaryAxisAlignItems?: string;

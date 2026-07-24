@@ -193,7 +193,24 @@ test("rendered responsive assets are budgeted across desktop and mobile roots", 
           type: "TEXT",
           characters: "Desktop",
           absoluteBoundingBox: { x: 0, y: 0, width: 100, height: 20 },
-        }, ...visualChildren("desktop", 80)],
+        }, ...visualChildren("desktop", 80), {
+          id: "desktop:mask",
+          name: "Mask group",
+          type: "GROUP",
+          absoluteBoundingBox: { x: 100, y: 100, width: 640, height: 480 },
+          children: [{
+            id: "desktop:image",
+            name: "Adjusted hero",
+            type: "RECTANGLE",
+            absoluteBoundingBox: { x: 100, y: 100, width: 640, height: 480 },
+            fills: [{
+              type: "IMAGE",
+              imageRef: "desktop-hero",
+              scaleMode: "STRETCH",
+              imageTransform: [[1.5, 0, -0.2], [0, 1.5, -0.1]],
+            }],
+          }],
+        }],
       }, {
         id: "3:0",
         name: "SP-page",
@@ -205,7 +222,24 @@ test("rendered responsive assets are budgeted across desktop and mobile roots", 
           type: "TEXT",
           characters: "Mobile",
           absoluteBoundingBox: { x: 2000, y: 0, width: 100, height: 20 },
-        }, ...visualChildren("mobile", 80)],
+        }, ...visualChildren("mobile", 80), {
+          id: "mobile:mask",
+          name: "Mask group",
+          type: "GROUP",
+          absoluteBoundingBox: { x: 2050, y: 100, width: 340, height: 240 },
+          children: [{
+            id: "mobile:image",
+            name: "Adjusted hero",
+            type: "RECTANGLE",
+            absoluteBoundingBox: { x: 2050, y: 100, width: 340, height: 240 },
+            fills: [{
+              type: "IMAGE",
+              imageRef: "mobile-hero",
+              scaleMode: "STRETCH",
+              imageTransform: [[1.5, 0, -0.2], [0, 1.5, -0.1]],
+            }],
+          }],
+        }],
       }],
     }],
   });
@@ -213,4 +247,6 @@ test("rendered responsive assets are budgeted across desktop and mobile roots", 
   assert.equal(ids.length, 120);
   assert.equal(ids.filter((id) => id.startsWith("desktop:")).length, 60);
   assert.equal(ids.filter((id) => id.startsWith("mobile:")).length, 60);
+  assert.ok(ids.includes("desktop:mask"));
+  assert.ok(ids.includes("mobile:mask"));
 });

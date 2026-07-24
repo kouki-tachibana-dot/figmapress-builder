@@ -363,6 +363,103 @@ test("Japanese Figma text records its webfont and deterministic glyph fallback",
   assert.match(result.previewHtml, /font-family:Inter,&#039;Noto Sans JP&#039;/);
 });
 
+test("Figma image fit modes use exact renders first and safe native fallbacks", async () => {
+  const file: MockFigmaFile = {
+    document: {
+      id: "0:0",
+      name: "Image fidelity",
+      type: "DOCUMENT",
+      children: [{
+        id: "1:0",
+        name: "Page",
+        type: "CANVAS",
+        children: [{
+          id: "2:0",
+          name: "PC-page",
+          type: "FRAME",
+          absoluteBoundingBox: { x: 0, y: 0, width: 1200, height: 800 },
+          children: [{
+            id: "3:0",
+            name: "Fit image",
+            type: "RECTANGLE",
+            absoluteBoundingBox: { x: 40, y: 40, width: 300, height: 200 },
+            fills: [{ type: "IMAGE", imageRef: "fit-ref", scaleMode: "FIT" }],
+          }, {
+            id: "3:1",
+            name: "Fill image",
+            type: "RECTANGLE",
+            absoluteBoundingBox: { x: 360, y: 40, width: 300, height: 200 },
+            fills: [{ type: "IMAGE", imageRef: "fill-ref", scaleMode: "FILL" }],
+          }, {
+            id: "3:2",
+            name: "Adjusted crop",
+            type: "RECTANGLE",
+            absoluteBoundingBox: { x: 680, y: 40, width: 300, height: 200 },
+            fills: [{
+              type: "IMAGE",
+              imageRef: "crop-ref",
+              scaleMode: "STRETCH",
+              imageTransform: [[1.5, 0, -0.2], [0, 1.5, -0.1]],
+            }],
+          }, {
+            id: "3:3",
+            name: "Tiled texture",
+            type: "RECTANGLE",
+            absoluteBoundingBox: { x: 40, y: 280, width: 300, height: 200 },
+            fills: [{
+              type: "IMAGE",
+              imageRef: "tile-ref",
+              scaleMode: "TILE",
+              scalingFactor: 0.5,
+            }],
+          }],
+        }],
+      }],
+    },
+  };
+
+  const result = await convertFile(
+    file,
+    {},
+    {
+      "fit-ref": "https://images.example/fit.png",
+      "fill-ref": "https://images.example/fill.png",
+      "crop-ref": "https://images.example/crop.png",
+      "tile-ref": "https://images.example/tile.png",
+    },
+    [],
+    { "3:2": "https://images.example/crop-rendered.png" },
+  );
+  const imageWidgets = result.elementorTemplate.content[0]?.elements
+    .filter((element) => element.widgetType === "image") ?? [];
+  const byNodeId = new Map(imageWidgets.map((element) => [
+    element.settings.figmapress_node_id,
+    element.settings,
+  ]));
+
+  assert.equal(byNodeId.get("3:0")?.["object-fit"], "contain");
+  assert.equal(byNodeId.get("3:1")?.["object-fit"], "cover");
+  assert.equal(byNodeId.get("3:2")?.["object-fit"], "fill");
+  assert.equal(
+    (byNodeId.get("3:2")?.image as { url?: string })?.url,
+    "https://images.example/crop-rendered.png",
+  );
+  assert.match(result.previewHtml, /data-figmapress-image-source="native"[^>]+object-fit:contain/);
+  assert.match(result.previewHtml, /data-figmapress-image-source="rendered"[^>]+crop-rendered\.png/);
+  assert.deepEqual(result.qualityReport?.metrics.images, {
+    visible: 4,
+    mapped: 3,
+    exactRendered: 1,
+    nativeFit: 2,
+    adjusted: 2,
+    masks: 0,
+  });
+  assert.equal(
+    result.qualityReport?.checks.find((check) => check.id === "images")?.status,
+    "warning",
+  );
+});
+
 test("Figma gradients keep their handles and all color stops in Elementor", async () => {
   const file: MockFigmaFile = {
     document: {

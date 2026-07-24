@@ -192,6 +192,12 @@ const FIGMA_RENDER_GROUP_TYPES = new Set([
 ]);
 const MAX_RENDERED_NODES = 120;
 
+interface RenderCandidate {
+  id: string;
+  order: number;
+  priority: number;
+}
+
 function findNodeById(node: FigmaNode, id: string): FigmaNode | null {
   if (node.id === id) return node;
   for (const child of node.children ?? []) {
@@ -245,39 +251,89 @@ function hasComplexVisual(node: FigmaNode): boolean {
   return (node.children ?? []).some(hasComplexVisual);
 }
 
+function visibleImagePaint(node: FigmaNode) {
+  return node.fills?.find((fill) => fill.visible !== false && fill.type === "IMAGE");
+}
+
+function hasMask(node: FigmaNode): boolean {
+  if (node.isMask || /(?:^|\s)mask(?:\s|$)/i.test(node.name)) return true;
+  return (node.children ?? []).some(hasMask);
+}
+
+function hasAdjustedImage(node: FigmaNode): boolean {
+  const paint = visibleImagePaint(node);
+  if (paint) {
+    const filters = Object.values(paint.filters ?? {}).some((value) =>
+      typeof value === "number" && Math.abs(value) > 0.0001
+    );
+    return paint.scaleMode === "STRETCH"
+      || paint.scaleMode === "TILE"
+      || Boolean(paint.imageTransform)
+      || Boolean(paint.rotation)
+      || filters;
+  }
+  return (node.children ?? []).some(hasAdjustedImage);
+}
+
+function renderPriority(node: FigmaNode): number {
+  const bounds = node.absoluteBoundingBox;
+  const areaBonus = bounds
+    ? Math.min(50, Math.max(0, Math.round(Math.log10(Math.max(1, bounds.width * bounds.height)) * 8)))
+    : 0;
+  if (hasMask(node)) return 500 + areaBonus;
+  if (hasAdjustedImage(node)) return 400 + areaBonus;
+  if (hasImageFill(node)) return 300 + areaBonus;
+  if (FIGMA_RENDER_GROUP_TYPES.has(node.type)) return 200 + areaBonus;
+  return 100 + areaBonus;
+}
+
 /**
  * Export the highest text-free visual subtree as one image. Text stays as
  * native Elementor widgets, while masks, vectors and Figma image crops keep
  * their exact appearance without exploding the document into tiny paths.
+ * Candidates are ranked so masks and adjusted image fills are not displaced
+ * by small decorative vectors when a large responsive design reaches the API
+ * render budget.
  */
 export function collectRenderedNodeIds(document: FigmaNode): string[] {
-  const ids: string[] = [];
-  const seen = new Set<string>();
-  const visit = (node: FigmaNode, limit: number): void => {
-    if (node.visible === false || ids.length >= limit) return;
-    const bounds = node.absoluteBoundingBox;
-    const renderGroup = FIGMA_RENDER_GROUP_TYPES.has(node.type)
-      && !hasText(node)
-      && hasComplexVisual(node);
-    const renderLeaf = FIGMA_RENDERABLE_TYPES.has(node.type) || hasOwnImageFill(node);
-    if (bounds && bounds.width > 0 && bounds.height > 0 && (renderGroup || renderLeaf)) {
-      if (!seen.has(node.id)) {
-        ids.push(node.id);
-        seen.add(node.id);
+  const collect = (root: FigmaNode, limit: number): string[] => {
+    const candidates: RenderCandidate[] = [];
+    let order = 0;
+    const visit = (node: FigmaNode): void => {
+      if (node.visible === false) return;
+      const currentOrder = order++;
+      const bounds = node.absoluteBoundingBox;
+      const renderGroup = FIGMA_RENDER_GROUP_TYPES.has(node.type)
+        && !hasText(node)
+        && hasComplexVisual(node);
+      const renderLeaf = FIGMA_RENDERABLE_TYPES.has(node.type) || hasOwnImageFill(node);
+      if (bounds && bounds.width > 0 && bounds.height > 0 && (renderGroup || renderLeaf)) {
+        candidates.push({
+          id: node.id,
+          order: currentOrder,
+          priority: renderPriority(node),
+        });
+        return;
       }
-      return;
-    }
-    for (const child of node.children ?? []) visit(child, limit);
+      for (const child of node.children ?? []) visit(child);
+    };
+    visit(root);
+    return candidates
+      .sort((left, right) => right.priority - left.priority || left.order - right.order)
+      .slice(0, limit)
+      .sort((left, right) => left.order - right.order)
+      .map((candidate) => candidate.id);
   };
+
   const responsive = responsivePageRoots(document);
   if (responsive.desktop && responsive.mobile) {
     const desktopLimit = Math.floor(MAX_RENDERED_NODES / 2);
-    visit(responsive.desktop, desktopLimit);
-    visit(responsive.mobile, MAX_RENDERED_NODES);
-  } else {
-    visit(document, MAX_RENDERED_NODES);
+    return [
+      ...collect(responsive.desktop, desktopLimit),
+      ...collect(responsive.mobile, MAX_RENDERED_NODES - desktopLimit),
+    ];
   }
-  return ids;
+  return collect(document, MAX_RENDERED_NODES);
 }
 
 async function fetchRenderedNodeUrls(

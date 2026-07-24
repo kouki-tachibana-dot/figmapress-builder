@@ -3,7 +3,7 @@
 Figma の構造を、WordPress で扱える Gutenberg ブロックまたはElementorページへ変換する
 オープンソースの Web アプリ＋CLIです。
 
-## v0.17.0 — Native Figma Effects
+## v0.18.0 — Native Figma Image Fidelity
 
 **Web版:** [https://figmapress-builder.vercel.app](https://figmapress-builder.vercel.app)
 
@@ -49,6 +49,10 @@ Figma の構造を、WordPress で扱える Gutenberg ブロックまたはEleme
 - Elementor標準の編集可能なシャドウと、Connectorによる完全な複数効果描画を併用
 - 効果設定は構造化データだけを許可し、透明度、色、座標、半径、件数を安全な範囲へ制限
 - 品質診断で透明度、影、ぼかしの検出数と再現数を確認
+- Figmaレンダー上限に達してもマスク、切り抜き、調整済み写真を装飾ベクターより優先取得
+- Figmaの画像フィット `FIT` / `FILL` をElementorの `contain` / `cover` へ変換
+- レンダー取得済み画像と標準フィット画像を区別し、不要な引き伸ばしを防止
+- 品質診断で画像、正確な切り抜き、標準フィット、マスク、未再現の画像調整を確認
 - Elementor下書き前にVisual QAを必須化し、重大差分がある場合は明示確認してから送信
 - `PC-page` と `SP-page` を自動検出し、ElementorでPC／タブレット用とスマホ用を安全に切り替え
 - スマホ版の画像トリミング、文字位置、セクション順をPC版の縮小ではなくFigmaどおりに保持

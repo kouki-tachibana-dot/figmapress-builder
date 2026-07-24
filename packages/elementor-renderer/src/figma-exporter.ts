@@ -72,6 +72,12 @@ interface FigmaEffectsManifest {
   backgroundBlur?: number;
 }
 
+interface FigmaVisualAsset {
+  url: string;
+  rendered: boolean;
+  paint?: FigmaPaint;
+}
+
 interface AccordionItem {
   title: string;
   content: string;
@@ -337,8 +343,8 @@ function renderElement(
   const contactForm = contactFormElement(node, bounds, parentBounds, parentNode, context);
   if (contactForm) return contactForm;
 
-  const assetUrl = visualUrl(node, context.assets);
-  if (assetUrl) return imageElement(node, bounds, parentBounds, parentNode, assetUrl, context);
+  const asset = visualAsset(node, context.assets);
+  if (asset) return imageElement(node, bounds, parentBounds, parentNode, asset, context);
   if (node.type === "TEXT" && typeof node.characters === "string") {
     return textElement(node, bounds, parentBounds, parentNode, context);
   }
@@ -748,18 +754,19 @@ function imageElement(
   bounds: FigmaBounds,
   parentBounds: FigmaBounds,
   parentNode: FigmaNode,
-  url: string,
+  asset: FigmaVisualAsset,
   context: RenderContext,
 ): ElementorElement {
   const settings: ElementorSettings = {
     ...widgetPosition(node, bounds, parentBounds, parentNode),
     figmapress_node_id: node.id,
     figmapress_node_name: node.name,
-    image: { url, id: "", alt: node.name, source: "library" },
+    image: { url: asset.url, id: "", alt: node.name, source: "library" },
     image_size: "full",
     space: size(100, "%"),
     height: canvasSize(bounds.height, context),
-    "object-fit": "fill",
+    "object-fit": imageObjectFit(asset),
+    "object-position": "center center",
     image_border_radius: radiusDimensions(node, context),
   };
   if (typeof node.opacity === "number" && node.opacity < 1) {
@@ -796,13 +803,16 @@ function baseContainerSettings(node: FigmaNode, context: RenderContext): Element
     settings.flex_align_items = flexAlignment(node.counterAxisAlignItems);
     settings.flex_wrap = node.layoutWrap === "WRAP" ? "wrap" : "nowrap";
   }
-  const backgroundUrl = ownImageUrl(node, context.assets.imageUrls ?? {});
+  const backgroundPaint = ownImagePaint(node);
+  const backgroundUrl = backgroundPaint?.imageRef
+    ? context.assets.imageUrls?.[backgroundPaint.imageRef] ?? null
+    : null;
   if (backgroundUrl) {
     settings.background_background = "classic";
     settings.background_image = { url: backgroundUrl, id: "", source: "library" };
     settings.background_position = "center center";
-    settings.background_repeat = "no-repeat";
-    settings.background_size = "cover";
+    settings.background_repeat = backgroundPaint?.scaleMode === "TILE" ? "repeat" : "no-repeat";
+    settings.background_size = imageBackgroundSize(backgroundPaint);
   } else {
     const gradient = figmaGradient(node);
     if (gradient) {
@@ -918,15 +928,16 @@ function previewNode(
   if (node.visible === false || !bounds || bounds.width <= 0 || bounds.height <= 0) return "";
   const position = previewPosition(node, bounds, parentBounds, parentNode);
   const attributes = previewNodeAttributes(node);
-  const assetUrl = visualUrl(node, context.assets);
-  if (assetUrl) {
-    return `<img alt="${escapeAttribute(node.name)}" ${attributes} data-figmapress-kind="visual" src="${escapeAttribute(assetUrl)}" style="${position};object-fit:fill;${previewRadius(node)}${previewTransform(node)}${previewEffects(node)}" />`;
+  const asset = visualAsset(node, context.assets);
+  if (asset) {
+    return `<img alt="${escapeAttribute(node.name)}" ${attributes} data-figmapress-kind="visual" data-figmapress-image-source="${asset.rendered ? "rendered" : "native"}" src="${escapeAttribute(asset.url)}" style="${position};object-fit:${imageObjectFit(asset)};object-position:center center;${previewRadius(node)}${previewTransform(node)}${previewEffects(node)}" />`;
   }
 
+  const backgroundPaint = ownImagePaint(node);
   const backgroundUrl = ownImageUrl(node, context.assets.imageUrls ?? {});
   const gradient = figmaGradient(node);
   const background = backgroundUrl
-    ? `background-image:url(&quot;${escapeAttribute(backgroundUrl)}&quot;);background-position:center;background-repeat:no-repeat;background-size:cover;`
+    ? `background-image:url(&quot;${escapeAttribute(backgroundUrl)}&quot;);background-position:center;background-repeat:${backgroundPaint?.scaleMode === "TILE" ? "repeat" : "no-repeat"};background-size:${imageBackgroundSize(backgroundPaint)};`
     : gradient
       ? `background-image:${escapeAttribute(gradientCss(gradient))};`
       : solidColor(node.fills) ? `background:${escapeAttribute(solidColor(node.fills) ?? "")};` : "";
@@ -1074,9 +1085,44 @@ function runHtml(run: RichRun, context: RenderContext): string {
 }
 
 function visualUrl(node: FigmaNode, assets: FigmaRenderAssets): string | null {
+  return visualAsset(node, assets)?.url ?? null;
+}
+
+function visualAsset(node: FigmaNode, assets: FigmaRenderAssets): FigmaVisualAsset | null {
   const rendered = assets.renderedNodeUrls?.[node.id];
-  if (rendered) return rendered;
-  return containsText(node) ? null : ownImageUrl(node, assets.imageUrls ?? {});
+  if (rendered) return { url: rendered, rendered: true };
+  if (containsText(node)) return null;
+  const paint = ownImagePaint(node);
+  const url = paint?.imageRef ? assets.imageUrls?.[paint.imageRef] : undefined;
+  return url ? { url, rendered: false, paint } : null;
+}
+
+function imageObjectFit(asset: FigmaVisualAsset): "contain" | "cover" | "fill" {
+  if (asset.rendered) return "fill";
+  switch (asset.paint?.scaleMode?.toUpperCase()) {
+    case "FIT":
+      return "contain";
+    case "STRETCH":
+      return "fill";
+    case "TILE":
+      return "contain";
+    case "FILL":
+    default:
+      return "cover";
+  }
+}
+
+function imageBackgroundSize(paint: FigmaPaint | undefined): "auto" | "contain" | "cover" {
+  switch (paint?.scaleMode?.toUpperCase()) {
+    case "FIT":
+      return "contain";
+    case "TILE":
+      return "auto";
+    case "FILL":
+    case "STRETCH":
+    default:
+      return "cover";
+  }
 }
 
 function containsText(node: FigmaNode): boolean {
@@ -1085,10 +1131,14 @@ function containsText(node: FigmaNode): boolean {
 }
 
 function ownImageUrl(node: FigmaNode, imageUrls: Record<string, string>): string | null {
-  const imageRef = node.fills?.find((fill) =>
-    fill.visible !== false && fill.type === "IMAGE" && fill.imageRef,
-  )?.imageRef;
+  const imageRef = ownImagePaint(node)?.imageRef;
   return imageRef ? imageUrls[imageRef] ?? null : null;
+}
+
+function ownImagePaint(node: FigmaNode): FigmaPaint | undefined {
+  return node.fills?.find((fill) =>
+    fill.visible !== false && fill.type === "IMAGE" && fill.imageRef,
+  );
 }
 
 function figmaGradient(node: FigmaNode): FigmaGradientManifest | null {
