@@ -3,7 +3,7 @@
 Figma の構造を、WordPress で扱える Gutenberg ブロックまたはElementorページへ変換する
 オープンソースの Web アプリ＋CLIです。
 
-## v0.16.0 — Native Figma Gradients
+## v0.17.0 — Native Figma Effects
 
 **Web版:** [https://figmapress-builder.vercel.app](https://figmapress-builder.vercel.app)
 
@@ -45,6 +45,10 @@ Figma の構造を、WordPress で扱える Gutenberg ブロックまたはEleme
 - Elementor標準の編集可能な2色グラデーションと、Connectorによる完全な複数色描画を併用
 - グラデーション設定は構造化データだけを許可し、任意CSSを実行できないよう数値と件数を制限
 - 品質診断でグラデーションの検出数、再現数、複数色数を確認
+- Figmaレイヤーの透明度、複数の外側／内側シャドウ、レイヤーぼかし、背景ぼかしを保持
+- Elementor標準の編集可能なシャドウと、Connectorによる完全な複数効果描画を併用
+- 効果設定は構造化データだけを許可し、透明度、色、座標、半径、件数を安全な範囲へ制限
+- 品質診断で透明度、影、ぼかしの検出数と再現数を確認
 - Elementor下書き前にVisual QAを必須化し、重大差分がある場合は明示確認してから送信
 - `PC-page` と `SP-page` を自動検出し、ElementorでPC／タブレット用とスマホ用を安全に切り替え
 - スマホ版の画像トリミング、文字位置、セクション順をPC版の縮小ではなくFigmaどおりに保持

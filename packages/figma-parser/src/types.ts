@@ -56,6 +56,7 @@ export interface FigmaEffect {
   offset?: { x: number; y: number };
   radius?: number;
   spread?: number;
+  blendMode?: string;
 }
 
 export interface FigmaNodeBase {

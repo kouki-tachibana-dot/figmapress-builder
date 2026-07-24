@@ -32,6 +32,7 @@ test("WordPress connection probe reports Connector and Elementor versions", asyn
         revisions: true,
         webfonts: true,
         gradients: true,
+        effects: true,
       },
     });
   });
@@ -51,6 +52,7 @@ test("WordPress connection probe reports Connector and Elementor versions", asyn
     revisions: true,
     webfonts: true,
     gradients: true,
+    effects: true,
   });
   assert.equal(status.user.name, "editor");
   assert.equal(requests.length, 1);

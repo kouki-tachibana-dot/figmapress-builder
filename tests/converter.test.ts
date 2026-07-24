@@ -508,6 +508,106 @@ test("Figma radial gradients keep their center and ellipse radii", async () => {
   );
 });
 
+test("Figma opacity, multiple shadows, and blur effects stay aligned in preview and Elementor", async () => {
+  const file: MockFigmaFile = {
+    document: {
+      id: "0:0",
+      name: "Effects campaign",
+      type: "DOCUMENT",
+      children: [{
+        id: "1:0",
+        name: "Page",
+        type: "CANVAS",
+        children: [{
+          id: "2:0",
+          name: "PC-page",
+          type: "FRAME",
+          absoluteBoundingBox: { x: 0, y: 0, width: 400, height: 240 },
+          children: [{
+            id: "3:0",
+            name: "Translucent campaign card",
+            type: "RECTANGLE",
+            opacity: 0.65,
+            absoluteBoundingBox: { x: 40, y: 30, width: 320, height: 180 },
+            fills: [{ type: "SOLID", color: { r: 1, g: 1, b: 1 } }],
+            effects: [
+              {
+                type: "DROP_SHADOW",
+                color: { r: 0.82, g: 0.04, b: 0.17, a: 0.5 },
+                offset: { x: 0, y: 8 },
+                radius: 24,
+                spread: 2,
+              },
+              {
+                type: "INNER_SHADOW",
+                color: { r: 1, g: 1, b: 1, a: 0.7 },
+                offset: { x: 0, y: 1 },
+                radius: 4,
+                spread: 0,
+              },
+              { type: "LAYER_BLUR", radius: 3 },
+              { type: "BACKGROUND_BLUR", radius: 12 },
+            ],
+          }],
+        }],
+      }],
+    },
+  };
+
+  const result = await convertFile(file);
+  const settings = result.elementorTemplate.content[0]?.elements[0]?.settings;
+  assert.deepEqual(settings?.figmapress_effects, {
+    opacity: 0.65,
+    shadows: [
+      {
+        type: "drop",
+        x: 0,
+        y: 8,
+        blur: 24,
+        spread: 2,
+        color: { red: 209, green: 10, blue: 43, alpha: 0.5 },
+      },
+      {
+        type: "inner",
+        x: 0,
+        y: 1,
+        blur: 4,
+        spread: 0,
+        color: { red: 255, green: 255, blue: 255, alpha: 0.7 },
+      },
+    ],
+    blur: 3,
+    backgroundBlur: 12,
+  });
+  assert.equal(settings?.box_shadow_box_shadow_type, "yes");
+  assert.deepEqual(settings?.box_shadow_box_shadow, {
+    horizontal: 0,
+    vertical: 8,
+    blur: 24,
+    spread: 2,
+    color: "rgba(209, 10, 43, 0.5)",
+  });
+  assert.match(result.previewHtml, /opacity:0\.65/);
+  assert.match(
+    result.previewHtml,
+    /box-shadow:0px 8px 24px 2px rgba\(209, 10, 43, 0\.5\),0px 1px 4px 0px rgba\(255, 255, 255, 0\.7\) inset/,
+  );
+  assert.match(result.previewHtml, /filter:blur\(3px\)/);
+  assert.match(result.previewHtml, /backdrop-filter:blur\(12px\)/);
+  assert.deepEqual(result.qualityReport?.metrics.effects, {
+    visible: 5,
+    mapped: 5,
+    opacityNodes: 1,
+    shadowEffects: 2,
+    blurEffects: 2,
+    multiShadowNodes: 1,
+  });
+  assert.equal(
+    result.qualityReport?.checks.find((check) => check.id === "effects")?.status,
+    "pass",
+  );
+});
+
 test("paired PC and SP frames become device-specific Elementor layouts", async () => {
   const text = (
     id: string,

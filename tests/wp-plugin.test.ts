@@ -230,6 +230,22 @@ test("Connector renders only structured and bounded Figma gradients", async () =
   assert.match(rest, /'gradients'\s*=>\s*true/);
 });
 
+test("Connector renders only structured and bounded Figma effects", async () => {
+  const [plugin, rest] = await Promise.all([
+    readFile(pluginPath, "utf8"),
+    readFile(restApiPath, "utf8"),
+  ]);
+  assert.match(plugin, /figmapress_connector_effects_css/);
+  assert.match(plugin, /array_slice\( \$effects\['shadows'\], 0, 8 \)/);
+  assert.match(plugin, /in_array\( \$type, array\( 'drop', 'inner' \), true \)/);
+  assert.match(plugin, /'box-shadow:' \. implode/);
+  assert.match(plugin, /'opacity:' \. \$opacity/);
+  assert.match(plugin, /'filter:blur\(' \. \$blur/);
+  assert.match(plugin, /'backdrop-filter:blur\(' \. \$background_blur/);
+  assert.match(plugin, /isset\( \$settings\['figmapress_effects'\] \)/);
+  assert.match(rest, /'effects'\s*=>\s*true/);
+});
+
 test("Connector revisions and verifies a matching draft before visual QA updates", async () => {
   const [plugin, rest] = await Promise.all([
     readFile(pluginPath, "utf8"),

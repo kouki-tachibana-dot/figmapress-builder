@@ -16,6 +16,7 @@ export interface FigmaQualityCheck {
     | "editable-text"
     | "typography"
     | "gradients"
+    | "effects"
     | "auto-layout"
     | "responsive"
     | "interactions";
@@ -48,6 +49,14 @@ export interface FigmaQualityReport {
       visible: number;
       mapped: number;
       multiStop: number;
+    };
+    effects: {
+      visible: number;
+      mapped: number;
+      opacityNodes: number;
+      shadowEffects: number;
+      blurEffects: number;
+      multiShadowNodes: number;
     };
     functionalWidgets: {
       navigation: number;
@@ -102,6 +111,21 @@ export function createFigmaQualityReport(
       )?.gradientStops?.length ?? 0) > 2,
     ).length,
   };
+  const visibleEffectEntries = boundedNodes.flatMap((node) => visualEffectEntries(node));
+  const mappedEffectEntries = visibleEffectEntries.filter((entry) => entry.mapped);
+  const effects = {
+    visible: visibleEffectEntries.length,
+    mapped: mappedEffectEntries.length,
+    opacityNodes: visibleEffectEntries.filter((entry) => entry.type === "opacity").length,
+    shadowEffects: visibleEffectEntries.filter((entry) => entry.type === "shadow").length,
+    blurEffects: visibleEffectEntries.filter((entry) => entry.type === "blur").length,
+    multiShadowNodes: boundedNodes.filter((node) =>
+      (node.effects?.filter((effect) =>
+        effect.visible !== false
+        && (effect.type === "DROP_SHADOW" || effect.type === "INNER_SHADOW")
+      ).length ?? 0) > 1,
+    ).length,
+  };
   const absoluteLayoutNodes = boundedEntries.filter(({ node, parent }) =>
     node !== roots.desktop
     && node !== roots.mobile
@@ -112,9 +136,10 @@ export function createFigmaQualityReport(
     functionalWidgets.navigation + functionalWidgets.contactForm + functionalWidgets.accordion;
   const boundedRatio = visibleNodes.length > 0 ? boundedNodes.length / visibleNodes.length : 0;
   const gradientRatio = gradients.visible > 0 ? gradients.mapped / gradients.visible : 1;
+  const effectRatio = effects.visible > 0 ? effects.mapped / effects.visible : 1;
   const score = Math.max(
     0,
-    Math.min(100, Math.round(65 + boundedRatio * 25 + gradientRatio * 10)),
+    Math.min(100, Math.round(60 + boundedRatio * 25 + gradientRatio * 8 + effectRatio * 7)),
   );
   const checks: FigmaQualityCheck[] = [
     {
@@ -152,6 +177,18 @@ export function createFigmaQualityReport(
         : gradients.mapped === gradients.visible
           ? `${gradients.mapped}グラデーションを再現（複数色${gradients.multiStop}）`
           : `${gradients.visible - gradients.mapped}グラデーションは未対応形式`,
+    },
+    {
+      id: "effects",
+      label: "透明度・影・ぼかし",
+      status: effects.visible === 0
+        ? "info"
+        : effects.mapped === effects.visible ? "pass" : "warning",
+      detail: effects.visible === 0
+        ? "効果の変換対象はありません"
+        : effects.mapped === effects.visible
+          ? `${effects.mapped}効果を再現（透明度${effects.opacityNodes}・影${effects.shadowEffects}・ぼかし${effects.blurEffects}）`
+          : `${effects.visible - effects.mapped}効果は未対応形式`,
     },
     {
       id: "auto-layout",
@@ -194,6 +231,7 @@ export function createFigmaQualityReport(
       absoluteLayoutNodes,
       typography,
       gradients,
+      effects,
       functionalWidgets,
     },
     checks,
@@ -235,6 +273,46 @@ function hasMappedGradient(node: FigmaNode): boolean {
     paint?.gradientHandlePositions?.length === 3
     && (paint.gradientStops?.length ?? 0) >= 2,
   );
+}
+
+function visualEffectEntries(
+  node: FigmaNode,
+): Array<{ type: "opacity" | "shadow" | "blur" | "unsupported"; mapped: boolean }> {
+  const entries: Array<{
+    type: "opacity" | "shadow" | "blur" | "unsupported";
+    mapped: boolean;
+  }> = [];
+  if (typeof node.opacity === "number" && node.opacity < 0.999) {
+    entries.push({
+      type: "opacity",
+      mapped: Number.isFinite(node.opacity) && node.opacity >= 0 && node.opacity <= 1,
+    });
+  }
+  for (const effect of node.effects ?? []) {
+    if (effect.visible === false) continue;
+    if (effect.type === "DROP_SHADOW" || effect.type === "INNER_SHADOW") {
+      const color = effect.color;
+      entries.push({
+        type: "shadow",
+        mapped:
+          Number.isFinite(effect.radius ?? 0)
+          && Number.isFinite(effect.spread ?? 0)
+          && Number.isFinite(effect.offset?.x ?? 0)
+          && Number.isFinite(effect.offset?.y ?? 0)
+          && (!color || [color.r, color.g, color.b, color.a ?? 1].every(Number.isFinite)),
+      });
+      continue;
+    }
+    if (effect.type === "LAYER_BLUR" || effect.type === "BACKGROUND_BLUR") {
+      entries.push({
+        type: "blur",
+        mapped: Number.isFinite(effect.radius) && (effect.radius ?? -1) >= 0,
+      });
+      continue;
+    }
+    entries.push({ type: "unsupported", mapped: false });
+  }
+  return entries;
 }
 
 function countFunctionalWidgets(elements: ElementorElement[]): {

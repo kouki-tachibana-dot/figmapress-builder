@@ -3,7 +3,7 @@
  * Plugin Name:       FigmaPress Connector
  * Plugin URI:        https://github.com/kouki-tachibana-dot/figmapress-builder
  * Description:       Connects FigmaPress to Gutenberg and Elementor draft pages.
- * Version:           0.11.0
+ * Version:           0.12.0
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Update URI:        https://figmapress-builder.vercel.app/downloads/figmapress-connector.json
@@ -20,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 define( 'FIGMAPRESS_CONNECTOR_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FIGMAPRESS_CONNECTOR_URL', plugin_dir_url( __FILE__ ) );
-define( 'FIGMAPRESS_CONNECTOR_VERSION', '0.11.0' );
+define( 'FIGMAPRESS_CONNECTOR_VERSION', '0.12.0' );
 
 require_once FIGMAPRESS_CONNECTOR_DIR . 'includes/rest-api.php';
 require_once FIGMAPRESS_CONNECTOR_DIR . 'includes/contact-form.php';
@@ -302,6 +302,65 @@ function figmapress_connector_gradient_css( $gradient ) {
 }
 
 /**
+ * Generate bounded CSS declarations from structured Figma effect values.
+ *
+ * No CSS property name or free-form value is read from the saved document.
+ * Opacity, shadow geometry, colors and blur radii are rebuilt from numbers.
+ */
+function figmapress_connector_effects_css( $effects ) {
+    if ( ! is_array( $effects ) ) {
+        return '';
+    }
+    $declarations = array();
+
+    if ( array_key_exists( 'opacity', $effects ) ) {
+        $opacity = figmapress_connector_css_number( $effects['opacity'], 0, 1 );
+        if ( null !== $opacity ) {
+            $declarations[] = 'opacity:' . $opacity;
+        }
+    }
+
+    $shadows = array();
+    foreach ( isset( $effects['shadows'] ) && is_array( $effects['shadows'] ) ? array_slice( $effects['shadows'], 0, 8 ) : array() as $shadow ) {
+        if ( ! is_array( $shadow ) ) {
+            continue;
+        }
+        $type = isset( $shadow['type'] ) ? sanitize_key( $shadow['type'] ) : '';
+        if ( ! in_array( $type, array( 'drop', 'inner' ), true ) ) {
+            continue;
+        }
+        $x      = figmapress_connector_css_number( isset( $shadow['x'] ) ? $shadow['x'] : null, -2000, 2000 );
+        $y      = figmapress_connector_css_number( isset( $shadow['y'] ) ? $shadow['y'] : null, -2000, 2000 );
+        $blur   = figmapress_connector_css_number( isset( $shadow['blur'] ) ? $shadow['blur'] : null, 0, 2000 );
+        $spread = figmapress_connector_css_number( isset( $shadow['spread'] ) ? $shadow['spread'] : null, -2000, 2000 );
+        $color  = figmapress_connector_gradient_color_css( isset( $shadow['color'] ) ? $shadow['color'] : null );
+        if ( null === $x || null === $y || null === $blur || null === $spread || '' === $color ) {
+            continue;
+        }
+        $shadows[] = $x . 'px ' . $y . 'px ' . $blur . 'px ' . $spread . 'px ' . $color . ( 'inner' === $type ? ' inset' : '' );
+    }
+    if ( $shadows ) {
+        $declarations[] = 'box-shadow:' . implode( ',', $shadows );
+    }
+
+    $blur = isset( $effects['blur'] )
+        ? figmapress_connector_css_number( $effects['blur'], 0, 200 )
+        : null;
+    if ( null !== $blur && (float) $blur > 0 ) {
+        $declarations[] = 'filter:blur(' . $blur . 'px)';
+    }
+    $background_blur = isset( $effects['backgroundBlur'] )
+        ? figmapress_connector_css_number( $effects['backgroundBlur'], 0, 200 )
+        : null;
+    if ( null !== $background_blur && (float) $background_blur > 0 ) {
+        $declarations[] = '-webkit-backdrop-filter:blur(' . $background_blur . 'px)';
+        $declarations[] = 'backdrop-filter:blur(' . $background_blur . 'px)';
+    }
+
+    return $declarations ? implode( ';', $declarations ) . ';' : '';
+}
+
+/**
  * Expose stable Figma node identities in Elementor's rendered DOM.
  *
  * The authenticated snapshot endpoint uses these attributes to measure the
@@ -338,6 +397,12 @@ function figmapress_connector_add_elementor_render_attributes( $element ) {
     );
     if ( '' !== $gradient_css ) {
         $element->add_render_attribute( '_wrapper', 'style', 'background-image:' . $gradient_css . ';' );
+    }
+    $effects_css = figmapress_connector_effects_css(
+        isset( $settings['figmapress_effects'] ) ? $settings['figmapress_effects'] : null
+    );
+    if ( '' !== $effects_css ) {
+        $element->add_render_attribute( '_wrapper', 'style', $effects_css );
     }
     $element_type = method_exists( $element, 'get_type' ) ? $element->get_type() : '';
     $widget_name  = method_exists( $element, 'get_name' ) ? $element->get_name() : '';

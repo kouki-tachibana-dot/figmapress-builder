@@ -187,6 +187,7 @@ function figmapress_connector_rest_status() {
                 'revisions'      => true,
                 'webfonts'       => true,
                 'gradients'      => true,
+                'effects'        => true,
             ),
         )
     );

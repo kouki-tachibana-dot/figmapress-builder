@@ -56,6 +56,22 @@ interface FigmaGradientManifest {
   }>;
 }
 
+interface FigmaShadowManifest {
+  type: "drop" | "inner";
+  x: number;
+  y: number;
+  blur: number;
+  spread: number;
+  color: FigmaGradientColor;
+}
+
+interface FigmaEffectsManifest {
+  opacity?: number;
+  shadows?: FigmaShadowManifest[];
+  blur?: number;
+  backgroundBlur?: number;
+}
+
 interface AccordionItem {
   title: string;
   content: string;
@@ -304,7 +320,7 @@ function previewRoot(
   const background = gradient
     ? `background-image:${escapeAttribute(gradient)};`
     : `background:${escapeAttribute(solidColor(root.fills) ?? "#FFFFFF")};`;
-  return `<div class="figmapress-figma-preview${className}" data-figmapress-layout="${context.variant}" style="--figma-unit:calc(100cqw / ${round(rootBounds.width)});aspect-ratio:${round(rootBounds.width)}/${round(rootBounds.height)};${background}${previewAutoLayout(root)}">${(root.children ?? []).map((node) => previewNode(node, rootBounds, root, context)).join("")}</div>`;
+  return `<div class="figmapress-figma-preview${className}" data-figmapress-layout="${context.variant}" style="--figma-unit:calc(100cqw / ${round(rootBounds.width)});aspect-ratio:${round(rootBounds.width)}/${round(rootBounds.height)};${background}${previewAutoLayout(root)}${previewEffects(root)}">${(root.children ?? []).map((node) => previewNode(node, rootBounds, root, context)).join("")}</div>`;
 }
 
 function renderElement(
@@ -378,7 +394,7 @@ function navigationElement(
   const background = descendants(node).find((child) => /nav bar background/i.test(child.name));
   const topBar = descendants(node).find((child) => /top bar/i.test(child.name));
 
-  return widget(context.ids, node.id, "figmapress-nav", {
+  const settings: ElementorSettings = {
     ...widgetPosition(node, bounds, parentBounds, parentNode),
     figmapress_node_id: node.id,
     figmapress_node_name: node.name,
@@ -396,7 +412,9 @@ function navigationElement(
     background_color: solidColor(background?.fills) ?? "rgba(255,255,255,0.92)",
     accent_color: solidColor(topBar?.fills) ?? "#D10B2C",
     text_color: solidColor(menuTexts[0]?.fills) ?? "#202020",
-  });
+  };
+  applyEffects(settings, node);
+  return widget(context.ids, node.id, "figmapress-nav", settings);
 }
 
 function contactFormElement(
@@ -442,7 +460,7 @@ function contactFormElement(
       && candidate.height < bounds.height * 0.2;
   }) : undefined;
 
-  return widget(context.ids, node.id, "figmapress-contact-form", {
+  const settings: ElementorSettings = {
     ...widgetPosition(node, bounds, parentBounds, parentNode),
     figmapress_node_id: node.id,
     figmapress_node_name: node.name,
@@ -460,7 +478,9 @@ function contactFormElement(
     panel_color: solidColor(panel?.fills) ?? "#FFE2E8",
     text_color: "#202020",
     success_message: "送信しました。お問い合わせありがとうございます。",
-  });
+  };
+  applyEffects(settings, node);
+  return widget(context.ids, node.id, "figmapress-contact-form", settings);
 }
 
 function accordionPlan(node: FigmaNode): AccordionPlan | null {
@@ -713,6 +733,7 @@ function textElement(
     align: textAlign(style.textAlignHorizontal),
   };
   applyTypographyFlags(settings, style);
+  applyEffects(settings, node);
   applyRotation(settings, node);
 
   const content = richRuns.map((run) => runHtml(run, context)).join("").replace(/\n/g, "<br>");
@@ -744,6 +765,7 @@ function imageElement(
   if (typeof node.opacity === "number" && node.opacity < 1) {
     settings.opacity = size(node.opacity);
   }
+  applyEffects(settings, node, "image");
   applyRotation(settings, node);
   return widget(context.ids, node.id, "image", settings);
 }
@@ -807,7 +829,7 @@ function baseContainerSettings(node: FigmaNode, context: RenderContext): Element
     );
   }
   settings.border_radius = radiusDimensions(node, context);
-  applyShadow(settings, node);
+  applyEffects(settings, node, "container");
   applyRotation(settings, node);
   if (bounds && node === context.root) settings.min_height = canvasSize(bounds.height, context);
   return settings;
@@ -898,7 +920,7 @@ function previewNode(
   const attributes = previewNodeAttributes(node);
   const assetUrl = visualUrl(node, context.assets);
   if (assetUrl) {
-    return `<img alt="${escapeAttribute(node.name)}" ${attributes} data-figmapress-kind="visual" src="${escapeAttribute(assetUrl)}" style="${position};object-fit:fill;${previewRadius(node)}${previewTransform(node)}" />`;
+    return `<img alt="${escapeAttribute(node.name)}" ${attributes} data-figmapress-kind="visual" src="${escapeAttribute(assetUrl)}" style="${position};object-fit:fill;${previewRadius(node)}${previewTransform(node)}${previewEffects(node)}" />`;
   }
 
   const backgroundUrl = ownImageUrl(node, context.assets.imageUrls ?? {});
@@ -911,7 +933,6 @@ function previewNode(
   const border = solidColor(node.strokes)
     ? `border:${round(node.strokeWeight ?? 1)}px solid ${escapeAttribute(solidColor(node.strokes) ?? "")};`
     : "";
-  const opacity = typeof node.opacity === "number" ? `opacity:${round(node.opacity)};` : "";
   const overflow = node.clipsContent ? "overflow:hidden;" : "overflow:visible;";
 
   if (node.type === "TEXT") {
@@ -921,12 +942,12 @@ function previewNode(
     const content = runs.length > 1
       ? runs.map((run) => runHtml(run, context)).join("").replace(/\n/g, "<br>")
       : escapeHtml(node.characters ?? "").replace(/\n/g, "<br>");
-    return `<div ${attributes} data-figmapress-kind="text" style="${position};box-sizing:border-box;color:${escapeAttribute(solidColor(style.fills ?? node.fills) ?? "#111111")};display:flex;flex-direction:column;font-family:${escapeAttribute(cssFont(style.fontFamily))};font-size:calc(var(--figma-unit) * ${round(fontSize)});font-style:${style.italic ? "italic" : "normal"};font-weight:${round(style.fontWeight ?? 400)};hyphens:none;justify-content:${textVerticalAlign(style.textAlignVertical)};letter-spacing:calc(var(--figma-unit) * ${round(style.letterSpacing ?? 0)});line-break:strict;line-height:${round(textLineHeight(style, runs, fontSize) / fontSize)};max-width:100%;overflow:${textOverflow(node)};overflow-wrap:normal;text-align:${textAlign(style.textAlignHorizontal)};text-decoration:${textDecoration(style.textDecoration)};text-orientation:mixed;text-transform:${textTransform(style.textCase)};white-space:${textWhiteSpace(node)};word-break:${textWhiteSpace(node) === "pre" ? "keep-all" : "normal"};writing-mode:horizontal-tb;${previewTransform(node)}${opacity}"><span style="display:block;max-width:100%">${content}</span></div>`;
+    return `<div ${attributes} data-figmapress-kind="text" style="${position};box-sizing:border-box;color:${escapeAttribute(solidColor(style.fills ?? node.fills) ?? "#111111")};display:flex;flex-direction:column;font-family:${escapeAttribute(cssFont(style.fontFamily))};font-size:calc(var(--figma-unit) * ${round(fontSize)});font-style:${style.italic ? "italic" : "normal"};font-weight:${round(style.fontWeight ?? 400)};hyphens:none;justify-content:${textVerticalAlign(style.textAlignVertical)};letter-spacing:calc(var(--figma-unit) * ${round(style.letterSpacing ?? 0)});line-break:strict;line-height:${round(textLineHeight(style, runs, fontSize) / fontSize)};max-width:100%;overflow:${textOverflow(node)};overflow-wrap:normal;text-align:${textAlign(style.textAlignHorizontal)};text-decoration:${textDecoration(style.textDecoration)};text-orientation:mixed;text-transform:${textTransform(style.textCase)};white-space:${textWhiteSpace(node)};word-break:${textWhiteSpace(node) === "pre" ? "keep-all" : "normal"};writing-mode:horizontal-tb;${previewTransform(node)}${previewEffects(node)}"><span style="display:block;max-width:100%">${content}</span></div>`;
   }
 
   const children = (node.children ?? []).map((child) => previewNode(child, bounds, node, context)).join("");
   if (!children && !background && !border) return "";
-  return `<div aria-label="${escapeAttribute(node.name)}" ${attributes} data-figmapress-kind="container" style="${position};${previewAutoLayout(node)}${background}${border}${previewRadius(node)}${overflow}${previewTransform(node)}${opacity}">${children}</div>`;
+  return `<div aria-label="${escapeAttribute(node.name)}" ${attributes} data-figmapress-kind="container" style="${position};${previewAutoLayout(node)}${background}${border}${previewRadius(node)}${overflow}${previewTransform(node)}${previewEffects(node)}">${children}</div>`;
 }
 
 function previewNodeAttributes(node: FigmaNode): string {
@@ -1239,17 +1260,97 @@ function applyRotation(settings: ElementorSettings, node: FigmaNode): void {
   settings._transform_rotateZ_effect = size(node.rotation, "deg");
 }
 
-function applyShadow(settings: ElementorSettings, node: FigmaNode): void {
-  const shadow = node.effects?.find((effect) => effect.visible !== false && effect.type === "DROP_SHADOW");
-  if (!shadow) return;
-  settings.box_shadow_box_shadow_type = "yes";
-  settings.box_shadow_box_shadow = {
-    horizontal: shadow.offset?.x ?? 0,
-    vertical: shadow.offset?.y ?? 0,
-    blur: shadow.radius ?? 0,
-    spread: shadow.spread ?? 0,
-    color: shadow.color ? colorCss(shadow.color) : "rgba(0, 0, 0, 0.2)",
+function figmaEffects(node: FigmaNode): FigmaEffectsManifest | null {
+  const manifest: FigmaEffectsManifest = {};
+  if (finite(node.opacity) && node.opacity! >= 0 && node.opacity! < 0.999) {
+    manifest.opacity = round(Math.max(0, Math.min(1, node.opacity!)));
+  }
+  const shadows = (node.effects ?? [])
+    .filter((effect) =>
+      effect.visible !== false
+      && (effect.type === "DROP_SHADOW" || effect.type === "INNER_SHADOW"),
+    )
+    .slice(0, 8)
+    .map((effect): FigmaShadowManifest => ({
+      type: effect.type === "INNER_SHADOW" ? "inner" : "drop",
+      x: round(effect.offset?.x ?? 0),
+      y: round(effect.offset?.y ?? 0),
+      blur: round(Math.max(0, effect.radius ?? 0)),
+      spread: round(effect.spread ?? 0),
+      color: figmaEffectColor(effect.color),
+    }));
+  if (shadows.length) manifest.shadows = shadows;
+  const blur = (node.effects ?? []).find((effect) =>
+    effect.visible !== false && effect.type === "LAYER_BLUR" && finite(effect.radius),
+  );
+  if (blur?.radius && blur.radius > 0) manifest.blur = round(blur.radius);
+  const backgroundBlur = (node.effects ?? []).find((effect) =>
+    effect.visible !== false && effect.type === "BACKGROUND_BLUR" && finite(effect.radius),
+  );
+  if (backgroundBlur?.radius && backgroundBlur.radius > 0) {
+    manifest.backgroundBlur = round(backgroundBlur.radius);
+  }
+  return Object.keys(manifest).length ? manifest : null;
+}
+
+function figmaEffectColor(color: FigmaColor | undefined): FigmaGradientColor {
+  return {
+    red: byte(color?.r ?? 0),
+    green: byte(color?.g ?? 0),
+    blue: byte(color?.b ?? 0),
+    alpha: round(Math.max(0, Math.min(1, color?.a ?? 0.2))),
   };
+}
+
+function applyEffects(
+  settings: ElementorSettings,
+  node: FigmaNode,
+  target: "container" | "image" | "widget" = "widget",
+): void {
+  const effects = figmaEffects(node);
+  if (!effects) return;
+  const connectorEffects = target === "image" && typeof effects.opacity === "number"
+    ? Object.fromEntries(Object.entries(effects).filter(([key]) => key !== "opacity"))
+    : effects;
+  if (Object.keys(connectorEffects).length) settings.figmapress_effects = connectorEffects;
+  const shadow = effects.shadows?.[0];
+  if (!shadow || target !== "container") return;
+  const prefix = "box_shadow";
+  settings[`${prefix}_box_shadow_type`] = "yes";
+  settings[`${prefix}_box_shadow`] = {
+    horizontal: shadow.x,
+    vertical: shadow.y,
+    blur: shadow.blur,
+    spread: shadow.spread,
+    color: gradientColorCss(shadow.color),
+  };
+  if (shadow.type === "inner") {
+    settings[`${prefix}_box_shadow_position`] = "inset";
+  }
+}
+
+function previewEffects(node: FigmaNode): string {
+  const effects = figmaEffects(node);
+  if (!effects) return "";
+  const declarations: string[] = [];
+  if (typeof effects.opacity === "number") declarations.push(`opacity:${round(effects.opacity)}`);
+  if (effects.shadows?.length) {
+    const shadows = effects.shadows.map((shadow) => [
+      `${round(shadow.x)}px`,
+      `${round(shadow.y)}px`,
+      `${round(shadow.blur)}px`,
+      `${round(shadow.spread)}px`,
+      gradientColorCss(shadow.color),
+      shadow.type === "inner" ? "inset" : "",
+    ].filter(Boolean).join(" "));
+    declarations.push(`box-shadow:${shadows.join(",")}`);
+  }
+  if (effects.blur) declarations.push(`filter:blur(${round(effects.blur)}px)`);
+  if (effects.backgroundBlur) {
+    declarations.push(`-webkit-backdrop-filter:blur(${round(effects.backgroundBlur)}px)`);
+    declarations.push(`backdrop-filter:blur(${round(effects.backgroundBlur)}px)`);
+  }
+  return `${declarations.join(";")};`;
 }
 
 function headingTag(node: FigmaNode, fontSize: number): string {

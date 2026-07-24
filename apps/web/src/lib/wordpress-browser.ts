@@ -22,6 +22,7 @@ export interface BrowserWordPressStatus {
     revisions: boolean;
     webfonts?: boolean;
     gradients?: boolean;
+    effects?: boolean;
   };
   canEditPages: boolean;
 }
@@ -257,6 +258,7 @@ export async function probeWordPressDirect(
       revisions?: unknown;
       webfonts?: unknown;
       gradients?: unknown;
+      effects?: unknown;
     };
   }>(response);
   return {
@@ -280,6 +282,7 @@ export async function probeWordPressDirect(
       revisions: status.visualQa.revisions === true,
       webfonts: status.visualQa.webfonts === true,
       gradients: status.visualQa.gradients === true,
+      effects: status.visualQa.effects === true,
     } : undefined,
     canEditPages: status.canEditPages === true,
   };
