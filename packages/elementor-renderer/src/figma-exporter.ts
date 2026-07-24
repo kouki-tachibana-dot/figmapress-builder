@@ -38,6 +38,24 @@ interface FigmaWebfont {
   provider: "google";
 }
 
+interface FigmaGradientColor {
+  red: number;
+  green: number;
+  blue: number;
+  alpha: number;
+}
+
+interface FigmaGradientManifest {
+  type: "linear" | "radial";
+  angle?: number;
+  center?: { x: number; y: number };
+  radius?: { x: number; y: number };
+  stops: Array<{
+    color: FigmaGradientColor;
+    position: number;
+  }>;
+}
+
 interface AccordionItem {
   title: string;
   content: string;
@@ -282,8 +300,11 @@ function previewRoot(
   className: string,
 ): string {
   const rootBounds = context.rootBounds;
-  const background = solidColor(root.fills) ?? "#FFFFFF";
-  return `<div class="figmapress-figma-preview${className}" data-figmapress-layout="${context.variant}" style="--figma-unit:calc(100cqw / ${round(rootBounds.width)});aspect-ratio:${round(rootBounds.width)}/${round(rootBounds.height)};background:${escapeAttribute(background)};${previewAutoLayout(root)}">${(root.children ?? []).map((node) => previewNode(node, rootBounds, root, context)).join("")}</div>`;
+  const gradient = gradientCss(figmaGradient(root));
+  const background = gradient
+    ? `background-image:${escapeAttribute(gradient)};`
+    : `background:${escapeAttribute(solidColor(root.fills) ?? "#FFFFFF")};`;
+  return `<div class="figmapress-figma-preview${className}" data-figmapress-layout="${context.variant}" style="--figma-unit:calc(100cqw / ${round(rootBounds.width)});aspect-ratio:${round(rootBounds.width)}/${round(rootBounds.height)};${background}${previewAutoLayout(root)}">${(root.children ?? []).map((node) => previewNode(node, rootBounds, root, context)).join("")}</div>`;
 }
 
 function renderElement(
@@ -314,7 +335,11 @@ function renderElement(
   if (accordion) {
     children.push(accordionElement(node, accordion, bounds, node, context));
   }
-  const hasVisibleStyle = Boolean(solidColor(node.fills) || solidColor(node.strokes));
+  const hasVisibleStyle = Boolean(
+    solidColor(node.fills)
+    || figmaGradient(node)
+    || solidColor(node.strokes),
+  );
   if (!children.length && !hasVisibleStyle) return null;
 
   return {
@@ -749,11 +774,6 @@ function baseContainerSettings(node: FigmaNode, context: RenderContext): Element
     settings.flex_align_items = flexAlignment(node.counterAxisAlignItems);
     settings.flex_wrap = node.layoutWrap === "WRAP" ? "wrap" : "nowrap";
   }
-  const background = solidColor(node.fills);
-  if (background) {
-    settings.background_background = "classic";
-    settings.background_color = background;
-  }
   const backgroundUrl = ownImageUrl(node, context.assets.imageUrls ?? {});
   if (backgroundUrl) {
     settings.background_background = "classic";
@@ -761,6 +781,17 @@ function baseContainerSettings(node: FigmaNode, context: RenderContext): Element
     settings.background_position = "center center";
     settings.background_repeat = "no-repeat";
     settings.background_size = "cover";
+  } else {
+    const gradient = figmaGradient(node);
+    if (gradient) {
+      applyGradient(settings, gradient);
+    } else {
+      const background = solidColor(node.fills);
+      if (background) {
+        settings.background_background = "classic";
+        settings.background_color = background;
+      }
+    }
   }
   const border = solidColor(node.strokes);
   if (border) {
@@ -871,9 +902,12 @@ function previewNode(
   }
 
   const backgroundUrl = ownImageUrl(node, context.assets.imageUrls ?? {});
+  const gradient = figmaGradient(node);
   const background = backgroundUrl
     ? `background-image:url(&quot;${escapeAttribute(backgroundUrl)}&quot;);background-position:center;background-repeat:no-repeat;background-size:cover;`
-    : solidColor(node.fills) ? `background:${escapeAttribute(solidColor(node.fills) ?? "")};` : "";
+    : gradient
+      ? `background-image:${escapeAttribute(gradientCss(gradient))};`
+      : solidColor(node.fills) ? `background:${escapeAttribute(solidColor(node.fills) ?? "")};` : "";
   const border = solidColor(node.strokes)
     ? `border:${round(node.strokeWeight ?? 1)}px solid ${escapeAttribute(solidColor(node.strokes) ?? "")};`
     : "";
@@ -1034,6 +1068,144 @@ function ownImageUrl(node: FigmaNode, imageUrls: Record<string, string>): string
     fill.visible !== false && fill.type === "IMAGE" && fill.imageRef,
   )?.imageRef;
   return imageRef ? imageUrls[imageRef] ?? null : null;
+}
+
+function figmaGradient(node: FigmaNode): FigmaGradientManifest | null {
+  const paint = node.fills?.find((candidate) =>
+    candidate.visible !== false
+    && ["GRADIENT_LINEAR", "GRADIENT_RADIAL"].includes(candidate.type.toUpperCase()),
+  );
+  const bounds = node.absoluteBoundingBox;
+  const handles = paint?.gradientHandlePositions;
+  const rawStops = paint?.gradientStops
+    ?.filter((stop) =>
+      Number.isFinite(stop.position)
+      && stop.color
+      && [stop.color.r, stop.color.g, stop.color.b].every(Number.isFinite),
+    )
+    .sort((left, right) => left.position - right.position);
+  if (!paint || !bounds || !handles || handles.length !== 3 || !rawStops || rawStops.length < 2) {
+    return null;
+  }
+
+  const selectedStops = rawStops.length <= 8
+    ? rawStops
+    : [...rawStops.slice(0, 7), rawStops[rawStops.length - 1]];
+  const color = (value: FigmaColor): FigmaGradientColor => ({
+    red: byte(value.r),
+    green: byte(value.g),
+    blue: byte(value.b),
+    alpha: round(Math.max(0, Math.min(1, (value.a ?? 1) * (paint.opacity ?? 1)))),
+  });
+  const type = paint.type.toUpperCase();
+
+  if (type === "GRADIENT_LINEAR") {
+    const start = {
+      x: handles[0].x * bounds.width,
+      y: handles[0].y * bounds.height,
+    };
+    const end = {
+      x: handles[1].x * bounds.width,
+      y: handles[1].y * bounds.height,
+    };
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance < 0.001) return null;
+    const ux = dx / distance;
+    const uy = dy / distance;
+    const cssLineLength =
+      Math.abs(bounds.width * ux) + Math.abs(bounds.height * uy);
+    if (cssLineLength < 0.001) return null;
+    const startProjection =
+      (start.x - bounds.width / 2) * ux + (start.y - bounds.height / 2) * uy;
+    const angle = (Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360;
+    return {
+      type: "linear",
+      angle: round(angle),
+      stops: selectedStops.map((stop) => ({
+        color: color(stop.color),
+        position: round(
+          (startProjection + stop.position * distance + cssLineLength / 2)
+          / cssLineLength
+          * 100,
+        ),
+      })),
+    };
+  }
+
+  const center = handles[0];
+  const radiusX = Math.hypot(
+    (handles[1].x - center.x) * bounds.width,
+    (handles[1].y - center.y) * bounds.height,
+  ) / bounds.width * 100;
+  const radiusY = Math.hypot(
+    (handles[2].x - center.x) * bounds.width,
+    (handles[2].y - center.y) * bounds.height,
+  ) / bounds.height * 100;
+  if (radiusX < 0.001 || radiusY < 0.001) return null;
+  return {
+    type: "radial",
+    center: { x: round(center.x * 100), y: round(center.y * 100) },
+    radius: { x: round(radiusX), y: round(radiusY) },
+    stops: selectedStops.map((stop) => ({
+      color: color(stop.color),
+      position: round(stop.position * 100),
+    })),
+  };
+}
+
+function gradientColorCss(color: FigmaGradientColor): string {
+  if (color.alpha < 0.999) {
+    return `rgba(${color.red}, ${color.green}, ${color.blue}, ${round(color.alpha)})`;
+  }
+  return `#${hex(color.red)}${hex(color.green)}${hex(color.blue)}`.toUpperCase();
+}
+
+function gradientCss(gradient: FigmaGradientManifest | null): string {
+  if (!gradient) return "";
+  const stops = gradient.stops
+    .map((stop) => `${gradientColorCss(stop.color)} ${round(stop.position)}%`)
+    .join(", ");
+  if (gradient.type === "linear") {
+    return `linear-gradient(${round(gradient.angle ?? 180)}deg, ${stops})`;
+  }
+  return `radial-gradient(ellipse ${round(gradient.radius?.x ?? 50)}% ${round(gradient.radius?.y ?? 50)}% at ${round(gradient.center?.x ?? 50)}% ${round(gradient.center?.y ?? 50)}%, ${stops})`;
+}
+
+function applyGradient(
+  settings: ElementorSettings,
+  gradient: FigmaGradientManifest,
+): void {
+  const first = gradient.stops[0];
+  const last = gradient.stops[gradient.stops.length - 1];
+  settings.background_background = "gradient";
+  settings.background_color = gradientColorCss(first.color);
+  settings.background_color_stop = size(
+    Math.max(0, Math.min(100, first.position)),
+    "%",
+  );
+  settings.background_color_b = gradientColorCss(last.color);
+  settings.background_color_b_stop = size(
+    Math.max(0, Math.min(100, last.position)),
+    "%",
+  );
+  settings.background_gradient_type = gradient.type;
+  if (gradient.type === "linear") {
+    settings.background_gradient_angle = size(gradient.angle ?? 180, "deg");
+  } else {
+    settings.background_gradient_position = nearestGradientPosition(
+      gradient.center?.x ?? 50,
+      gradient.center?.y ?? 50,
+    );
+  }
+  settings.figmapress_gradient = gradient;
+}
+
+function nearestGradientPosition(x: number, y: number): string {
+  const horizontal = x < 33.333 ? "left" : x > 66.667 ? "right" : "center";
+  const vertical = y < 33.333 ? "top" : y > 66.667 ? "bottom" : "center";
+  return `${vertical} ${horizontal}`;
 }
 
 function solidColor(paints: FigmaPaint[] | undefined): string | null {

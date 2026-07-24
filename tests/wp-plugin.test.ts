@@ -215,6 +215,21 @@ test("Connector loads only allowlisted Figma webfonts for the owned page and sna
   assert.match(rest, /'webfonts'\s*=>\s*true/);
 });
 
+test("Connector renders only structured and bounded Figma gradients", async () => {
+  const [plugin, rest] = await Promise.all([
+    readFile(pluginPath, "utf8"),
+    readFile(restApiPath, "utf8"),
+  ]);
+  assert.match(plugin, /figmapress_connector_gradient_css/);
+  assert.match(plugin, /in_array\( \$type, array\( 'linear', 'radial' \), true \)/);
+  assert.match(plugin, /array_slice\( \$gradient\['stops'\], 0, 8 \)/);
+  assert.match(plugin, /figmapress_connector_gradient_color_css/);
+  assert.match(plugin, /linear-gradient\(/);
+  assert.match(plugin, /radial-gradient\(ellipse/);
+  assert.match(plugin, /'background-image:' \. \$gradient_css/);
+  assert.match(rest, /'gradients'\s*=>\s*true/);
+});
+
 test("Connector revisions and verifies a matching draft before visual QA updates", async () => {
   const [plugin, rest] = await Promise.all([
     readFile(pluginPath, "utf8"),

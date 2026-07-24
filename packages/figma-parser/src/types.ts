@@ -14,12 +14,24 @@ export interface FigmaColor {
   a?: number;
 }
 
+export interface FigmaVector {
+  x: number;
+  y: number;
+}
+
+export interface FigmaColorStop {
+  position: number;
+  color: FigmaColor;
+}
+
 export interface FigmaPaint {
   type: string;
   color?: FigmaColor;
   opacity?: number;
   imageRef?: string;
   scaleMode?: string;
+  gradientHandlePositions?: [FigmaVector, FigmaVector, FigmaVector];
+  gradientStops?: FigmaColorStop[];
   visible?: boolean;
 }
 

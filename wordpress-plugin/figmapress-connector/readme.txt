@@ -3,7 +3,7 @@ Contributors: figmapress
 Tags: blocks, figma, gutenberg, elementor
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 0.10.0
+Stable tag: 0.11.0
 License: GPLv2 or later
 
 Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
@@ -15,6 +15,12 @@ Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
    create a draft page containing figmapress/* blocks.
 
 == Changelog ==
+= 0.11.0 =
+* Figmaの線形・放射グラデーションを角度、中心、半径、最大8色のストップまで再現。
+* Elementor標準の編集可能なグラデーション設定も同時保存。
+* 構造化された色・位置・角度だけを受け付け、任意CSSの実行を防止。
+* 実ページVisual QAでもプレビューと同じ複数色グラデーションを描画。
+
 = 0.10.0 =
 * Figmaで使用している書体とウェイトを対象Elementorページだけに読み込み。
 * 日本語の代替字形をNoto Sans／Serif JPへ固定し、文字幅・改行・行高の環境差を低減。

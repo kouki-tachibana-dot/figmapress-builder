@@ -3,7 +3,7 @@
  * Plugin Name:       FigmaPress Connector
  * Plugin URI:        https://github.com/kouki-tachibana-dot/figmapress-builder
  * Description:       Connects FigmaPress to Gutenberg and Elementor draft pages.
- * Version:           0.10.0
+ * Version:           0.11.0
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Update URI:        https://figmapress-builder.vercel.app/downloads/figmapress-connector.json
@@ -20,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 define( 'FIGMAPRESS_CONNECTOR_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FIGMAPRESS_CONNECTOR_URL', plugin_dir_url( __FILE__ ) );
-define( 'FIGMAPRESS_CONNECTOR_VERSION', '0.10.0' );
+define( 'FIGMAPRESS_CONNECTOR_VERSION', '0.11.0' );
 
 require_once FIGMAPRESS_CONNECTOR_DIR . 'includes/rest-api.php';
 require_once FIGMAPRESS_CONNECTOR_DIR . 'includes/contact-form.php';
@@ -233,6 +233,74 @@ function figmapress_connector_register_elementor_widgets( $widgets_manager ) {
 }
 add_action( 'elementor/widgets/register', 'figmapress_connector_register_elementor_widgets' );
 
+/** Format a bounded number for a generated CSS value. */
+function figmapress_connector_css_number( $value, $minimum, $maximum ) {
+    if ( ! is_numeric( $value ) ) {
+        return null;
+    }
+    $number = max( (float) $minimum, min( (float) $maximum, (float) $value ) );
+    return rtrim( rtrim( number_format( $number, 3, '.', '' ), '0' ), '.' );
+}
+
+/** Build an rgba() value from numeric channels only. */
+function figmapress_connector_gradient_color_css( $color ) {
+    if ( ! is_array( $color ) ) {
+        return '';
+    }
+    $red   = figmapress_connector_css_number( isset( $color['red'] ) ? $color['red'] : null, 0, 255 );
+    $green = figmapress_connector_css_number( isset( $color['green'] ) ? $color['green'] : null, 0, 255 );
+    $blue  = figmapress_connector_css_number( isset( $color['blue'] ) ? $color['blue'] : null, 0, 255 );
+    $alpha = figmapress_connector_css_number( isset( $color['alpha'] ) ? $color['alpha'] : null, 0, 1 );
+    if ( null === $red || null === $green || null === $blue || null === $alpha ) {
+        return '';
+    }
+    return 'rgba(' . $red . ',' . $green . ',' . $blue . ',' . $alpha . ')';
+}
+
+/**
+ * Generate one safe CSS gradient from the structured FigmaPress setting.
+ *
+ * Arbitrary CSS strings are never accepted. Types, numeric ranges, colors and
+ * stop count are all bounded before the value reaches a style attribute.
+ */
+function figmapress_connector_gradient_css( $gradient ) {
+    if ( ! is_array( $gradient ) ) {
+        return '';
+    }
+    $type = isset( $gradient['type'] ) ? sanitize_key( $gradient['type'] ) : '';
+    if ( ! in_array( $type, array( 'linear', 'radial' ), true ) ) {
+        return '';
+    }
+    $stops = array();
+    foreach ( isset( $gradient['stops'] ) && is_array( $gradient['stops'] ) ? array_slice( $gradient['stops'], 0, 8 ) : array() as $stop ) {
+        if ( ! is_array( $stop ) ) {
+            continue;
+        }
+        $color    = figmapress_connector_gradient_color_css( isset( $stop['color'] ) ? $stop['color'] : null );
+        $position = figmapress_connector_css_number( isset( $stop['position'] ) ? $stop['position'] : null, -200, 300 );
+        if ( '' === $color || null === $position ) {
+            continue;
+        }
+        $stops[] = $color . ' ' . $position . '%';
+    }
+    if ( count( $stops ) < 2 ) {
+        return '';
+    }
+
+    if ( 'linear' === $type ) {
+        $angle = figmapress_connector_css_number( isset( $gradient['angle'] ) ? $gradient['angle'] : 180, 0, 360 );
+        return 'linear-gradient(' . $angle . 'deg,' . implode( ',', $stops ) . ')';
+    }
+
+    $center   = isset( $gradient['center'] ) && is_array( $gradient['center'] ) ? $gradient['center'] : array();
+    $radius   = isset( $gradient['radius'] ) && is_array( $gradient['radius'] ) ? $gradient['radius'] : array();
+    $center_x = figmapress_connector_css_number( isset( $center['x'] ) ? $center['x'] : 50, -100, 200 );
+    $center_y = figmapress_connector_css_number( isset( $center['y'] ) ? $center['y'] : 50, -100, 200 );
+    $radius_x = figmapress_connector_css_number( isset( $radius['x'] ) ? $radius['x'] : 50, 0.1, 400 );
+    $radius_y = figmapress_connector_css_number( isset( $radius['y'] ) ? $radius['y'] : 50, 0.1, 400 );
+    return 'radial-gradient(ellipse ' . $radius_x . '% ' . $radius_y . '% at ' . $center_x . '% ' . $center_y . '%,' . implode( ',', $stops ) . ')';
+}
+
 /**
  * Expose stable Figma node identities in Elementor's rendered DOM.
  *
@@ -264,6 +332,12 @@ function figmapress_connector_add_elementor_render_attributes( $element ) {
     }
     if ( isset( $settings['figmapress_section'] ) && 'yes' === $settings['figmapress_section'] ) {
         $element->add_render_attribute( '_wrapper', 'data-figmapress-section', 'true' );
+    }
+    $gradient_css = figmapress_connector_gradient_css(
+        isset( $settings['figmapress_gradient'] ) ? $settings['figmapress_gradient'] : null
+    );
+    if ( '' !== $gradient_css ) {
+        $element->add_render_attribute( '_wrapper', 'style', 'background-image:' . $gradient_css . ';' );
     }
     $element_type = method_exists( $element, 'get_type' ) ? $element->get_type() : '';
     $widget_name  = method_exists( $element, 'get_name' ) ? $element->get_name() : '';

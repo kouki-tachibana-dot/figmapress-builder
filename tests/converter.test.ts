@@ -363,6 +363,151 @@ test("Japanese Figma text records its webfont and deterministic glyph fallback",
   assert.match(result.previewHtml, /font-family:Inter,&#039;Noto Sans JP&#039;/);
 });
 
+test("Figma gradients keep their handles and all color stops in Elementor", async () => {
+  const file: MockFigmaFile = {
+    document: {
+      id: "0:0",
+      name: "Gradient campaign",
+      type: "DOCUMENT",
+      children: [{
+        id: "1:0",
+        name: "Page",
+        type: "CANVAS",
+        children: [{
+          id: "2:0",
+          name: "PC-page",
+          type: "FRAME",
+          absoluteBoundingBox: { x: 0, y: 0, width: 400, height: 200 },
+          children: [{
+            id: "3:0",
+            name: "Campaign fade",
+            type: "RECTANGLE",
+            absoluteBoundingBox: { x: 0, y: 0, width: 400, height: 200 },
+            fills: [{
+              type: "GRADIENT_LINEAR",
+              gradientHandlePositions: [
+                { x: 0, y: 0 },
+                { x: 1, y: 1 },
+                { x: 0, y: 1 },
+              ],
+              gradientStops: [
+                { position: 0, color: { r: 1, g: 0, b: 0 } },
+                { position: 0.5, color: { r: 0, g: 1, b: 0, a: 0.5 } },
+                { position: 1, color: { r: 0, g: 0, b: 1 } },
+              ],
+            }],
+          }],
+        }],
+      }],
+    },
+  };
+
+  const result = await convertFile(file);
+  const gradient = result.elementorTemplate.content[0]?.elements[0]?.settings;
+  assert.equal(gradient?.background_background, "gradient");
+  assert.equal(gradient?.background_color, "#FF0000");
+  assert.equal(gradient?.background_color_b, "#0000FF");
+  assert.deepEqual(gradient?.background_gradient_angle, {
+    unit: "deg",
+    size: 116.565,
+    sizes: [],
+  });
+  assert.deepEqual(gradient?.figmapress_gradient, {
+    type: "linear",
+    angle: 116.565,
+    stops: [
+      {
+        color: { red: 255, green: 0, blue: 0, alpha: 1 },
+        position: 0,
+      },
+      {
+        color: { red: 0, green: 255, blue: 0, alpha: 0.5 },
+        position: 50,
+      },
+      {
+        color: { red: 0, green: 0, blue: 255, alpha: 1 },
+        position: 100,
+      },
+    ],
+  });
+  assert.match(
+    result.previewHtml,
+    /linear-gradient\(116\.565deg, #FF0000 0%, rgba\(0, 255, 0, 0\.5\) 50%, #0000FF 100%\)/,
+  );
+  assert.deepEqual(result.qualityReport?.metrics.gradients, {
+    visible: 1,
+    mapped: 1,
+    multiStop: 1,
+  });
+  assert.equal(
+    result.qualityReport?.checks.find((check) => check.id === "gradients")?.status,
+    "pass",
+  );
+});
+
+test("Figma radial gradients keep their center and ellipse radii", async () => {
+  const file: MockFigmaFile = {
+    document: {
+      id: "0:0",
+      name: "Radial campaign",
+      type: "DOCUMENT",
+      children: [{
+        id: "1:0",
+        name: "Page",
+        type: "CANVAS",
+        children: [{
+          id: "2:0",
+          name: "PC-page",
+          type: "FRAME",
+          absoluteBoundingBox: { x: 0, y: 0, width: 200, height: 100 },
+          children: [{
+            id: "3:0",
+            name: "Radial glow",
+            type: "RECTANGLE",
+            absoluteBoundingBox: { x: 0, y: 0, width: 200, height: 100 },
+            fills: [{
+              type: "GRADIENT_RADIAL",
+              gradientHandlePositions: [
+                { x: 0.5, y: 0.5 },
+                { x: 1, y: 0.5 },
+                { x: 0.5, y: 1 },
+              ],
+              gradientStops: [
+                { position: 0, color: { r: 1, g: 1, b: 1 } },
+                { position: 1, color: { r: 1, g: 0.8, b: 0.8 } },
+              ],
+            }],
+          }],
+        }],
+      }],
+    },
+  };
+
+  const result = await convertFile(file);
+  const gradient = result.elementorTemplate.content[0]?.elements[0]?.settings;
+  assert.equal(gradient?.background_gradient_type, "radial");
+  assert.equal(gradient?.background_gradient_position, "center center");
+  assert.deepEqual(gradient?.figmapress_gradient, {
+    type: "radial",
+    center: { x: 50, y: 50 },
+    radius: { x: 50, y: 50 },
+    stops: [
+      {
+        color: { red: 255, green: 255, blue: 255, alpha: 1 },
+        position: 0,
+      },
+      {
+        color: { red: 255, green: 204, blue: 204, alpha: 1 },
+        position: 100,
+      },
+    ],
+  });
+  assert.match(
+    result.previewHtml,
+    /radial-gradient\(ellipse 50% 50% at 50% 50%, #FFFFFF 0%, #FFCCCC 100%\)/,
+  );
+});
+
 test("paired PC and SP frames become device-specific Elementor layouts", async () => {
   const text = (
     id: string,
