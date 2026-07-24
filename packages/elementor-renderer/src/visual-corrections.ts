@@ -139,21 +139,27 @@ function translateElement(
   element: ElementorElement,
   correction: AppliedElementorVisualCorrection,
 ): ElementorElement {
+  const translateX = round(
+    numericSetting(element.settings.figmapress_visual_translate_x_vw)
+      + toViewportWidthNumber(correction.offsetX, correction.captureWidth),
+  );
+  const translateY = round(
+    numericSetting(element.settings.figmapress_visual_translate_y_vw)
+      + toViewportWidthNumber(correction.offsetY, correction.captureWidth),
+  );
   return {
     ...element,
     settings: {
       ...element.settings,
       _transform_translate_popover: "transform",
-      _transform_translateX_effect: customSize(correction.translateX),
-      _transform_translateY_effect: customSize(correction.translateY),
-      figmapress_visual_translate_x_vw: toViewportWidthNumber(
-        correction.offsetX,
-        correction.captureWidth,
+      _transform_translateX_effect: customSize(
+        Math.abs(translateX) < 0.0001 ? "0px" : `${translateX}vw`,
       ),
-      figmapress_visual_translate_y_vw: toViewportWidthNumber(
-        correction.offsetY,
-        correction.captureWidth,
+      _transform_translateY_effect: customSize(
+        Math.abs(translateY) < 0.0001 ? "0px" : `${translateY}vw`,
       ),
+      figmapress_visual_translate_x_vw: translateX,
+      figmapress_visual_translate_y_vw: translateY,
     },
   };
 }
@@ -281,12 +287,16 @@ function previewSelector(variant: VisualCorrectionVariant): string {
 export function applyPreviewVisualCorrections(
   previewHtml: string,
   corrections: ElementorVisualCorrection[],
+  channel: "primary" | "runtime" = "primary",
 ): string {
   const normalized = normalizeElementorVisualCorrections(corrections);
   if (!normalized.length) return previewHtml;
+  const property = channel === "runtime"
+    ? "--figmapress-qa-runtime-global-transform"
+    : "--figmapress-qa-global-transform";
   const rules = normalized
     .map((correction) =>
-      `${previewSelector(correction.variant)} > *{--figmapress-qa-global-transform:translate(${correction.translateX},${correction.translateY})!important}`,
+      `${previewSelector(correction.variant)} > *{${property}:translate(${correction.translateX},${correction.translateY})!important}`,
     )
     .join("");
   return `<style data-figmapress-visual-corrections>${rules}</style>${previewHtml}`;
@@ -295,12 +305,16 @@ export function applyPreviewVisualCorrections(
 export function applyPreviewSectionVisualCorrections(
   previewHtml: string,
   corrections: ElementorSectionVisualCorrection[],
+  channel: "primary" | "runtime" = "primary",
 ): string {
   const normalized = normalizeElementorSectionVisualCorrections(corrections);
   if (!normalized.length) return previewHtml;
+  const property = channel === "runtime"
+    ? "--figmapress-qa-runtime-local-transform"
+    : "--figmapress-qa-local-transform";
   const rules = normalized
     .map((correction) =>
-      `${previewSelector(correction.variant)} [data-figmapress-node-id="${correction.nodeId}"]{--figmapress-qa-local-transform:translate(${correction.translateX},${correction.translateY})!important}`,
+      `${previewSelector(correction.variant)} [data-figmapress-node-id="${correction.nodeId}"]{${property}:translate(${correction.translateX},${correction.translateY})!important}`,
     )
     .join("");
   return `<style data-figmapress-section-visual-corrections>${rules}</style>${previewHtml}`;

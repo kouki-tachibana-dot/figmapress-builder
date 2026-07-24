@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   createElementorDraftPage,
+  fetchElementorSnapshot,
   probeWordPressConnection,
+  updateElementorDraftPage,
   WpRequestError,
   type WpConfig,
 } from "@figmapress/wp-connector";
@@ -142,4 +144,57 @@ test("permission errors are not mislabeled as invalid credentials", async (conte
     }),
     (error: unknown) => error instanceof WpRequestError && error.status === 403,
   );
+});
+
+test("server transport supports Elementor snapshot and revision update routes", async (context) => {
+  const requests: Array<{ url: string; method?: string; body?: string }> = [];
+  context.mock.method(globalThis, "fetch", async (input, init) => {
+    const url = String(input);
+    requests.push({
+      url,
+      method: init?.method,
+      body: String(init?.body ?? ""),
+    });
+    if (url.endsWith("/snapshot")) {
+      return Response.json({
+        postId: 91,
+        html: "<main></main>",
+        styles: "",
+        storedElements: 4,
+        generatedAt: "2026-07-24T00:00:00Z",
+      });
+    }
+    return Response.json({
+      postId: 91,
+      status: "draft",
+      storedElements: 4,
+      revisionId: 92,
+    });
+  });
+
+  const requestId = "66666666-6666-4666-8666-666666666666";
+  const snapshot = await fetchElementorSnapshot(config, 91, requestId);
+  assert.equal(snapshot.postId, 91);
+  const update = await updateElementorDraftPage(config, {
+    postId: 91,
+    requestId,
+    template: {
+      title: "Elementor Page",
+      type: "page",
+      version: "0.4",
+      page_settings: {},
+      content: [{
+        id: "1234abcd",
+        elType: "container",
+        isInner: false,
+        settings: {},
+        elements: [],
+      }],
+    },
+  });
+  assert.equal(update.revisionId, 92);
+  assert.equal(requests.length, 2);
+  assert.match(requests[0]?.url ?? "", /pages\/91\/snapshot$/);
+  assert.match(requests[1]?.url ?? "", /pages\/91\/document$/);
+  assert.equal(requests[1]?.method, "PUT");
 });

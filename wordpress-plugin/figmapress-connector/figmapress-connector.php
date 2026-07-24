@@ -3,7 +3,7 @@
  * Plugin Name:       FigmaPress Connector
  * Plugin URI:        https://github.com/kouki-tachibana-dot/figmapress-builder
  * Description:       Connects FigmaPress to Gutenberg and Elementor draft pages.
- * Version:           0.8.0
+ * Version:           0.9.0
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Update URI:        https://figmapress-builder.vercel.app/downloads/figmapress-connector.json
@@ -20,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 define( 'FIGMAPRESS_CONNECTOR_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FIGMAPRESS_CONNECTOR_URL', plugin_dir_url( __FILE__ ) );
-define( 'FIGMAPRESS_CONNECTOR_VERSION', '0.8.0' );
+define( 'FIGMAPRESS_CONNECTOR_VERSION', '0.9.0' );
 
 require_once FIGMAPRESS_CONNECTOR_DIR . 'includes/rest-api.php';
 require_once FIGMAPRESS_CONNECTOR_DIR . 'includes/contact-form.php';
@@ -128,6 +128,80 @@ function figmapress_connector_register_elementor_widgets( $widgets_manager ) {
     $widgets_manager->register( new FigmaPress_Accordion_Widget() );
 }
 add_action( 'elementor/widgets/register', 'figmapress_connector_register_elementor_widgets' );
+
+/**
+ * Expose stable Figma node identities in Elementor's rendered DOM.
+ *
+ * The authenticated snapshot endpoint uses these attributes to measure the
+ * actual WordPress output section by section. They contain no credentials or
+ * unpublished copy beyond the layer names already stored in the document.
+ */
+function figmapress_connector_add_elementor_render_attributes( $element ) {
+    if ( ! is_object( $element ) || ! method_exists( $element, 'get_settings_for_display' ) || ! method_exists( $element, 'add_render_attribute' ) ) {
+        return;
+    }
+    static $processed = array();
+    $object_id        = function_exists( 'spl_object_id' ) ? spl_object_id( $element ) : 0;
+    if ( $object_id && isset( $processed[ $object_id ] ) ) {
+        return;
+    }
+    if ( $object_id ) {
+        $processed[ $object_id ] = true;
+    }
+
+    $settings  = $element->get_settings_for_display();
+    $node_id   = isset( $settings['figmapress_node_id'] ) ? sanitize_text_field( $settings['figmapress_node_id'] ) : '';
+    $node_name = isset( $settings['figmapress_node_name'] ) ? sanitize_text_field( $settings['figmapress_node_name'] ) : '';
+    if ( '' !== $node_id && preg_match( '/^[A-Za-z0-9:_-]{1,160}$/', $node_id ) ) {
+        $element->add_render_attribute( '_wrapper', 'data-figmapress-node-id', $node_id );
+    }
+    if ( '' !== $node_name ) {
+        $element->add_render_attribute( '_wrapper', 'data-figmapress-node-name', $node_name );
+    }
+    if ( isset( $settings['figmapress_section'] ) && 'yes' === $settings['figmapress_section'] ) {
+        $element->add_render_attribute( '_wrapper', 'data-figmapress-section', 'true' );
+    }
+    $element_type = method_exists( $element, 'get_type' ) ? $element->get_type() : '';
+    $widget_name  = method_exists( $element, 'get_name' ) ? $element->get_name() : '';
+    $kind         = 'container';
+    if ( 'widget' === $element_type ) {
+        $kind = 'text-editor' === $widget_name ? 'text' : ( 'image' === $widget_name ? 'visual' : 'widget' );
+    }
+    $element->add_render_attribute( '_wrapper', 'data-figmapress-kind', $kind );
+
+    $classes = isset( $settings['css_classes'] ) ? preg_split( '/\s+/', $settings['css_classes'] ) : array();
+    foreach ( $classes as $class_name ) {
+        $safe_class = sanitize_html_class( $class_name );
+        if ( '' !== $safe_class ) {
+            $element->add_render_attribute( '_wrapper', 'class', $safe_class );
+        }
+    }
+    if ( in_array( 'figmapress-layout', $classes, true ) ) {
+        $element->add_render_attribute( '_wrapper', 'class', 'figmapress-figma-preview' );
+    }
+}
+add_action( 'elementor/frontend/element/before_render', 'figmapress_connector_add_elementor_render_attributes' );
+add_action( 'elementor/frontend/widget/before_render', 'figmapress_connector_add_elementor_render_attributes' );
+
+/** Preserve Elementor metadata in the WordPress revision created before QA updates. */
+function figmapress_connector_revision_meta_keys( $keys ) {
+    return array_values(
+        array_unique(
+            array_merge(
+                $keys,
+                array(
+                    '_elementor_data',
+                    '_elementor_page_settings',
+                    '_elementor_edit_mode',
+                    '_elementor_template_type',
+                    '_elementor_version',
+                    '_wp_page_template',
+                )
+            )
+        )
+    );
+}
+add_filter( 'wp_post_revision_meta_keys', 'figmapress_connector_revision_meta_keys' );
 
 /**
  * Small helper used by render.php files. Centralizes attribute escaping

@@ -49,6 +49,29 @@ export interface CreateElementorDraftInput {
   requestId: string;
 }
 
+export interface ElementorSnapshot {
+  postId: number;
+  html: string;
+  styles: string;
+  storedElements: number;
+  embeddedAssetsBytes?: number;
+  generatedAt: string;
+}
+
+export interface UpdateElementorDraftInput {
+  postId: number;
+  requestId: string;
+  template: ElementorTemplateInput;
+  pageTemplate?: "elementor_canvas" | "elementor_header_footer" | "default";
+}
+
+export interface UpdateElementorDraftResult {
+  postId: number;
+  status: "draft";
+  storedElements: number;
+  revisionId?: number | null;
+}
+
 export interface WordPressConnectionStatus {
   authenticated: true;
   user: { id: number; name: string };
@@ -60,6 +83,11 @@ export interface WordPressConnectionStatus {
     navigation: boolean;
     contactForm: boolean;
     accordion: boolean;
+  };
+  visualQa?: {
+    snapshot: boolean;
+    documentUpdate: boolean;
+    revisions: boolean;
   };
   canEditPages: boolean;
 }
@@ -181,6 +209,11 @@ export async function probeWordPressConnection(
       contactForm?: unknown;
       accordion?: unknown;
     };
+    visualQa?: {
+      snapshot?: unknown;
+      documentUpdate?: unknown;
+      revisions?: unknown;
+    };
   };
   return {
     authenticated: true,
@@ -199,6 +232,11 @@ export async function probeWordPressConnection(
       navigation: status.functionalWidgets.navigation === true,
       contactForm: status.functionalWidgets.contactForm === true,
       accordion: status.functionalWidgets.accordion === true,
+    } : undefined,
+    visualQa: status.visualQa ? {
+      snapshot: status.visualQa.snapshot === true,
+      documentUpdate: status.visualQa.documentUpdate === true,
+      revisions: status.visualQa.revisions === true,
     } : undefined,
     canEditPages: status.canEditPages === true,
   };
@@ -291,4 +329,55 @@ export async function createElementorDraftPage(
     );
   }
   return { ...data, target: "elementor" };
+}
+
+export async function fetchElementorSnapshot(
+  cfg: WpConfig,
+  postId: number,
+  requestId: string,
+): Promise<ElementorSnapshot> {
+  const res = await wpFetch(
+    cfg,
+    `/figmapress/v1/elementor/pages/${postId}/snapshot`,
+    {
+      method: "POST",
+      body: JSON.stringify({ requestId }),
+    },
+  );
+  const text = await res.text();
+  if (!res.ok) {
+    throw new WpRequestError(
+      `Failed to render Elementor draft (HTTP ${res.status})`,
+      res.status,
+      text,
+    );
+  }
+  return JSON.parse(text) as ElementorSnapshot;
+}
+
+export async function updateElementorDraftPage(
+  cfg: WpConfig,
+  input: UpdateElementorDraftInput,
+): Promise<UpdateElementorDraftResult> {
+  const res = await wpFetch(
+    cfg,
+    `/figmapress/v1/elementor/pages/${input.postId}/document`,
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        requestId: input.requestId,
+        template: input.template,
+        pageTemplate: input.pageTemplate ?? "elementor_canvas",
+      }),
+    },
+  );
+  const text = await res.text();
+  if (!res.ok) {
+    throw new WpRequestError(
+      `Failed to update Elementor draft (HTTP ${res.status})`,
+      res.status,
+      text,
+    );
+  }
+  return JSON.parse(text) as UpdateElementorDraftResult;
 }

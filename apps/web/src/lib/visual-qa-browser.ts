@@ -192,8 +192,17 @@ export async function runVisualQa(
     const generatedHeight = visiblePreview
       ? visiblePreview.getBoundingClientRect().height
       : Math.max(1, frameDocument.body.scrollHeight);
+    const markedSections = visiblePreview
+      ? Array.from(
+          visiblePreview.querySelectorAll<HTMLElement>(
+            '[data-figmapress-section="true"]',
+          ),
+        )
+      : [];
     const sectionRegions = visiblePreview
-      ? Array.from(visiblePreview.children)
+      ? (markedSections.length
+          ? markedSections
+          : Array.from(visiblePreview.children) as HTMLElement[])
           .map((element) => regionInput(element as HTMLElement))
           .filter((region): region is VisualQaRegionInput => region !== null)
       : [];

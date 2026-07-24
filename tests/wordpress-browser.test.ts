@@ -3,7 +3,9 @@ import test from "node:test";
 import {
   WordPressDirectError,
   createWordPressDraftDirect,
+  fetchWordPressElementorSnapshotDirect,
   probeWordPressDirect,
+  updateWordPressElementorDocumentDirect,
 } from "../apps/web/src/lib/wordpress-browser.ts";
 
 const config = {
@@ -180,4 +182,62 @@ test("browser Elementor creation sends one draft request without a status prefli
   assert.match(requests[0]?.url ?? "", /figmapress\/v1\/elementor\/pages$/);
   assert.match(requests[0]?.body ?? "", /"status":"draft"/);
   assert.match(requests[0]?.body ?? "", /"requestId":"22222222-2222-4222-8222-222222222222"/);
+});
+
+test("browser retrieves and updates only the matching Elementor draft", async (context) => {
+  const requests: Array<{ url: string; method?: string; body?: string }> = [];
+  context.mock.method(globalThis, "fetch", async (input, init) => {
+    const url = String(input);
+    requests.push({
+      url,
+      method: init?.method,
+      body: typeof init?.body === "string" ? init.body : undefined,
+    });
+    if (url.endsWith("/snapshot")) {
+      return Response.json({
+        postId: 42,
+        html: '<main class="figmapress-figma-preview"></main>',
+        styles: "<style>body{margin:0}</style>",
+        storedElements: 8,
+        generatedAt: "2026-07-24T00:00:00Z",
+      });
+    }
+    return Response.json({
+      postId: 42,
+      status: "draft",
+      storedElements: 8,
+      revisionId: 44,
+    });
+  });
+
+  const requestId = "55555555-5555-4555-8555-555555555555";
+  const snapshot = await fetchWordPressElementorSnapshotDirect(
+    config,
+    42,
+    requestId,
+  );
+  assert.equal(snapshot.storedElements, 8);
+  assert.match(snapshot.html, /figmapress-figma-preview/);
+
+  const updated = await updateWordPressElementorDocumentDirect(config, {
+    postId: 42,
+    requestId,
+    pageTemplate: "elementor_canvas",
+    template: {
+      title: "ホーム",
+      type: "page",
+      version: "0.4",
+      page_settings: {},
+      content: [{ id: "1234abcd" }],
+    },
+  });
+  assert.equal(updated.status, "draft");
+  assert.equal(updated.revisionId, 44);
+  assert.equal(requests.length, 2);
+  assert.match(requests[0]?.url ?? "", /pages\/42\/snapshot$/);
+  assert.equal(requests[0]?.method, "POST");
+  assert.match(requests[0]?.body ?? "", new RegExp(requestId));
+  assert.match(requests[1]?.url ?? "", /pages\/42\/document$/);
+  assert.equal(requests[1]?.method, "PUT");
+  assert.match(requests[1]?.body ?? "", /"pageTemplate":"elementor_canvas"/);
 });

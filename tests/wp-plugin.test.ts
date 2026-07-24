@@ -59,9 +59,15 @@ test("Connector saves through Elementor and verifies persisted elements", async 
   const source = await readFile(restApiPath, "utf8");
   assert.match(source, /\\Elementor\\Plugin::\$instance->documents->get\( \$post_id \)/);
   assert.match(source, /\$document->save\(/);
-  const firstRead = source.indexOf("figmapress_connector_read_elementor_data( $post_id )");
+  const storeFunction = source.indexOf(
+    "function figmapress_connector_store_elementor_document",
+  );
+  const firstRead = source.indexOf(
+    "figmapress_connector_read_elementor_data( $post_id )",
+    storeFunction,
+  );
   const directWrite = source.indexOf(
-    "update_metadata(\n            'post',\n            $post_id,\n            '_elementor_data'",
+    "update_metadata(\n        'post',\n        $post_id,\n        '_elementor_data'",
     firstRead,
   );
   const secondRead = source.indexOf(
@@ -70,7 +76,7 @@ test("Connector saves through Elementor and verifies persisted elements", async 
   );
 
   assert.ok(firstRead > 0, "Document API output must be read back");
-  assert.ok(directWrite > firstRead, "incomplete Document API output must fall back to direct metadata");
+  assert.ok(directWrite > firstRead, "sanitized metadata must be preserved after Document API save");
   assert.ok(secondRead > directWrite, "direct metadata output must be read back again");
   assert.match(source, /is_array\( \$stored_value \)/);
   assert.match(source, /\$stored_elements !== \$expected_elements/);
@@ -169,4 +175,40 @@ test("Connector checks the pinned HTTPS manifest for native WordPress updates", 
   assert.match(source, /figmapress-builder\.vercel\.app/);
   assert.match(source, /version_compare/);
   assert.match(source, /'plugins_api'/);
+});
+
+test("Connector exposes authenticated Elementor snapshots with stable Figma node identities", async () => {
+  const [plugin, rest] = await Promise.all([
+    readFile(pluginPath, "utf8"),
+    readFile(restApiPath, "utf8"),
+  ]);
+  assert.match(rest, /elementor\/pages\/\(\?P<id>\\d\+\)\/snapshot/);
+  assert.match(rest, /get_builder_content_for_display\( \$post_id, true \)/);
+  assert.match(rest, /wp_print_styles\(\)/);
+  assert.match(rest, /attachment_url_to_postid/);
+  assert.match(rest, /8 \* MB_IN_BYTES/);
+  assert.match(rest, /data:' \. \$type \. ';base64,/);
+  assert.match(rest, /post-' \. \$post_id \. '\.css/);
+  assert.match(rest, /figmapress_connector_validate_owned_elementor_draft/);
+  assert.match(rest, /hash_equals\( \$stored_request_id, \$request_id \)/);
+  assert.match(plugin, /data-figmapress-node-id/);
+  assert.match(plugin, /data-figmapress-section/);
+  assert.match(plugin, /figmapress-figma-preview/);
+});
+
+test("Connector revisions and verifies a matching draft before visual QA updates", async () => {
+  const [plugin, rest] = await Promise.all([
+    readFile(pluginPath, "utf8"),
+    readFile(restApiPath, "utf8"),
+  ]);
+  assert.match(rest, /elementor\/pages\/\(\?P<id>\\d\+\)\/document/);
+  assert.match(rest, /'draft' !== get_post_status\( \$post_id \)/);
+  assert.match(rest, /\$revision_id = wp_save_post_revision\( \$post_id \)/);
+  assert.match(
+    rest,
+    /figmapress_connector_store_elementor_document\( \$post_id, \$content, \$page_settings, \$page_template \)/,
+  );
+  assert.match(rest, /figmapress_connector_clear_elementor_cache\( \$post_id \)/);
+  assert.match(plugin, /wp_post_revision_meta_keys/);
+  assert.match(plugin, /'_elementor_data'/);
 });

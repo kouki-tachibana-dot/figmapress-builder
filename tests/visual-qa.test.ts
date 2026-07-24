@@ -451,6 +451,40 @@ test("safe visual corrections become viewport-scaled Elementor transforms", () =
   assert.match(sectionPreview, /data-figmapress-section-visual-corrections/);
   assert.match(sectionPreview, /data-figmapress-node-id="10:hero"/);
   assert.match(sectionPreview, /--figmapress-qa-local-transform:translate\(0\.25vw,-0\.125vw\)!important/);
+
+  const secondGlobal = applyElementorVisualCorrections(sectionCorrected, [{
+    variant: "desktop",
+    offsetX: 2,
+    offsetY: -1,
+    captureWidth: 800,
+    confidence: "high",
+    errorReductionRatio: 20,
+  }]);
+  assert.deepEqual(
+    secondGlobal.content[0]?.elements[0]?.settings._transform_translateX_effect,
+    { unit: "custom", size: "-0.125vw", sizes: [] },
+  );
+  assert.deepEqual(
+    secondGlobal.content[0]?.elements[0]?.settings._transform_translateY_effect,
+    { unit: "custom", size: "0.125vw", sizes: [] },
+  );
+
+  const runtimePreview = applyPreviewVisualCorrections(
+    sectionPreview,
+    [{
+      variant: "desktop",
+      offsetX: 2,
+      offsetY: -1,
+      captureWidth: 800,
+      confidence: "high",
+      errorReductionRatio: 20,
+    }],
+    "runtime",
+  );
+  assert.match(
+    runtimePreview,
+    /--figmapress-qa-runtime-global-transform:translate\(0\.25vw,-0\.125vw\)!important/,
+  );
 });
 
 test("unsafe or oversized visual corrections are ignored without mutation", () => {
