@@ -246,6 +246,8 @@ function renderRootElement(
     settings: {
       ...baseContainerSettings(root, context),
       ...visibility,
+      figmapress_node_id: root.id,
+      figmapress_node_name: root.name,
       _element_id: anchorId("top", context),
       css_classes: `figmapress-layout figmapress-layout--${context.variant}`,
       content_width: "full",
@@ -306,6 +308,8 @@ function renderElement(
     settings: {
       ...baseContainerSettings(node, context),
       ...containerPosition(node, bounds, parentBounds, parentNode, context),
+      figmapress_node_id: node.id,
+      figmapress_node_name: node.name,
       html_tag: htmlTag(node),
       ...sectionAnchorSettings(node, context),
     },
@@ -335,6 +339,8 @@ function navigationElement(
 
   return widget(context.ids, node.id, "figmapress-nav", {
     ...widgetPosition(node, bounds, parentBounds, parentNode),
+    figmapress_node_id: node.id,
+    figmapress_node_name: node.name,
     _element_id: anchorId("site-navigation", context),
     layout_variant: context.variant,
     logo: logoUrl ? { url: logoUrl, id: "", alt: "サイトロゴ", source: "library" } : undefined,
@@ -397,6 +403,8 @@ function contactFormElement(
 
   return widget(context.ids, node.id, "figmapress-contact-form", {
     ...widgetPosition(node, bounds, parentBounds, parentNode),
+    figmapress_node_id: node.id,
+    figmapress_node_name: node.name,
     _element_id: anchorId("contact", context),
     title,
     name_label: exact(/^(?:お名前|氏名|name)$/i, "お名前"),
@@ -470,6 +478,8 @@ function accordionElement(
 ): ElementorElement {
   return widget(context.ids, `${node.id}:accordion`, "figmapress-accordion", {
     ...widgetPosition(node, plan.bounds, parentBounds, parentNode),
+    figmapress_node_id: `${node.id}:accordion`,
+    figmapress_node_name: `${node.name} / accordion`,
     items: plan.items.map((item, index) => ({
       _id: hashId(`${node.id}:accordion:${index}`),
       title: item.title,
@@ -569,6 +579,8 @@ function textElement(
   const lineHeight = textLineHeight(style, richRuns, fontSize);
   const settings: ElementorSettings = {
     ...widgetPosition(node, bounds, parentBounds, parentNode),
+    figmapress_node_id: node.id,
+    figmapress_node_name: node.name,
     css_classes: "figmapress-text figmapress-text--horizontal",
     text_color: solidColor(style.fills ?? node.fills) ?? "#111111",
     typography_typography: "custom",
@@ -599,6 +611,8 @@ function imageElement(
 ): ElementorElement {
   const settings: ElementorSettings = {
     ...widgetPosition(node, bounds, parentBounds, parentNode),
+    figmapress_node_id: node.id,
+    figmapress_node_name: node.name,
     image: { url, id: "", alt: node.name, source: "library" },
     image_size: "full",
     space: size(100, "%"),
@@ -1140,7 +1154,7 @@ function dimensions(
 
 function previewTransform(node: FigmaNode): string {
   const rotation = node.rotation ? ` rotate(${round(node.rotation)}deg)` : "";
-  return `--figmapress-qa-transform:translate(0px,0px);transform:var(--figmapress-qa-transform)${rotation};transform-origin:center;`;
+  return `--figmapress-qa-global-transform:translate(0px,0px);--figmapress-qa-local-transform:translate(0px,0px);transform:var(--figmapress-qa-global-transform) var(--figmapress-qa-local-transform)${rotation};transform-origin:center;`;
 }
 
 function positive(value: number | undefined): value is number {

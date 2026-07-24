@@ -251,6 +251,8 @@ export async function runVisualQa(
       width,
       height,
       sectionRegions,
+      24,
+      8,
     ).slice(0, 6);
     const textNodes = analyzeVisualRegions(
       referencePixels.data,

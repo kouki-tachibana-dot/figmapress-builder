@@ -4,12 +4,16 @@ import {
   analyzeVisualRegions,
   analyzeVisualPixels,
   resolveVisualQaDraftGate,
+  shouldKeepSectionVisualCorrections,
   shouldKeepVisualCorrections,
 } from "../apps/web/src/lib/visual-qa.ts";
 import {
+  applyElementorSectionVisualCorrections,
   applyElementorVisualCorrections,
+  applyPreviewSectionVisualCorrections,
   applyPreviewVisualCorrections,
   normalizeElementorVisualCorrections,
+  normalizeElementorSectionVisualCorrections,
   type ElementorTemplate,
 } from "@figmapress/elementor-renderer";
 
@@ -67,6 +71,48 @@ function translatePixels(
       const sourceOffset = (row * width + column) * 4;
       const targetOffset = (targetY * width + targetX) * 4;
       target.set(source.subarray(sourceOffset, sourceOffset + 4), targetOffset);
+    }
+  }
+  return target;
+}
+
+function translatePixelRegion(
+  source: Uint8ClampedArray,
+  width: number,
+  height: number,
+  regionY: number,
+  regionHeight: number,
+  offsetX: number,
+  offsetY: number,
+): Uint8ClampedArray {
+  const target = source.slice();
+  for (let row = regionY; row < regionY + regionHeight; row += 1) {
+    for (let column = 0; column < width; column += 1) {
+      const offset = (row * width + column) * 4;
+      target[offset] = 247;
+      target[offset + 1] = 247;
+      target[offset + 2] = 243;
+      target[offset + 3] = 255;
+    }
+  }
+  for (let row = regionY; row < regionY + regionHeight; row += 1) {
+    for (let column = 0; column < width; column += 1) {
+      const targetX = column + offsetX;
+      const targetY = row + offsetY;
+      if (
+        targetX < 0
+        || targetX >= width
+        || targetY < regionY
+        || targetY >= regionY + regionHeight
+        || targetY >= height
+      ) {
+        continue;
+      }
+      const sourceOffset = (row * width + column) * 4;
+      target.set(
+        source.subarray(sourceOffset, sourceOffset + 4),
+        (targetY * width + targetX) * 4,
+      );
     }
   }
   return target;
@@ -138,6 +184,32 @@ test("visual QA ranks named sections and text boxes by page impact", () => {
   assert.equal(regions[0]?.impactRatio, 20);
   assert.equal(regions.at(-1)?.nodeId, "hero");
   assert.equal(regions.at(-1)?.impactRatio, 0);
+});
+
+test("visual QA isolates a safe alignment correction to one shifted section", () => {
+  const width = 120;
+  const height = 160;
+  const reference = patternedPixels(width, height);
+  const target = translatePixelRegion(reference, width, height, 80, 80, 4, -3);
+  const regions = analyzeVisualRegions(
+    reference,
+    target,
+    width,
+    height,
+    [
+      { nodeId: "top", name: "Top", x: 0, y: 0, width, height: 80 },
+      { nodeId: "bottom", name: "Bottom", x: 0, y: 80, width, height: 80 },
+    ],
+    24,
+    8,
+  );
+
+  const top = regions.find((region) => region.nodeId === "top");
+  const bottom = regions.find((region) => region.nodeId === "bottom");
+  assert.equal(top?.alignment, undefined);
+  assert.equal(bottom?.alignment?.offsetX, -4);
+  assert.equal(bottom?.alignment?.offsetY, 3);
+  assert.equal(bottom?.alignment?.safeToApply, true);
 });
 
 test("visual QA rejects pixel buffers with mismatched dimensions", () => {
@@ -267,7 +339,7 @@ test("safe visual corrections become viewport-scaled Elementor transforms", () =
             id: "hero",
             elType: "container",
             isInner: true,
-            settings: {},
+            settings: { figmapress_node_id: "10:hero" },
             elements: [],
           },
         ],
@@ -284,7 +356,7 @@ test("safe visual corrections become viewport-scaled Elementor transforms", () =
             id: "mobile-hero",
             elType: "container",
             isInner: true,
-            settings: {},
+            settings: { figmapress_node_id: "20:hero" },
             elements: [],
           },
         ],
@@ -342,8 +414,43 @@ test("safe visual corrections become viewport-scaled Elementor transforms", () =
     corrections,
   );
   assert.match(preview, /data-figmapress-visual-corrections/);
-  assert.match(preview, /--figmapress-qa-transform:translate\(-0\.625vw,0\.375vw\)!important/);
+  assert.match(preview, /--figmapress-qa-global-transform:translate\(-0\.625vw,0\.375vw\)!important/);
   assert.match(preview, /data-figmapress-layout="mobile"/);
+
+  const sectionCorrection = [{
+    variant: "desktop" as const,
+    nodeId: "10:hero",
+    nodeName: "Hero",
+    offsetX: 2,
+    offsetY: -1,
+    captureWidth: 800,
+    confidence: "high" as const,
+    errorReductionRatio: 22,
+  }];
+  const sectionCorrected = applyElementorSectionVisualCorrections(
+    corrected,
+    sectionCorrection,
+  );
+  assert.deepEqual(
+    sectionCorrected.content[0]?.elements[0]?.settings._transform_translateX_effect,
+    { unit: "custom", size: "-0.375vw", sizes: [] },
+  );
+  assert.deepEqual(
+    sectionCorrected.content[0]?.elements[0]?.settings._transform_translateY_effect,
+    { unit: "custom", size: "0.25vw", sizes: [] },
+  );
+  assert.deepEqual(
+    sectionCorrected.content[1]?.elements[0]?.settings._transform_translateY_effect,
+    { unit: "custom", size: "-1vw", sizes: [] },
+  );
+
+  const sectionPreview = applyPreviewSectionVisualCorrections(
+    preview,
+    sectionCorrection,
+  );
+  assert.match(sectionPreview, /data-figmapress-section-visual-corrections/);
+  assert.match(sectionPreview, /data-figmapress-node-id="10:hero"/);
+  assert.match(sectionPreview, /--figmapress-qa-local-transform:translate\(0\.25vw,-0\.125vw\)!important/);
 });
 
 test("unsafe or oversized visual corrections are ignored without mutation", () => {
@@ -366,6 +473,21 @@ test("unsafe or oversized visual corrections are ignored without mutation", () =
     },
   ]);
   assert.deepEqual(invalid, []);
+  assert.deepEqual(
+    normalizeElementorSectionVisualCorrections([
+      {
+        variant: "desktop",
+        nodeId: "unsafe id\"]",
+        nodeName: "Unsafe",
+        offsetX: 2,
+        offsetY: 1,
+        captureWidth: 800,
+        confidence: "high",
+        errorReductionRatio: 30,
+      },
+    ]),
+    [],
+  );
   assert.equal(
     applyPreviewVisualCorrections("<div>unchanged</div>", []),
     "<div>unchanged</div>",
@@ -401,6 +523,56 @@ test("visual correction rollback guard keeps only measured improvements", () => 
   );
   assert.equal(
     shouldKeepVisualCorrections(before, before, ["desktop"]),
+    false,
+  );
+});
+
+test("section visual correction rollback guard checks the targeted node", () => {
+  const before = [{
+    variant: "desktop" as const,
+    score: 82,
+    changedPixelRatio: 18,
+    sections: [{
+      nodeId: "hero",
+      name: "Hero",
+      x: 0,
+      y: 0,
+      width: 800,
+      height: 400,
+      changedPixelRatio: 32,
+      meanColorError: 20,
+      impactRatio: 8,
+    }],
+  }];
+  assert.equal(
+    shouldKeepSectionVisualCorrections(
+      before,
+      [{
+        ...before[0],
+        score: 83,
+        changedPixelRatio: 17,
+        sections: [{
+          ...before[0].sections[0],
+          changedPixelRatio: 27,
+          impactRatio: 6.5,
+        }],
+      }],
+      [{ variant: "desktop", nodeId: "hero" }],
+    ),
+    true,
+  );
+  assert.equal(
+    shouldKeepSectionVisualCorrections(
+      before,
+      [{
+        ...before[0],
+        sections: [{
+          ...before[0].sections[0],
+          changedPixelRatio: 33,
+        }],
+      }],
+      [{ variant: "desktop", nodeId: "hero" }],
+    ),
     false,
   );
 });

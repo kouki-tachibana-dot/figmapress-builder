@@ -66,6 +66,7 @@ export interface VisualQaRegionMetrics {
   changedPixelRatio: number;
   meanColorError: number;
   impactRatio: number;
+  alignment?: VisualQaAlignment;
 }
 
 export interface VisualQaAlignment {
@@ -105,6 +106,16 @@ export interface VisualQaCorrectionOutcome {
   changedPixelRatio: number;
 }
 
+export interface VisualQaSectionCorrectionTarget {
+  variant: "desktop" | "mobile";
+  nodeId: string;
+}
+
+export interface VisualQaSectionCorrectionOutcome
+  extends VisualQaCorrectionOutcome {
+  sections: VisualQaRegionMetrics[];
+}
+
 export function shouldKeepVisualCorrections(
   before: VisualQaCorrectionOutcome[],
   after: VisualQaCorrectionOutcome[],
@@ -137,6 +148,51 @@ export function shouldKeepVisualCorrections(
   }
 
   return aggregateScoreGain >= 0.1 || aggregateChangedPixelReduction >= 0.1;
+}
+
+export function shouldKeepSectionVisualCorrections(
+  before: VisualQaSectionCorrectionOutcome[],
+  after: VisualQaSectionCorrectionOutcome[],
+  targets: VisualQaSectionCorrectionTarget[],
+): boolean {
+  if (!targets.length) return false;
+  const beforeByVariant = new Map(before.map((result) => [result.variant, result]));
+  const afterByVariant = new Map(after.map((result) => [result.variant, result]));
+  let improvedTargets = 0;
+
+  for (const target of targets) {
+    const baselinePage = beforeByVariant.get(target.variant);
+    const correctedPage = afterByVariant.get(target.variant);
+    if (!baselinePage || !correctedPage) return false;
+    if (
+      correctedPage.score < baselinePage.score - 0.2
+      || correctedPage.changedPixelRatio > baselinePage.changedPixelRatio + 0.2
+    ) {
+      return false;
+    }
+
+    const baseline = baselinePage.sections.find(
+      (section) => section.nodeId === target.nodeId,
+    );
+    const corrected = correctedPage.sections.find(
+      (section) => section.nodeId === target.nodeId,
+    );
+    if (!baseline || !corrected) return false;
+    if (
+      corrected.changedPixelRatio > baseline.changedPixelRatio + 0.4
+      || corrected.impactRatio > baseline.impactRatio + 0.03
+    ) {
+      return false;
+    }
+    if (
+      baseline.changedPixelRatio - corrected.changedPixelRatio >= 0.2
+      || baseline.impactRatio - corrected.impactRatio >= 0.01
+    ) {
+      improvedTargets += 1;
+    }
+  }
+
+  return improvedTargets > 0;
 }
 
 interface BandAccumulator {
@@ -444,6 +500,7 @@ export function analyzeVisualRegions(
   height: number,
   regions: VisualQaRegionInput[],
   threshold = 24,
+  maximumAlignmentShift = 0,
 ): VisualQaRegionMetrics[] {
   validatePixelBuffers(reference, target, width, height);
   const pagePixels = width * height;
@@ -474,16 +531,66 @@ export function analyzeVisualRegions(
         }
       }
 
+      const changedPixelRatio = round((changed / pixels) * 100);
+      const impactRatio = round((changed / pagePixels) * 100, 2);
+      let alignment: VisualQaAlignment | undefined;
+      const regionWidth = endX - startX;
+      const regionHeight = endY - startY;
+      if (
+        maximumAlignmentShift >= 2
+        && regionWidth >= 64
+        && regionHeight >= 64
+        && changedPixelRatio >= 4
+        && impactRatio >= 0.03
+      ) {
+        const referenceCrop = cropPixelBuffer(
+          reference,
+          width,
+          startX,
+          startY,
+          regionWidth,
+          regionHeight,
+        );
+        const targetCrop = cropPixelBuffer(
+          target,
+          width,
+          startX,
+          startY,
+          regionWidth,
+          regionHeight,
+        );
+        const estimated = estimateVisualAlignment(
+          referenceCrop,
+          targetCrop,
+          regionWidth,
+          regionHeight,
+          Math.min(10, maximumAlignmentShift),
+        );
+        alignment =
+          estimated.safeToApply && estimated.errorReductionRatio >= 15
+            ? {
+                ...estimated,
+                reason: `「${region.name}」をX ${estimated.offsetX >= 0 ? "+" : ""}${estimated.offsetX}px / Y ${estimated.offsetY >= 0 ? "+" : ""}${estimated.offsetY}px移動すると、領域内の画素誤差を約${estimated.errorReductionRatio}%削減できる見込みです。`,
+              }
+            : {
+                ...estimated,
+                confidence: "low",
+                safeToApply: false,
+                reason: `「${region.name}」は単純な位置移動だけで安全に改善できる確度が不足しています。`,
+              };
+      }
+
       return {
         nodeId: region.nodeId,
         name: region.name,
         x: startX,
         y: startY,
-        width: endX - startX,
-        height: endY - startY,
-        changedPixelRatio: round((changed / pixels) * 100),
+        width: regionWidth,
+        height: regionHeight,
+        changedPixelRatio,
         meanColorError: round(colorError / pixels),
-        impactRatio: round((changed / pagePixels) * 100, 2),
+        impactRatio,
+        alignment,
       };
     })
     .filter((region): region is VisualQaRegionMetrics => region !== null)
@@ -491,6 +598,26 @@ export function analyzeVisualRegions(
       right.impactRatio - left.impactRatio ||
       right.changedPixelRatio - left.changedPixelRatio,
     );
+}
+
+function cropPixelBuffer(
+  source: Uint8ClampedArray,
+  sourceWidth: number,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): Uint8ClampedArray {
+  const crop = new Uint8ClampedArray(width * height * 4);
+  for (let row = 0; row < height; row += 1) {
+    const sourceStart = ((y + row) * sourceWidth + x) * 4;
+    const targetStart = row * width * 4;
+    crop.set(
+      source.subarray(sourceStart, sourceStart + width * 4),
+      targetStart,
+    );
+  }
+  return crop;
 }
 
 export function analyzeVisualPixels(
