@@ -3,7 +3,7 @@ Contributors: figmapress
 Tags: blocks, figma, gutenberg, elementor
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 0.12.0
+Stable tag: 0.13.0
 License: GPLv2 or later
 
 Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
@@ -15,6 +15,12 @@ Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
    create a draft page containing figmapress/* blocks.
 
 == Changelog ==
+= 0.13.0 =
+* FigmaのCarousel／Sliderレイヤーを編集可能なElementorカルーセルへ変換。
+* 前後ボタン、ドット、キーボード、スワイプ、動きの軽減設定に対応。
+* FigmaプロトタイプのURL・セクション遷移と、CTA・電話・メールのリンクを実動化。
+* PC版とスマホ版の表示枚数を独立して保持。
+
 = 0.12.0 =
 * Figmaレイヤーの透明度、複数の外側／内側シャドウ、レイヤーぼかし、背景ぼかしを再現。
 * Elementor標準の編集可能なシャドウ設定も同時保存。

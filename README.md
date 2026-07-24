@@ -3,6 +3,10 @@
 Figma の構造を、WordPress で扱える Gutenberg ブロックまたはElementorページへ変換する
 オープンソースの Web アプリ＋CLIです。
 
+## v0.19.0 — Functional Parity
+
+FigmaのCarousel／Slider、プロトタイプリンク、CTA、電話、メールを実動Elementor Widgetへ変換します。カルーセルは前後ボタン、ドット、キーボード、スワイプ、動きの軽減設定に対応し、PC版とスマホ版の表示枚数を独立して保持します。
+
 ## v0.18.0 — Native Figma Image Fidelity
 
 **Web版:** [https://figmapress-builder.vercel.app](https://figmapress-builder.vercel.app)
@@ -61,8 +65,8 @@ Figma の構造を、WordPress で扱える Gutenberg ブロックまたはEleme
 - Elementorの編集画面と生成プレビューの両方で横書き、改行、文字ボックス高、切り詰めを保持
 - Figmaの折返し指定、明示改行、混在文字サイズ、縦位置、回転を保持
 - 写真・マスク・ベクターをFigmaレンダーAPIから取得し、文字は編集可能なWidgetとして保持
-- Figmaのメニュー、問い合わせフォーム、年表／FAQをElementorの実動Widgetへ変換
-- ナビのモバイルメニュー、フォーム送信、アコーディオン開閉をElementor Proなしで提供
+- Figmaのメニュー、リンク、カルーセル、問い合わせフォーム、年表／FAQをElementorの実動Widgetへ変換
+- ナビのモバイルメニュー、CTA遷移、カルーセル操作、フォーム送信、アコーディオン開閉をElementor Proなしで提供
 - Connector導入後の更新をWordPress標準のプラグイン更新画面から実行
 - タイムアウト後に同じ作成処理を再送しても、既存下書きを再利用して重複を防止
 - キャッシュされた問い合わせフォームでも期限切れせず送信可能
@@ -87,7 +91,7 @@ Figma Tokenは標準では同じタブの `sessionStorage` だけに保持しま
 - Elementor高忠実度変換は任意のレイヤー名に対応。Gutenberg変換では `section/*` または Hero / Services / Features / FAQ / CTA / Contact の意味が分かる名前を推奨
 - 同一Figmaページに `PC` / `Desktop` と `SP` / `Mobile` の名前を含むトップレベルフレームを配置すると端末別に自動統合。スマホフレームがない場合はPCデザインを画面幅へ連続追従
 - WordPressへの送信は固定ページの `draft` 作成だけ
-- Elementor Pro専用Widget、Theme Builder、WooCommerce、Popupは対象外（ナビ・フォーム・アコーディオンはConnector独自Widgetで対応）
+- Elementor Pro専用Widget、Theme Builder、WooCommerce、Popupは対象外（ナビ・リンク・カルーセル・フォーム・アコーディオンはConnector独自Widgetで対応）
 
 ---
 

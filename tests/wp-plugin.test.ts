@@ -53,6 +53,8 @@ test("Connector bounds synchronous media localization", async () => {
   assert.match(source, /download_url\( \$url, max\( 1, \(int\) \$download_timeout \) \)/);
   assert.match(source, /isset\( \$localized_images\[ \$url \] \)/);
   assert.match(source, /\$localized_images\[ \$url \]\s*=\s*array\(/);
+  assert.match(source, /'figmapress-carousel'/);
+  assert.match(source, /'previous_icon', 'next_icon'/);
 });
 
 test("Connector saves through Elementor and verifies persisted elements", async () => {
@@ -108,7 +110,13 @@ test("Connector accepts and registers functional Elementor widgets", async () =>
   assert.match(plugin, new RegExp(`Version:\\s+${escapedVersion}`));
   assert.match(plugin, new RegExp(`FIGMAPRESS_CONNECTOR_VERSION', '${escapedVersion}'`));
   assert.match(plugin, /elementor\/widgets\/register/);
-  for (const widget of ["figmapress-nav", "figmapress-contact-form", "figmapress-accordion"]) {
+  for (const widget of [
+    "figmapress-nav",
+    "figmapress-link",
+    "figmapress-carousel",
+    "figmapress-contact-form",
+    "figmapress-accordion",
+  ]) {
     assert.match(rest, new RegExp(`'${widget}'`));
   }
 });
@@ -147,12 +155,16 @@ test("functional widgets include keyboard, reduced-motion, and timeout safeguard
     readFile(interactionStylePath, "utf8"),
   ]);
   assert.match(script, /event\.key === "Escape"/);
+  assert.match(script, /event\.key === "ArrowLeft"/);
+  assert.match(script, /pointerdown/);
+  assert.match(script, /figmapress-carousel__dot/);
   assert.match(script, /toggle\.focus\(\)/);
   assert.match(script, /AbortController/);
   assert.match(script, /controller\.abort\(\)/);
   assert.match(script, /aria-busy/);
   assert.match(style, /prefers-reduced-motion:\s*reduce/);
   assert.match(style, /focus-visible/);
+  assert.match(style, /\.figmapress-carousel/);
 });
 
 test("mobile navigation keeps its CTA and device-specific anchor targets", async () => {

@@ -70,6 +70,8 @@ export interface FigmaQualityReport {
     };
     functionalWidgets: {
       navigation: number;
+      links: number;
+      carousel: number;
       contactForm: number;
       accordion: number;
     };
@@ -158,7 +160,11 @@ export function createFigmaQualityReport(
   ).length;
   const functionalWidgets = countFunctionalWidgets(template.content);
   const functionalWidgetTotal =
-    functionalWidgets.navigation + functionalWidgets.contactForm + functionalWidgets.accordion;
+    functionalWidgets.navigation
+    + functionalWidgets.links
+    + functionalWidgets.carousel
+    + functionalWidgets.contactForm
+    + functionalWidgets.accordion;
   const boundedRatio = visibleNodes.length > 0 ? boundedNodes.length / visibleNodes.length : 0;
   const gradientRatio = gradients.visible > 0 ? gradients.mapped / gradients.visible : 1;
   const effectRatio = effects.visible > 0 ? effects.mapped / effects.visible : 1;
@@ -248,7 +254,7 @@ export function createFigmaQualityReport(
       label: "実動パーツ",
       status: functionalWidgetTotal > 0 ? "pass" : "info",
       detail: functionalWidgetTotal > 0
-        ? `メニュー${functionalWidgets.navigation}・フォーム${functionalWidgets.contactForm}・アコーディオン${functionalWidgets.accordion}`
+        ? `メニュー${functionalWidgets.navigation}・リンク${functionalWidgets.links}・カルーセル${functionalWidgets.carousel}・フォーム${functionalWidgets.contactForm}・アコーディオン${functionalWidgets.accordion}`
         : "自動認識できる実動パーツはありません",
     },
   ];
@@ -402,13 +408,17 @@ function visualEffectEntries(
 
 function countFunctionalWidgets(elements: ElementorElement[]): {
   navigation: number;
+  links: number;
+  carousel: number;
   contactForm: number;
   accordion: number;
 } {
-  const result = { navigation: 0, contactForm: 0, accordion: 0 };
+  const result = { navigation: 0, links: 0, carousel: 0, contactForm: 0, accordion: 0 };
   const visit = (items: ElementorElement[]): void => {
     for (const item of items) {
       if (item.widgetType === "figmapress-nav") result.navigation += 1;
+      if (item.widgetType === "figmapress-link") result.links += 1;
+      if (item.widgetType === "figmapress-carousel") result.carousel += 1;
       if (item.widgetType === "figmapress-contact-form") result.contactForm += 1;
       if (item.widgetType === "figmapress-accordion") result.accordion += 1;
       visit(item.elements);

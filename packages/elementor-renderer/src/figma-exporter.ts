@@ -88,6 +88,25 @@ interface AccordionPlan {
   items: AccordionItem[];
 }
 
+interface FunctionalLink {
+  url: string;
+  label: string;
+  external: boolean;
+}
+
+interface CarouselItem {
+  id: string;
+  imageUrl: string;
+  title: string;
+  link: FunctionalLink | null;
+}
+
+interface CarouselPlan {
+  items: CarouselItem[];
+  previousIconUrl: string;
+  nextIconUrl: string;
+}
+
 class ElementIdFactory {
   private readonly seen = new Set<string>();
 
@@ -342,6 +361,8 @@ function renderElement(
   if (navigation) return navigation;
   const contactForm = contactFormElement(node, bounds, parentBounds, parentNode, context);
   if (contactForm) return contactForm;
+  const carousel = carouselElement(node, bounds, parentBounds, parentNode, context);
+  if (carousel) return carousel;
 
   const asset = visualAsset(node, context.assets);
   if (asset) return imageElement(node, bounds, parentBounds, parentNode, asset, context);
@@ -356,6 +377,10 @@ function renderElement(
     .filter((element): element is ElementorElement => element !== null);
   if (accordion) {
     children.push(accordionElement(node, accordion, bounds, node, context));
+  }
+  const action = functionalLink(node, context);
+  if (action) {
+    children.push(linkOverlayElement(node, action, context));
   }
   const hasVisibleStyle = Boolean(
     solidColor(node.fills)
@@ -410,11 +435,17 @@ function navigationElement(
     items: menuTexts.map((item, index) => ({
       _id: hashId(`${item.id}:menu:${index}`),
       label: item.characters?.trim() ?? "",
-      url: { url: menuAnchor(item.characters ?? "", context), is_external: "", nofollow: "" },
+      url: elementorUrl(
+        functionalLink(item, context, false)
+          ?? inferredSectionLink(item.characters ?? "", context),
+      ),
     })),
     cta_label: ctaText?.characters?.trim() || "お問い合わせ",
-    cta_url: { url: anchorHref("contact", context), is_external: "", nofollow: "" },
-    home_url: { url: anchorHref("top", context), is_external: "", nofollow: "" },
+    cta_url: elementorUrl(
+      functionalLink(ctaText ?? node, context, false)
+        ?? inferredSectionLink("お問い合わせ", context),
+    ),
+    home_url: elementorUrl(inferredSectionLink("トップ", context)),
     background_color: solidColor(background?.fills) ?? "rgba(255,255,255,0.92)",
     accent_color: solidColor(topBar?.fills) ?? "#D10B2C",
     text_color: solidColor(menuTexts[0]?.fills) ?? "#202020",
@@ -487,6 +518,111 @@ function contactFormElement(
   };
   applyEffects(settings, node);
   return widget(context.ids, node.id, "figmapress-contact-form", settings);
+}
+
+function carouselElement(
+  node: FigmaNode,
+  bounds: FigmaBounds,
+  parentBounds: FigmaBounds,
+  parentNode: FigmaNode,
+  context: RenderContext,
+): ElementorElement | null {
+  const plan = carouselPlan(node, context);
+  if (!plan) return null;
+  const itemsPerView = context.variant === "mobile"
+    ? 1
+    : Math.min(3, plan.items.length);
+  const settings: ElementorSettings = {
+    ...widgetPosition(node, bounds, parentBounds, parentNode),
+    figmapress_node_id: node.id,
+    figmapress_node_name: node.name,
+    items: plan.items.map((item, index) => ({
+      _id: hashId(`${item.id}:carousel:${index}`),
+      image: { url: item.imageUrl, id: "", alt: item.title, source: "library" },
+      title: item.title,
+      url: item.link ? elementorUrl(item.link) : { url: "", is_external: "", nofollow: "" },
+    })),
+    previous_icon: plan.previousIconUrl
+      ? { url: plan.previousIconUrl, id: "", alt: "前へ", source: "library" }
+      : undefined,
+    next_icon: plan.nextIconUrl
+      ? { url: plan.nextIconUrl, id: "", alt: "次へ", source: "library" }
+      : undefined,
+    items_per_view: itemsPerView,
+    items_per_view_mobile: 1,
+    show_dots: "yes",
+    loop: plan.items.length > itemsPerView ? "yes" : "",
+    autoplay: "",
+    accent_color: solidColor(node.strokes) ?? "#D10B2C",
+  };
+  applyEffects(settings, node);
+  return widget(context.ids, node.id, "figmapress-carousel", settings);
+}
+
+function carouselPlan(node: FigmaNode, context: RenderContext): CarouselPlan | null {
+  if (!/(?:\{wp:carousel\}|carousel|slider|スライダー|カルーセル)/i.test(node.name)) {
+    return null;
+  }
+  const directChildren = (node.children ?? []).filter((child) =>
+    /(?:carousel|slider).?item|カルーセル.?項目/i.test(child.name),
+  );
+  const candidates = directChildren.length >= 2
+    ? directChildren
+    : (node.children ?? []).filter((child) => {
+      const visual = largestVisualNode(child, context.assets);
+      return Boolean(visual && !/(?:next|prev|arrow|dot|次へ|前へ)/i.test(child.name));
+    });
+  const items = candidates
+    .map((item, index): CarouselItem | null => {
+      const visual = largestVisualNode(item, context.assets);
+      const imageUrl = visual ? visualUrl(visual, context.assets) : null;
+      if (!imageUrl) return null;
+      const textNodes = [item, ...descendants(item)]
+        .filter((child) => child.type === "TEXT" && child.characters?.trim())
+        .sort((left, right) => {
+          const y = (left.absoluteBoundingBox?.y ?? 0) - (right.absoluteBoundingBox?.y ?? 0);
+          return y || (left.absoluteBoundingBox?.x ?? 0) - (right.absoluteBoundingBox?.x ?? 0);
+        });
+      const title = textNodes.at(-1)?.characters?.trim()
+        || (/^\d+$/.test(item.name.trim()) ? `スライド ${index + 1}` : item.name.trim())
+        || `スライド ${index + 1}`;
+      return {
+        id: item.id,
+        imageUrl,
+        title,
+        link: functionalLink(item, context, false),
+      };
+    })
+    .filter((item): item is CarouselItem => item !== null);
+  if (items.length < 2) return null;
+
+  const all = descendants(node);
+  const previous = all.find((child) => /(?:carousel|slider).?(?:prev|previous)|前へ/i.test(child.name));
+  const next = all.find((child) => /(?:carousel|slider).?next|次へ/i.test(child.name));
+  const previousVisual = previous ? largestVisualNode(previous, context.assets) : null;
+  const nextVisual = next ? largestVisualNode(next, context.assets) : null;
+  return {
+    items,
+    previousIconUrl: previous
+      ? visualUrl(previous, context.assets)
+        ?? (previousVisual ? visualUrl(previousVisual, context.assets) : null)
+        ?? ""
+      : "",
+    nextIconUrl: next
+      ? visualUrl(next, context.assets)
+        ?? (nextVisual ? visualUrl(nextVisual, context.assets) : null)
+        ?? ""
+      : "",
+  };
+}
+
+function largestVisualNode(node: FigmaNode, assets: FigmaRenderAssets): FigmaNode | null {
+  return [node, ...descendants(node)]
+    .filter((candidate) => {
+      if (/(?:next|prev|arrow|dot|次へ|前へ)/i.test(candidate.name)) return false;
+      return Boolean(candidate.absoluteBoundingBox && visualUrl(candidate, assets));
+    })
+    .sort((left, right) => area(right) - area(left))[0] ?? null;
 }
 
 function accordionPlan(node: FigmaNode): AccordionPlan | null {
@@ -680,6 +816,15 @@ function menuAnchor(label: string, context: RenderContext): string {
   return anchorHref(slug(label) || "section", context);
 }
 
+function inferredSectionLink(label: string, context: RenderContext): FunctionalLink {
+  const anchor = sectionAnchorFromText(label);
+  return {
+    url: anchor ? anchorHref(anchor, context) : menuAnchor(label, context),
+    label: label.trim() || "リンク",
+    external: false,
+  };
+}
+
 function anchorId(value: string, context: RenderContext): string {
   return `${value}${context.anchorSuffix}`;
 }
@@ -713,6 +858,157 @@ function slug(value: string): string {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
+function functionalLink(
+  node: FigmaNode,
+  context: RenderContext,
+  infer = true,
+): FunctionalLink | null {
+  const related = [node, ...descendants(node)];
+  for (const candidate of related) {
+    for (const interaction of candidate.interactions ?? []) {
+      for (const action of interaction.actions ?? []) {
+        const url = typeof action.url === "string" ? action.url.trim() : "";
+        if (url) {
+          return {
+            url,
+            label: actionLabel(node),
+            external: /^https?:\/\//i.test(url) || action.openInNewTab === true,
+          };
+        }
+        const navigation = `${action.type ?? ""} ${action.navigation ?? ""}`.toUpperCase();
+        if (
+          typeof action.destinationId === "string"
+          && action.destinationId
+          && !/(?:OVERLAY|SWAP|BACK|CLOSE)/.test(navigation)
+        ) {
+          const destination = findNode(context.root, action.destinationId);
+          const anchor = destination?.id === context.root.id
+            ? "top"
+            : destination ? sectionAnchor(destination) : null;
+          if (anchor) {
+            return {
+              url: anchorHref(anchor, context),
+              label: actionLabel(node),
+              external: false,
+            };
+          }
+        }
+      }
+    }
+  }
+  if (!infer) return null;
+
+  const copy = node.type === "TEXT"
+    ? node.characters?.trim() ?? ""
+    : related
+      .filter((child) => child.type === "TEXT" && child.characters?.trim())
+      .slice(0, 12)
+      .map((child) => child.characters?.trim())
+      .join(" ");
+  const description = `${node.name} ${copy}`.trim();
+  const email = description.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0];
+  const phone = description.match(/(?:\+?\d[\d\s().-]{8,}\d)/)?.[0];
+  const explicitlyActionable = /(?:button|cta|link|card|電話|メール|privacy|トップ|menu.?item|nav.?item)/i.test(node.name)
+    || (
+      node.type === "TEXT"
+      && Boolean(
+        email
+        || phone
+        || /(?:こちら|(?:もっと)?見る|詳しく|トップへ|お問い合わせ|ご相談|送る|送信|プライバシー|→|＞|>)/i.test(copy),
+      )
+    );
+  if (!explicitlyActionable) return null;
+
+  if (email) return { url: `mailto:${email}`, label: copy || email, external: false };
+  if (phone && phone.replace(/\D/g, "").length >= 10) {
+    return {
+      url: `tel:${phone.replace(/[^\d+]/g, "")}`,
+      label: copy || phone,
+      external: false,
+    };
+  }
+  const anchor = sectionAnchorFromText(description);
+  if (anchor) {
+    return {
+      url: anchorHref(anchor, context),
+      label: copy || actionLabel(node),
+      external: false,
+    };
+  }
+  if (/プライバシー|privacy/i.test(description)) {
+    return { url: "/privacy-policy/", label: copy || "プライバシーポリシー", external: false };
+  }
+  return null;
+}
+
+function actionLabel(node: FigmaNode): string {
+  if (node.type === "TEXT" && node.characters?.trim()) return node.characters.trim();
+  return descendants(node)
+    .find((child) => child.type === "TEXT" && child.characters?.trim())
+    ?.characters?.trim()
+    || node.name
+    || "リンク";
+}
+
+function sectionAnchor(node: FigmaNode): string | null {
+  const copy = [node.name, ...descendants(node)
+    .filter((child) => child.type === "TEXT" && child.characters?.trim())
+    .slice(0, 20)
+    .map((child) => child.characters ?? "")]
+    .join(" ");
+  return sectionAnchorFromText(copy);
+}
+
+function sectionAnchorFromText(value: string): string | null {
+  if (/トップ|page.?top|\btop\b/i.test(value)) return "top";
+  if (/thought|message|想い|voice|現場の声/i.test(value)) return "thoughts";
+  if (/policy|policies|政策/i.test(value)) return "policies";
+  if (/activit|report|活動報告|news/i.test(value)) return "activities";
+  if (/profile|プロフィール/i.test(value)) return "profile";
+  if (/contact|相談|問合|声を聞かせて/i.test(value)) return "contact";
+  return null;
+}
+
+function findNode(root: FigmaNode, id: string): FigmaNode | null {
+  if (root.id === id) return root;
+  for (const child of root.children ?? []) {
+    const found = findNode(child, id);
+    if (found) return found;
+  }
+  return null;
+}
+
+function elementorUrl(link: FunctionalLink): Record<string, unknown> {
+  return {
+    url: link.url,
+    is_external: link.external ? "on" : "",
+    nofollow: "",
+  };
+}
+
+function linkOverlayElement(
+  node: FigmaNode,
+  action: FunctionalLink,
+  context: RenderContext,
+): ElementorElement {
+  return widget(context.ids, `${node.id}:link`, "figmapress-link", {
+    figmapress_node_id: `${node.id}:link`,
+    figmapress_node_name: `${node.name} / link`,
+    link_label: action.label,
+    link_url: elementorUrl(action),
+    _position: "absolute",
+    _offset_orientation_h: "start",
+    _offset_x: size(0, "%"),
+    _offset_orientation_v: "start",
+    _offset_y: size(0, "%"),
+    _element_width: "initial",
+    _element_custom_width: size(100, "%"),
+    _element_custom_width_tablet: size(100, "%"),
+    _element_custom_width_mobile: size(100, "%"),
+    z_index: 20,
+  });
+}
+
 function textElement(
   node: FigmaNode,
   bounds: FigmaBounds,
@@ -743,9 +1039,13 @@ function textElement(
   applyRotation(settings, node);
 
   const content = richRuns.map((run) => runHtml(run, context)).join("").replace(/\n/g, "<br>");
+  const action = functionalLink(node, context);
+  const linkedContent = action
+    ? `<a data-figmapress-functional-link href="${escapeAttribute(action.url)}"${action.external ? ' target="_blank" rel="noopener noreferrer"' : ""} style="color:inherit;text-decoration:inherit">${content}</a>`
+    : content;
   const whiteSpace = textWhiteSpace(node);
   const verticalAlign = textVerticalAlign(style.textAlignVertical);
-  settings.editor = `<div data-figmapress-text-box="${escapeAttribute(node.id)}" style="box-sizing:border-box;display:flex;flex-direction:column;font-family:${escapeAttribute(cssFont(style.fontFamily))};hyphens:none;justify-content:${verticalAlign};line-break:strict;margin:0;max-width:100%;${textBoxHeight(node, bounds, context)}overflow:${textOverflow(node)};overflow-wrap:normal;text-orientation:mixed;white-space:${whiteSpace};width:100%;word-break:${whiteSpace === "pre" ? "keep-all" : "normal"};writing-mode:horizontal-tb"><span style="display:block;max-width:100%">${content}</span></div>`;
+  settings.editor = `<div data-figmapress-text-box="${escapeAttribute(node.id)}" style="box-sizing:border-box;display:flex;flex-direction:column;font-family:${escapeAttribute(cssFont(style.fontFamily))};hyphens:none;justify-content:${verticalAlign};line-break:strict;margin:0;max-width:100%;${textBoxHeight(node, bounds, context)}overflow:${textOverflow(node)};overflow-wrap:normal;text-orientation:mixed;white-space:${whiteSpace};width:100%;word-break:${whiteSpace === "pre" ? "keep-all" : "normal"};writing-mode:horizontal-tb"><span style="display:block;max-width:100%">${linkedContent}</span></div>`;
   return widget(context.ids, node.id, "text-editor", settings);
 }
 

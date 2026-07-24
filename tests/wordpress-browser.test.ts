@@ -28,7 +28,13 @@ test("browser connection probes the Connector directly with Basic auth", async (
       wordpressVersion: "7.0.1",
       canEditPages: true,
       elementor: { active: true, version: "3.30.0" },
-      functionalWidgets: { navigation: true, contactForm: true, accordion: true },
+      functionalWidgets: {
+        navigation: true,
+        links: true,
+        carousel: true,
+        contactForm: true,
+        accordion: true,
+      },
       visualQa: {
         snapshot: true,
         documentUpdate: true,
@@ -45,6 +51,8 @@ test("browser connection probes the Connector directly with Basic auth", async (
   assert.equal(status.canEditPages, true);
   assert.deepEqual(status.functionalWidgets, {
     navigation: true,
+    links: true,
+    carousel: true,
     contactForm: true,
     accordion: true,
   });

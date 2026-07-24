@@ -3,7 +3,7 @@
  * Plugin Name:       FigmaPress Connector
  * Plugin URI:        https://github.com/kouki-tachibana-dot/figmapress-builder
  * Description:       Connects FigmaPress to Gutenberg and Elementor draft pages.
- * Version:           0.12.0
+ * Version:           0.13.0
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Update URI:        https://figmapress-builder.vercel.app/downloads/figmapress-connector.json
@@ -20,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 define( 'FIGMAPRESS_CONNECTOR_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FIGMAPRESS_CONNECTOR_URL', plugin_dir_url( __FILE__ ) );
-define( 'FIGMAPRESS_CONNECTOR_VERSION', '0.12.0' );
+define( 'FIGMAPRESS_CONNECTOR_VERSION', '0.13.0' );
 
 require_once FIGMAPRESS_CONNECTOR_DIR . 'includes/rest-api.php';
 require_once FIGMAPRESS_CONNECTOR_DIR . 'includes/contact-form.php';
@@ -228,6 +228,8 @@ function figmapress_connector_register_elementor_widgets( $widgets_manager ) {
     }
     require_once FIGMAPRESS_CONNECTOR_DIR . 'includes/elementor-widgets.php';
     $widgets_manager->register( new FigmaPress_Nav_Widget() );
+    $widgets_manager->register( new FigmaPress_Link_Widget() );
+    $widgets_manager->register( new FigmaPress_Carousel_Widget() );
     $widgets_manager->register( new FigmaPress_Contact_Form_Widget() );
     $widgets_manager->register( new FigmaPress_Accordion_Widget() );
 }

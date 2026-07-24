@@ -176,6 +176,217 @@ final class FigmaPress_Nav_Widget extends FigmaPress_Widget_Base {
     }
 }
 
+final class FigmaPress_Link_Widget extends FigmaPress_Widget_Base {
+    public function get_name() {
+        return 'figmapress-link';
+    }
+
+    public function get_title() {
+        return esc_html__( 'FigmaPress リンク領域', 'figmapress-connector' );
+    }
+
+    public function get_icon() {
+        return 'eicon-editor-link';
+    }
+
+    protected function register_controls() {
+        $this->start_controls_section(
+            'content',
+            array( 'label' => esc_html__( 'リンク', 'figmapress-connector' ) )
+        );
+        $this->add_control(
+            'link_label',
+            array(
+                'label'   => esc_html__( '読み上げラベル', 'figmapress-connector' ),
+                'type'    => \Elementor\Controls_Manager::TEXT,
+                'default' => esc_html__( 'リンク', 'figmapress-connector' ),
+            )
+        );
+        $this->add_control(
+            'link_url',
+            array(
+                'label'   => esc_html__( 'リンク先', 'figmapress-connector' ),
+                'type'    => \Elementor\Controls_Manager::URL,
+                'default' => array( 'url' => '#' ),
+            )
+        );
+        $this->end_controls_section();
+    }
+
+    protected function render() {
+        $settings = $this->get_settings_for_display();
+        $url      = isset( $settings['link_url']['url'] ) ? $settings['link_url']['url'] : '';
+        $label    = isset( $settings['link_label'] ) && '' !== $settings['link_label']
+            ? $settings['link_label']
+            : esc_html__( 'リンク', 'figmapress-connector' );
+        $external = ! empty( $settings['link_url']['is_external'] );
+        $nofollow = ! empty( $settings['link_url']['nofollow'] );
+        if ( '' === $url ) {
+            return;
+        }
+        ?>
+        <a class="figmapress-link" href="<?php echo esc_url( $url ); ?>" aria-label="<?php echo esc_attr( $label ); ?>"<?php echo $external ? ' target="_blank"' : ''; ?><?php echo $external || $nofollow ? ' rel="' . esc_attr( trim( ( $external ? 'noopener noreferrer ' : '' ) . ( $nofollow ? 'nofollow' : '' ) ) ) . '"' : ''; ?>><span class="screen-reader-text"><?php echo esc_html( $label ); ?></span></a>
+        <?php
+    }
+}
+
+final class FigmaPress_Carousel_Widget extends FigmaPress_Widget_Base {
+    public function get_name() {
+        return 'figmapress-carousel';
+    }
+
+    public function get_title() {
+        return esc_html__( 'FigmaPress カルーセル', 'figmapress-connector' );
+    }
+
+    public function get_icon() {
+        return 'eicon-slider-album';
+    }
+
+    protected function register_controls() {
+        $this->start_controls_section(
+            'content',
+            array( 'label' => esc_html__( 'カルーセル', 'figmapress-connector' ) )
+        );
+        $repeater = new \Elementor\Repeater();
+        $repeater->add_control(
+            'image',
+            array(
+                'label' => esc_html__( '画像', 'figmapress-connector' ),
+                'type'  => \Elementor\Controls_Manager::MEDIA,
+            )
+        );
+        $repeater->add_control(
+            'title',
+            array(
+                'label'   => esc_html__( 'タイトル', 'figmapress-connector' ),
+                'type'    => \Elementor\Controls_Manager::TEXT,
+                'default' => esc_html__( 'スライド', 'figmapress-connector' ),
+            )
+        );
+        $repeater->add_control(
+            'url',
+            array(
+                'label' => esc_html__( 'リンク', 'figmapress-connector' ),
+                'type'  => \Elementor\Controls_Manager::URL,
+            )
+        );
+        $this->add_control(
+            'items',
+            array(
+                'label'       => esc_html__( 'スライド', 'figmapress-connector' ),
+                'type'        => \Elementor\Controls_Manager::REPEATER,
+                'fields'      => $repeater->get_controls(),
+                'title_field' => '{{{ title }}}',
+            )
+        );
+        foreach ( array(
+            'items_per_view'        => array( 'PC表示枚数', 3 ),
+            'items_per_view_mobile' => array( 'スマホ表示枚数', 1 ),
+        ) as $key => $control ) {
+            $this->add_control(
+                $key,
+                array(
+                    'label'   => esc_html__( $control[0], 'figmapress-connector' ),
+                    'type'    => \Elementor\Controls_Manager::NUMBER,
+                    'default' => $control[1],
+                    'min'     => 1,
+                    'max'     => 6,
+                    'step'    => 1,
+                )
+            );
+        }
+        foreach ( array(
+            'show_dots' => array( 'ドットを表示', 'yes' ),
+            'loop'      => array( 'ループ', '' ),
+            'autoplay'  => array( '自動再生', '' ),
+        ) as $key => $control ) {
+            $this->add_control(
+                $key,
+                array(
+                    'label'        => esc_html__( $control[0], 'figmapress-connector' ),
+                    'type'         => \Elementor\Controls_Manager::SWITCHER,
+                    'return_value' => 'yes',
+                    'default'      => $control[1],
+                )
+            );
+        }
+        $this->add_control(
+            'previous_icon',
+            array(
+                'label' => esc_html__( '前へアイコン', 'figmapress-connector' ),
+                'type'  => \Elementor\Controls_Manager::MEDIA,
+            )
+        );
+        $this->add_control(
+            'next_icon',
+            array(
+                'label' => esc_html__( '次へアイコン', 'figmapress-connector' ),
+                'type'  => \Elementor\Controls_Manager::MEDIA,
+            )
+        );
+        $this->end_controls_section();
+
+        $this->start_controls_section(
+            'colors',
+            array(
+                'label' => esc_html__( '色', 'figmapress-connector' ),
+                'tab'   => \Elementor\Controls_Manager::TAB_STYLE,
+            )
+        );
+        $this->add_control(
+            'accent_color',
+            array(
+                'label'   => esc_html__( 'アクセント色', 'figmapress-connector' ),
+                'type'    => \Elementor\Controls_Manager::COLOR,
+                'default' => '#D10B2C',
+            )
+        );
+        $this->end_controls_section();
+    }
+
+    protected function render() {
+        $settings       = $this->get_settings_for_display();
+        $items          = isset( $settings['items'] ) && is_array( $settings['items'] ) ? $settings['items'] : array();
+        $count          = count( $items );
+        $per_view       = max( 1, min( 6, absint( isset( $settings['items_per_view'] ) ? $settings['items_per_view'] : 3 ) ) );
+        $mobile_view    = max( 1, min( 6, absint( isset( $settings['items_per_view_mobile'] ) ? $settings['items_per_view_mobile'] : 1 ) ) );
+        $accent         = figmapress_connector_css_color( isset( $settings['accent_color'] ) ? $settings['accent_color'] : '', '#D10B2C' );
+        $previous_icon  = isset( $settings['previous_icon']['url'] ) ? $settings['previous_icon']['url'] : '';
+        $next_icon      = isset( $settings['next_icon']['url'] ) ? $settings['next_icon']['url'] : '';
+        if ( 0 === $count ) {
+            return;
+        }
+        ?>
+        <section class="figmapress-carousel" aria-label="<?php esc_attr_e( 'スライドショー', 'figmapress-connector' ); ?>" data-per-view="<?php echo esc_attr( $per_view ); ?>" data-mobile-per-view="<?php echo esc_attr( $mobile_view ); ?>" data-loop="<?php echo 'yes' === ( isset( $settings['loop'] ) ? $settings['loop'] : '' ) ? 'true' : 'false'; ?>" data-autoplay="<?php echo 'yes' === ( isset( $settings['autoplay'] ) ? $settings['autoplay'] : '' ) ? 'true' : 'false'; ?>" style="--figmapress-accent:<?php echo esc_attr( $accent ); ?>" tabindex="0">
+            <div class="figmapress-carousel__viewport">
+                <div class="figmapress-carousel__track">
+                    <?php foreach ( $items as $index => $item ) :
+                        $title    = isset( $item['title'] ) && '' !== $item['title'] ? $item['title'] : sprintf( esc_html__( 'スライド %d', 'figmapress-connector' ), $index + 1 );
+                        $image    = isset( $item['image']['url'] ) ? $item['image']['url'] : '';
+                        $url      = isset( $item['url']['url'] ) ? $item['url']['url'] : '';
+                        $external = ! empty( $item['url']['is_external'] );
+                        ?>
+                        <article class="figmapress-carousel__slide" role="group" aria-roledescription="<?php esc_attr_e( 'スライド', 'figmapress-connector' ); ?>" aria-label="<?php echo esc_attr( sprintf( '%d / %d', $index + 1, $count ) ); ?>">
+                            <?php if ( '' !== $url ) : ?><a class="figmapress-carousel__item-link" href="<?php echo esc_url( $url ); ?>"<?php echo $external ? ' target="_blank" rel="noopener noreferrer"' : ''; ?>><?php endif; ?>
+                            <?php if ( $image ) : ?><img src="<?php echo esc_url( $image ); ?>" alt="<?php echo esc_attr( $title ); ?>" loading="lazy"><?php endif; ?>
+                            <?php if ( $title ) : ?><h3><?php echo esc_html( $title ); ?></h3><?php endif; ?>
+                            <?php if ( '' !== $url ) : ?></a><?php endif; ?>
+                        </article>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <button class="figmapress-carousel__button figmapress-carousel__button--previous" type="button" aria-label="<?php esc_attr_e( '前のスライド', 'figmapress-connector' ); ?>"><?php if ( $previous_icon ) : ?><img src="<?php echo esc_url( $previous_icon ); ?>" alt=""><?php else : ?><span aria-hidden="true">‹</span><?php endif; ?></button>
+            <button class="figmapress-carousel__button figmapress-carousel__button--next" type="button" aria-label="<?php esc_attr_e( '次のスライド', 'figmapress-connector' ); ?>"><?php if ( $next_icon ) : ?><img src="<?php echo esc_url( $next_icon ); ?>" alt=""><?php else : ?><span aria-hidden="true">›</span><?php endif; ?></button>
+            <?php if ( 'yes' === ( isset( $settings['show_dots'] ) ? $settings['show_dots'] : 'yes' ) ) : ?>
+                <div class="figmapress-carousel__dots" role="group" aria-label="<?php esc_attr_e( 'スライドを選択', 'figmapress-connector' ); ?>"></div>
+            <?php endif; ?>
+            <p class="screen-reader-text figmapress-carousel__status" aria-live="polite" aria-atomic="true"></p>
+        </section>
+        <?php
+    }
+}
+
 final class FigmaPress_Contact_Form_Widget extends FigmaPress_Widget_Base {
     public function get_name() {
         return 'figmapress-contact-form';

@@ -945,6 +945,159 @@ test("Figma interaction layers become functional Elementor widgets", async () =>
   assert.ok(elements.some((element) => element.settings._element_id === "thoughts"));
 });
 
+test("Figma carousel and prototype actions become editable functional widgets", async () => {
+  const slide = (
+    id: string,
+    x: number,
+    title: string,
+    imageRef: string,
+    url?: string,
+  ) => ({
+    id,
+    name: "Comp/Carousel-Item",
+    type: "FRAME",
+    absoluteBoundingBox: { x, y: 300, width: 480, height: 360 },
+    interactions: url ? [{
+      actions: [{ type: "URL", url, openInNewTab: true }],
+    }] : undefined,
+    children: [
+      {
+        id: `${id}:image`,
+        name: `${title} image`,
+        type: "RECTANGLE",
+        absoluteBoundingBox: { x, y: 300, width: 480, height: 300 },
+        fills: [{ type: "IMAGE", imageRef, scaleMode: "FILL" }],
+      },
+      {
+        id: `${id}:title`,
+        name: "Title",
+        type: "TEXT",
+        characters: title,
+        absoluteBoundingBox: { x: x + 20, y: 620, width: 440, height: 28 },
+        style: { fontSize: 18, fontWeight: 600 },
+      },
+    ],
+  });
+  const file: MockFigmaFile = {
+    document: {
+      id: "0:0",
+      name: "Functional carousel",
+      type: "DOCUMENT",
+      children: [{
+        id: "1:0",
+        name: "Page",
+        type: "CANVAS",
+        children: [{
+          id: "46:12",
+          name: "PC-page",
+          type: "FRAME",
+          absoluteBoundingBox: { x: 0, y: 0, width: 1920, height: 1800 },
+          children: [
+            {
+              id: "20:0",
+              name: "Comp/Carousel",
+              type: "FRAME",
+              absoluteBoundingBox: { x: 150, y: 260, width: 1620, height: 460 },
+              children: [
+                slide("20:1", 190, "活動報告1", "slide-1", "https://example.com/report-1"),
+                slide("20:2", 710, "活動報告2", "slide-2"),
+                slide("20:3", 1230, "活動報告3", "slide-3"),
+                {
+                  id: "20:4",
+                  name: "Comp/Carousel-Prev",
+                  type: "RECTANGLE",
+                  absoluteBoundingBox: { x: 150, y: 440, width: 28, height: 44 },
+                  fills: [{ type: "IMAGE", imageRef: "arrow-prev", scaleMode: "FIT" }],
+                },
+                {
+                  id: "20:5",
+                  name: "Comp/Carousel-Next",
+                  type: "RECTANGLE",
+                  absoluteBoundingBox: { x: 1742, y: 440, width: 28, height: 44 },
+                  fills: [{ type: "IMAGE", imageRef: "arrow-next", scaleMode: "FIT" }],
+                },
+              ],
+            },
+            {
+              id: "30:0",
+              name: "Consultation Button Background",
+              type: "RECTANGLE",
+              absoluteBoundingBox: { x: 150, y: 800, width: 350, height: 84 },
+              fills: [{ type: "SOLID", color: { r: 0.82, g: 0.04, b: 0.17 } }],
+              interactions: [{
+                actions: [{ type: "NODE", destinationId: "40:0", navigation: "NAVIGATE" }],
+              }],
+            },
+            {
+              id: "31:0",
+              name: "Email",
+              type: "TEXT",
+              characters: "hello@example.com",
+              absoluteBoundingBox: { x: 150, y: 920, width: 240, height: 30 },
+              style: { fontSize: 18, fontWeight: 500 },
+            },
+            {
+              id: "32:0",
+              name: "Section heading",
+              type: "TEXT",
+              characters: "活動報告",
+              absoluteBoundingBox: { x: 700, y: 920, width: 240, height: 40 },
+              style: { fontSize: 32, fontWeight: 700 },
+            },
+            {
+              id: "40:0",
+              name: "Sec/Contact",
+              type: "FRAME",
+              absoluteBoundingBox: { x: 0, y: 1100, width: 1920, height: 600 },
+              fills: [{ type: "SOLID", color: { r: 1, g: 0.9, b: 0.92 } }],
+            },
+          ],
+        }],
+      }],
+    },
+  };
+  const result = await convertFile(file, {}, {
+    "slide-1": "https://images.example/slide-1.jpg",
+    "slide-2": "https://images.example/slide-2.jpg",
+    "slide-3": "https://images.example/slide-3.jpg",
+    "arrow-prev": "https://images.example/arrow-prev.svg",
+    "arrow-next": "https://images.example/arrow-next.svg",
+  });
+  const elements: typeof result.elementorTemplate.content = [];
+  const visit = (items: typeof result.elementorTemplate.content): void => {
+    for (const item of items) {
+      elements.push(item);
+      visit(item.elements);
+    }
+  };
+  visit(result.elementorTemplate.content);
+
+  const carousel = elements.find((element) => element.widgetType === "figmapress-carousel");
+  const link = elements.find((element) => element.widgetType === "figmapress-link");
+  const email = elements.find((element) =>
+    element.widgetType === "text-editor"
+    && String(element.settings.editor).includes("hello@example.com"),
+  );
+  const plainHeading = elements.find((element) =>
+    element.widgetType === "text-editor"
+    && String(element.settings.editor).includes(">活動報告<"),
+  );
+  const items = carousel?.settings.items as Array<{
+    title: string;
+    url: { url: string; is_external: string };
+  }>;
+  assert.equal(items.length, 3);
+  assert.equal(items[0]?.title, "活動報告1");
+  assert.equal(items[0]?.url.url, "https://example.com/report-1");
+  assert.equal(items[0]?.url.is_external, "on");
+  assert.equal(carousel?.settings.items_per_view, 3);
+  assert.equal((link?.settings.link_url as { url: string }).url, "#contact");
+  assert.match(String(email?.settings.editor), /href="mailto:hello@example\.com"/);
+  assert.doesNotMatch(String(plainHeading?.settings.editor), /data-figmapress-functional-link/);
+  assert.equal(result.qualityReport?.metrics.functionalWidgets.carousel, 1);
+  assert.equal(result.qualityReport?.metrics.functionalWidgets.links, 1);
+});
+
 test("Figma Auto Layout becomes normal-flow Elementor Flexbox with a quality report", async () => {
   const file: MockFigmaFile = {
     document: {
