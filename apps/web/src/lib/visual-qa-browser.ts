@@ -73,6 +73,27 @@ function waitForImage(image: HTMLImageElement, timeoutMs: number): Promise<void>
   });
 }
 
+async function waitForFonts(
+  document: Document,
+  timeoutMs: number,
+): Promise<void> {
+  if (!document.fonts) return;
+  let timeout = 0;
+  try {
+    await Promise.race([
+      document.fonts.ready.then(() => undefined),
+      new Promise<never>((_resolve, reject) => {
+        timeout = window.setTimeout(
+          () => reject(new Error("Webフォントの読み込みがタイムアウトしました。")),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 async function loadReferenceImage(url: string): Promise<HTMLImageElement> {
   const image = new Image();
   image.decoding = "async";
@@ -175,7 +196,7 @@ export async function runVisualQa(
     await Promise.all(
       Array.from(frameDocument.images, (image) => waitForImage(image, 8_000)),
     );
-    await frameDocument.fonts?.ready;
+    await waitForFonts(frameDocument, 12_000);
     const visiblePreviews = Array.from(
       frameDocument.querySelectorAll<HTMLElement>(".figmapress-figma-preview"),
     ).filter(

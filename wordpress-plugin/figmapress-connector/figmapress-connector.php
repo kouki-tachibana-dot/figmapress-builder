@@ -3,7 +3,7 @@
  * Plugin Name:       FigmaPress Connector
  * Plugin URI:        https://github.com/kouki-tachibana-dot/figmapress-builder
  * Description:       Connects FigmaPress to Gutenberg and Elementor draft pages.
- * Version:           0.9.0
+ * Version:           0.10.0
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Update URI:        https://figmapress-builder.vercel.app/downloads/figmapress-connector.json
@@ -20,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 define( 'FIGMAPRESS_CONNECTOR_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FIGMAPRESS_CONNECTOR_URL', plugin_dir_url( __FILE__ ) );
-define( 'FIGMAPRESS_CONNECTOR_VERSION', '0.9.0' );
+define( 'FIGMAPRESS_CONNECTOR_VERSION', '0.10.0' );
 
 require_once FIGMAPRESS_CONNECTOR_DIR . 'includes/rest-api.php';
 require_once FIGMAPRESS_CONNECTOR_DIR . 'includes/contact-form.php';
@@ -104,6 +104,110 @@ function figmapress_connector_register_elementor_assets() {
 }
 add_action( 'wp_enqueue_scripts', 'figmapress_connector_register_elementor_assets' );
 add_action( 'elementor/frontend/before_register_scripts', 'figmapress_connector_register_elementor_assets' );
+
+/** Google-hosted families that FigmaPress may request from a saved manifest. */
+function figmapress_connector_supported_webfont_families() {
+    return array(
+        'BIZ UDPGothic',
+        'BIZ UDPMincho',
+        'IBM Plex Sans JP',
+        'Inter',
+        'Lato',
+        'M PLUS 1p',
+        'M PLUS Rounded 1c',
+        'Montserrat',
+        'Noto Sans JP',
+        'Noto Serif JP',
+        'Open Sans',
+        'Poppins',
+        'Roboto',
+        'Shippori Mincho',
+        'Zen Kaku Gothic New',
+        'Zen Maru Gothic',
+    );
+}
+
+/**
+ * Read a bounded webfont manifest generated from the Figma text styles.
+ *
+ * The allowlist prevents saved Elementor data from turning this into an
+ * arbitrary remote stylesheet loader.
+ */
+function figmapress_connector_page_webfonts( $post_id ) {
+    $settings = get_post_meta( $post_id, '_elementor_page_settings', true );
+    if ( is_string( $settings ) ) {
+        $decoded  = json_decode( $settings, true );
+        $settings = is_array( $decoded ) ? $decoded : array();
+    }
+    $manifest = is_array( $settings ) && isset( $settings['figmapress_webfonts'] ) && is_array( $settings['figmapress_webfonts'] )
+        ? $settings['figmapress_webfonts']
+        : array();
+    $supported = figmapress_connector_supported_webfont_families();
+    $fonts     = array();
+
+    foreach ( array_slice( $manifest, 0, 4 ) as $font ) {
+        $family = is_array( $font ) && isset( $font['family'] )
+            ? sanitize_text_field( $font['family'] )
+            : '';
+        if ( ! in_array( $family, $supported, true ) ) {
+            continue;
+        }
+        $weights = array();
+        foreach ( isset( $font['weights'] ) && is_array( $font['weights'] ) ? array_slice( $font['weights'], 0, 6 ) : array() as $weight ) {
+            $normalized = absint( $weight );
+            if ( $normalized >= 100 && $normalized <= 900 && 0 === $normalized % 100 ) {
+                $weights[] = $normalized;
+            }
+        }
+        $weights = array_values( array_unique( $weights ) );
+        sort( $weights, SORT_NUMERIC );
+        if ( ! $weights ) {
+            $weights = array( 400 );
+        }
+        $fonts[ $family ] = $weights;
+    }
+
+    return $fonts;
+}
+
+function figmapress_connector_webfont_stylesheet_url( $post_id ) {
+    $families = array();
+    foreach ( figmapress_connector_page_webfonts( $post_id ) as $family => $weights ) {
+        $encoded_family = str_replace( '%20', '+', rawurlencode( $family ) );
+        $families[]     = 'family=' . $encoded_family . ':wght@' . implode( ';', $weights );
+    }
+    if ( ! $families ) {
+        return '';
+    }
+    return esc_url_raw(
+        'https://fonts.googleapis.com/css2?' . implode( '&', $families ) . '&display=swap'
+    );
+}
+
+/**
+ * Load only the font families used by the current FigmaPress Elementor page.
+ * This is independent of Elementor's optional local Google Fonts setting.
+ */
+function figmapress_connector_enqueue_page_webfonts( $post_id = 0 ) {
+    $post_id = absint( $post_id );
+    if ( ! $post_id ) {
+        $post_id = get_queried_object_id();
+    }
+    if ( ! $post_id || ! get_post_meta( $post_id, '_figmapress_request_id', true ) ) {
+        return;
+    }
+    $url = figmapress_connector_webfont_stylesheet_url( $post_id );
+    if ( '' === $url ) {
+        return;
+    }
+    wp_enqueue_style(
+        'figmapress-page-webfonts-' . $post_id,
+        $url,
+        array(),
+        null
+    );
+}
+add_action( 'wp_enqueue_scripts', 'figmapress_connector_enqueue_page_webfonts', 20 );
 
 /** Group the functional widgets together in Elementor's widget panel. */
 function figmapress_connector_register_elementor_category( $elements_manager ) {

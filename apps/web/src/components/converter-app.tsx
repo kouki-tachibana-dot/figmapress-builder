@@ -38,7 +38,7 @@ const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.7.0";
-const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.9.0";
+const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.10.0";
 
 function versionAtLeast(version: string | undefined, minimum: string): boolean {
   if (!version) return false;
@@ -197,6 +197,7 @@ interface WordPressStatus {
     snapshot: boolean;
     documentUpdate: boolean;
     revisions: boolean;
+    webfonts?: boolean;
   };
   canEditPages: boolean;
 }
@@ -293,11 +294,45 @@ function downloadText(filename: string, value: string, type: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
 }
 
-function previewDocument(content: string): string {
+function webfontStylesheetUrl(value: unknown): string {
+  if (!Array.isArray(value)) return "";
+  const families = value
+    .slice(0, 4)
+    .flatMap((font) => {
+      if (!font || typeof font !== "object") return [];
+      const candidate = font as { family?: unknown; weights?: unknown };
+      if (
+        typeof candidate.family !== "string"
+        || !/^[A-Za-z0-9 ]{1,80}$/.test(candidate.family)
+      ) {
+        return [];
+      }
+      const weights = Array.isArray(candidate.weights)
+        ? candidate.weights
+          .slice(0, 6)
+          .filter(
+            (weight): weight is number =>
+              Number.isInteger(weight)
+              && weight >= 100
+              && weight <= 900
+              && weight % 100 === 0,
+          )
+        : [];
+      const family = encodeURIComponent(candidate.family).replace(/%20/g, "+");
+      return [`family=${family}:wght@${weights.length ? weights.join(";") : "400"}`];
+    });
+  return families.length
+    ? `https://fonts.googleapis.com/css2?${families.join("&")}&display=swap`
+    : "";
+}
+
+function previewDocument(content: string, webfonts?: unknown): string {
+  const webfontUrl = webfontStylesheetUrl(webfonts);
   return `<!doctype html>
 <html lang="ja"><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' https: data:; style-src 'unsafe-inline';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' https: data:; style-src 'unsafe-inline' https:; font-src https: data:;">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+${webfontUrl ? `<link rel="stylesheet" href="${webfontUrl}">` : ""}
 <style>
 *{box-sizing:border-box}body{margin:0;background:#f5f3ed;color:#13212a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.65}
 section{padding:64px clamp(24px,7vw,88px);max-width:1100px;margin:0 auto}h1,h2,h3{line-height:1.13;letter-spacing:-.035em}h1{font-size:clamp(36px,7vw,72px);margin:0 0 20px}h2{font-size:clamp(28px,5vw,48px);margin:0 0 28px}h3{font-size:20px}p{color:#53636c}a{display:inline-block;background:#c8ff61;color:#102029;text-decoration:none;font-weight:750;padding:13px 20px;border-radius:999px}
@@ -405,7 +440,12 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const [applicationPassword, setApplicationPassword] = useState("");
   const [confirmed, setConfirmed] = useState(false);
 
-  const srcDoc = output ? previewDocument(output.previewHtml) : "";
+  const srcDoc = output
+    ? previewDocument(
+        output.previewHtml,
+        output.elementorTemplate.page_settings.figmapress_webfonts,
+      )
+    : "";
   const connectorSupportsInteractions = wpStatus?.functionalWidgets
     ? Object.values(wpStatus.functionalWidgets).every(Boolean)
     : versionAtLeast(wpStatus?.connectorVersion, FUNCTIONAL_WIDGETS_CONNECTOR_VERSION);
@@ -413,6 +453,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     ? wpStatus.visualQa.snapshot
       && wpStatus.visualQa.documentUpdate
       && wpStatus.visualQa.revisions
+      && wpStatus.visualQa.webfonts === true
     : versionAtLeast(
         wpStatus?.connectorVersion,
         ACTUAL_VISUAL_QA_CONNECTOR_VERSION,
@@ -883,7 +924,10 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     try {
       return await compareVisualQuality(
         targetOutput,
-        previewDocument(targetOutput.previewHtml),
+        previewDocument(
+          targetOutput.previewHtml,
+          targetOutput.elementorTemplate.page_settings.figmapress_webfonts,
+        ),
         setVisualQaResults,
       );
     } catch (caught) {
@@ -1018,7 +1062,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.14.0 live</span>
+          <span className="status-pill"><i /> v0.15.0 live</span>
         </nav>
       </header>
 
@@ -1722,7 +1766,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.14.0</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.15.0</span></div>
       </footer>
     </main>
   );

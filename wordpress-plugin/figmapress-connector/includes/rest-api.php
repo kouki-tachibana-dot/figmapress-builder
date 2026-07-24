@@ -185,6 +185,7 @@ function figmapress_connector_rest_status() {
                 'snapshot'       => true,
                 'documentUpdate' => true,
                 'revisions'      => true,
+                'webfonts'       => true,
             ),
         )
     );
@@ -509,6 +510,7 @@ function figmapress_connector_rest_elementor_snapshot( WP_REST_Request $request 
         }
         wp_enqueue_style( 'elementor-frontend' );
         wp_enqueue_style( 'figmapress-elementor-interactions' );
+        figmapress_connector_enqueue_page_webfonts( $post_id );
 
         if ( class_exists( '\\Elementor\\Core\\Files\\CSS\\Post' ) ) {
             $post_css = new \Elementor\Core\Files\CSS\Post( $post_id );
@@ -564,6 +566,7 @@ function figmapress_connector_rest_elementor_snapshot( WP_REST_Request $request 
                 'styles'         => $styles,
                 'storedElements' => figmapress_connector_count_elementor_elements( figmapress_connector_read_elementor_data( $post_id ) ),
                 'embeddedAssetsBytes' => $embedded_asset_bytes,
+                'webfonts'       => array_keys( figmapress_connector_page_webfonts( $post_id ) ),
                 'generatedAt'    => gmdate( 'c' ),
             )
         );

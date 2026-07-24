@@ -55,6 +55,7 @@ export interface ElementorSnapshot {
   styles: string;
   storedElements: number;
   embeddedAssetsBytes?: number;
+  webfonts?: string[];
   generatedAt: string;
 }
 
@@ -88,6 +89,7 @@ export interface WordPressConnectionStatus {
     snapshot: boolean;
     documentUpdate: boolean;
     revisions: boolean;
+    webfonts?: boolean;
   };
   canEditPages: boolean;
 }
@@ -213,6 +215,7 @@ export async function probeWordPressConnection(
       snapshot?: unknown;
       documentUpdate?: unknown;
       revisions?: unknown;
+      webfonts?: unknown;
     };
   };
   return {
@@ -237,6 +240,7 @@ export async function probeWordPressConnection(
       snapshot: status.visualQa.snapshot === true,
       documentUpdate: status.visualQa.documentUpdate === true,
       revisions: status.visualQa.revisions === true,
+      webfonts: status.visualQa.webfonts === true,
     } : undefined,
     canEditPages: status.canEditPages === true,
   };

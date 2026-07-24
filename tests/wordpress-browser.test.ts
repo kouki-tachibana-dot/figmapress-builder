@@ -29,6 +29,12 @@ test("browser connection probes the Connector directly with Basic auth", async (
       canEditPages: true,
       elementor: { active: true, version: "3.30.0" },
       functionalWidgets: { navigation: true, contactForm: true, accordion: true },
+      visualQa: {
+        snapshot: true,
+        documentUpdate: true,
+        revisions: true,
+        webfonts: true,
+      },
     });
   });
 
@@ -39,6 +45,12 @@ test("browser connection probes the Connector directly with Basic auth", async (
     navigation: true,
     contactForm: true,
     accordion: true,
+  });
+  assert.deepEqual(status.visualQa, {
+    snapshot: true,
+    documentUpdate: true,
+    revisions: true,
+    webfonts: true,
   });
   assert.match(requests[0]?.url ?? "", /figmapress\/v1\/status$/);
   assert.match(requests[0]?.authorization ?? "", /^Basic /);
