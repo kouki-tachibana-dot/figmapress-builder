@@ -253,6 +253,13 @@ test("real Figma bounds produce a high-fidelity editable Elementor document", as
   const root = result.elementorTemplate.content[0];
   assert.equal(root?.elType, "container");
   assert.deepEqual(root?.settings.min_height, { unit: "vw", size: 83.333, sizes: [] });
+  assert.deepEqual(result.elementorTemplate.page_settings.figmapress_webfonts, [
+    {
+      family: "Noto Sans JP",
+      provider: "google",
+      weights: [400, 800],
+    },
+  ]);
 
   const elements: typeof result.elementorTemplate.content = [];
   const visit = (items: typeof result.elementorTemplate.content): void => {
@@ -313,6 +320,47 @@ test("real Figma bounds produce a high-fidelity editable Elementor document", as
     "pass",
   );
   assert.ok(result.warnings.some((warning) => warning.includes("高忠実度モード")));
+});
+
+test("Japanese Figma text records its webfont and deterministic glyph fallback", async () => {
+  const file: MockFigmaFile = {
+    document: {
+      id: "0:0",
+      name: "Webfont campaign",
+      type: "DOCUMENT",
+      children: [{
+        id: "1:0",
+        name: "Page",
+        type: "CANVAS",
+        children: [{
+          id: "46:12",
+          name: "PC-page",
+          type: "FRAME",
+          absoluteBoundingBox: { x: 0, y: 0, width: 1920, height: 600 },
+          children: [{
+            id: "46:17",
+            name: "Hero title",
+            type: "TEXT",
+            characters: "明石をずーっと元気なまちに！",
+            absoluteBoundingBox: { x: 150, y: 180, width: 900, height: 100 },
+            style: {
+              fontFamily: "Inter",
+              fontSize: 72,
+              fontWeight: 700,
+              lineHeightPx: 90,
+            },
+          }],
+        }],
+      }],
+    },
+  };
+
+  const result = await convertFile(file);
+  assert.deepEqual(result.elementorTemplate.page_settings.figmapress_webfonts, [
+    { family: "Inter", provider: "google", weights: [700] },
+    { family: "Noto Sans JP", provider: "google", weights: [700] },
+  ]);
+  assert.match(result.previewHtml, /font-family:Inter,&#039;Noto Sans JP&#039;/);
 });
 
 test("paired PC and SP frames become device-specific Elementor layouts", async () => {

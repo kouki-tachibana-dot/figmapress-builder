@@ -3,7 +3,7 @@ Contributors: figmapress
 Tags: blocks, figma, gutenberg, elementor
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 0.9.0
+Stable tag: 0.10.0
 License: GPLv2 or later
 
 Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
@@ -15,6 +15,12 @@ Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
    create a draft page containing figmapress/* blocks.
 
 == Changelog ==
+= 0.10.0 =
+* Figmaで使用している書体とウェイトを対象Elementorページだけに読み込み。
+* 日本語の代替字形をNoto Sans／Serif JPへ固定し、文字幅・改行・行高の環境差を低減。
+* 許可済みGoogle Fontsと件数上限だけを受け付け、任意の外部CSS読込を防止。
+* 実ページVisual QAでもWebフォントの読込完了後にPC／スマホを比較。
+
 = 0.9.0 =
 * 作成したElementor下書きを実際のフロントエンド描画でPC／スマホ再検証。
 * 実測で改善した位置補正だけを下書きへ保存し、悪化時は自動で元へ戻す。

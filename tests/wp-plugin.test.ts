@@ -196,6 +196,25 @@ test("Connector exposes authenticated Elementor snapshots with stable Figma node
   assert.match(plugin, /figmapress-figma-preview/);
 });
 
+test("Connector loads only allowlisted Figma webfonts for the owned page and snapshot", async () => {
+  const [plugin, rest] = await Promise.all([
+    readFile(pluginPath, "utf8"),
+    readFile(restApiPath, "utf8"),
+  ]);
+  assert.match(plugin, /figmapress_connector_supported_webfont_families/);
+  assert.match(plugin, /'Inter'/);
+  assert.match(plugin, /'Noto Sans JP'/);
+  assert.match(plugin, /array_slice\( \$manifest, 0, 4 \)/);
+  assert.match(plugin, /array_slice\( \$font\['weights'\], 0, 6 \)/);
+  assert.match(plugin, /in_array\( \$family, \$supported, true \)/);
+  assert.match(plugin, /https:\/\/fonts\.googleapis\.com\/css2\?/);
+  assert.match(plugin, /get_post_meta\( \$post_id, '_figmapress_request_id', true \)/);
+  assert.match(plugin, /add_action\( 'wp_enqueue_scripts', 'figmapress_connector_enqueue_page_webfonts', 20 \)/);
+  assert.match(rest, /figmapress_connector_enqueue_page_webfonts\( \$post_id \)/);
+  assert.match(rest, /'webfonts'\s*=>\s*array_keys\( figmapress_connector_page_webfonts\( \$post_id \) \)/);
+  assert.match(rest, /'webfonts'\s*=>\s*true/);
+});
+
 test("Connector revisions and verifies a matching draft before visual QA updates", async () => {
   const [plugin, rest] = await Promise.all([
     readFile(pluginPath, "utf8"),

@@ -3,7 +3,7 @@
 Figma の構造を、WordPress で扱える Gutenberg ブロックまたはElementorページへ変換する
 オープンソースの Web アプリ＋CLIです。
 
-## v0.14.0 — Live Elementor Closed-Loop QA
+## v0.15.0 — Deterministic Figma Typography
 
 **Web版:** [https://figmapress-builder.vercel.app](https://figmapress-builder.vercel.app)
 
@@ -37,6 +37,10 @@ Figma の構造を、WordPress で扱える Gutenberg ブロックまたはEleme
 - 実Elementor描画をFigma基準画像と再比較し、改善する追加補正だけを下書きへ保存
 - 実ページ補正が改善しない場合は元のElementor JSONへ自動で戻し、更新前リビジョンも保持
 - Connectorが実DOMへFigmaノードIDを付与し、実ページでもセクション単位の差分を追跡
+- Figmaの使用書体とウェイトを安全なマニフェストとしてElementorデータへ保存
+- FigmaPressページだけに必要なWebフォントを読み込み、日本語の代替字形もNoto Sans／Serif JPへ固定
+- Connectorの許可リストと件数上限で、保存データから任意の外部CSSを読み込めないよう制限
+- 実ページVisual QAはWebフォントの読込完了後に計測し、改行・文字幅・行高の揺れを低減
 - Elementor下書き前にVisual QAを必須化し、重大差分がある場合は明示確認してから送信
 - `PC-page` と `SP-page` を自動検出し、ElementorでPC／タブレット用とスマホ用を安全に切り替え
 - スマホ版の画像トリミング、文字位置、セクション順をPC版の縮小ではなくFigmaどおりに保持

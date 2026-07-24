@@ -32,6 +32,12 @@ interface RichRun {
   style: FigmaTypeStyle;
 }
 
+interface FigmaWebfont {
+  family: string;
+  weights: number[];
+  provider: "google";
+}
+
 interface AccordionItem {
   title: string;
   content: string;
@@ -165,6 +171,9 @@ export class FigmaElementorExporter {
       page_settings: {
         background_background: "classic",
         background_color: solidColor(root.fills) ?? "#FFFFFF",
+        figmapress_webfonts: figmaWebfonts(
+          [root, roots.mobile].filter((node): node is FigmaNode => Boolean(node)),
+        ),
         hide_title: "yes",
       },
       content,
@@ -508,6 +517,86 @@ function descendants(node: FigmaNode): FigmaNode[] {
   };
   for (const child of node.children ?? []) visit(child);
   return result;
+}
+
+const GOOGLE_WEBFONT_FAMILIES = new Set([
+  "BIZ UDPGothic",
+  "BIZ UDPMincho",
+  "IBM Plex Sans JP",
+  "Inter",
+  "Lato",
+  "M PLUS 1p",
+  "M PLUS Rounded 1c",
+  "Montserrat",
+  "Noto Sans JP",
+  "Noto Serif JP",
+  "Open Sans",
+  "Poppins",
+  "Roboto",
+  "Shippori Mincho",
+  "Zen Kaku Gothic New",
+  "Zen Maru Gothic",
+]);
+
+function normalizedFontWeight(value: number | undefined): number {
+  if (!Number.isFinite(value)) return 400;
+  return Math.min(900, Math.max(100, Math.round((value as number) / 100) * 100));
+}
+
+function figmaWebfonts(roots: FigmaNode[]): FigmaWebfont[] {
+  const weightsByFamily = new Map<string, Set<number>>();
+  const japaneseFallbackWeights = new Map<string, Set<number>>();
+  const add = (familyValue: string | undefined, weight: number | undefined): void => {
+    const family = familyValue?.replace(/['"\\]/g, "").trim();
+    if (!family || !GOOGLE_WEBFONT_FAMILIES.has(family)) return;
+    const weights = weightsByFamily.get(family) ?? new Set<number>();
+    weights.add(normalizedFontWeight(weight));
+    weightsByFamily.set(family, weights);
+  };
+
+  for (const root of roots) {
+    for (const node of [root, ...descendants(root)]) {
+      if (node.type !== "TEXT") continue;
+      const hasJapaneseCopy =
+        /[\u3000-\u30ff\u3400-\u9fff\uf900-\ufaff]/u.test(node.characters ?? "");
+      for (const run of textRuns(node)) {
+        add(run.style.fontFamily, run.style.fontWeight);
+        if (hasJapaneseCopy) {
+          const fallback =
+            run.style.fontFamily && /serif|mincho/i.test(run.style.fontFamily)
+              ? "Noto Serif JP"
+              : "Noto Sans JP";
+          const weights =
+            japaneseFallbackWeights.get(fallback) ?? new Set<number>();
+          weights.add(normalizedFontWeight(run.style.fontWeight));
+          japaneseFallbackWeights.set(fallback, weights);
+        }
+      }
+    }
+  }
+
+  for (const [fallback, weights] of japaneseFallbackWeights) {
+    const fallbackWeights = weightsByFamily.get(fallback) ?? new Set<number>();
+    for (const weight of weights) fallbackWeights.add(weight);
+    weightsByFamily.set(fallback, fallbackWeights);
+  }
+
+  const sorted = Array.from(weightsByFamily.entries())
+    .sort(([left], [right]) => left.localeCompare(right));
+  const fallbacks = sorted.filter(([family]) => /^Noto (?:Sans|Serif) JP$/.test(family));
+  const selected = [
+    ...sorted
+      .filter(([family]) => !/^Noto (?:Sans|Serif) JP$/.test(family))
+      .slice(0, Math.max(0, 4 - fallbacks.length)),
+    ...fallbacks.slice(0, 2),
+  ].sort(([left], [right]) => left.localeCompare(right));
+
+  return selected
+    .map(([family, weights]) => ({
+      family,
+      provider: "google",
+      weights: Array.from(weights).sort((left, right) => left - right).slice(0, 6),
+    }));
 }
 
 function isInsideInteractionBounds(node: FigmaNode, interaction: FigmaBounds): boolean {
@@ -1095,14 +1184,20 @@ function textDecoration(value: FigmaTypeStyle["textDecoration"]): string {
 
 function cssFont(value: string | undefined): string {
   const primary = value?.replace(/['\\]/g, "").trim();
+  const serif = Boolean(primary && /serif|mincho/i.test(primary));
+  const japaneseFallback = serif ? "Noto Serif JP" : "Noto Sans JP";
   const families = [
     primary,
-    "Noto Sans JP",
-    "Hiragino Kaku Gothic ProN",
-    "Yu Gothic",
-    "Meiryo",
-    "Arial",
-    "sans-serif",
+    japaneseFallback,
+    ...(serif
+      ? ["Hiragino Mincho ProN", "Yu Mincho", "Times New Roman", "serif"]
+      : [
+          "Hiragino Kaku Gothic ProN",
+          "Yu Gothic",
+          "Meiryo",
+          "Arial",
+          "sans-serif",
+        ]),
   ].filter((family, index, values): family is string =>
     Boolean(family)
     && values.findIndex(

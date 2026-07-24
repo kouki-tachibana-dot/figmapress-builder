@@ -20,6 +20,7 @@ export interface BrowserWordPressStatus {
     snapshot: boolean;
     documentUpdate: boolean;
     revisions: boolean;
+    webfonts?: boolean;
   };
   canEditPages: boolean;
 }
@@ -50,6 +51,7 @@ export interface BrowserElementorSnapshot {
   styles: string;
   storedElements: number;
   embeddedAssetsBytes?: number;
+  webfonts?: string[];
   generatedAt: string;
 }
 
@@ -252,6 +254,7 @@ export async function probeWordPressDirect(
       snapshot?: unknown;
       documentUpdate?: unknown;
       revisions?: unknown;
+      webfonts?: unknown;
     };
   }>(response);
   return {
@@ -273,6 +276,7 @@ export async function probeWordPressDirect(
       snapshot: status.visualQa.snapshot === true,
       documentUpdate: status.visualQa.documentUpdate === true,
       revisions: status.visualQa.revisions === true,
+      webfonts: status.visualQa.webfonts === true,
     } : undefined,
     canEditPages: status.canEditPages === true,
   };

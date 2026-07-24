@@ -26,6 +26,12 @@ test("WordPress connection probe reports Connector and Elementor versions", asyn
       canEditPages: true,
       elementor: { active: true, version: "3.30.0" },
       functionalWidgets: { navigation: true, contactForm: true, accordion: true },
+      visualQa: {
+        snapshot: true,
+        documentUpdate: true,
+        revisions: true,
+        webfonts: true,
+      },
     });
   });
 
@@ -37,6 +43,12 @@ test("WordPress connection probe reports Connector and Elementor versions", asyn
     navigation: true,
     contactForm: true,
     accordion: true,
+  });
+  assert.deepEqual(status.visualQa, {
+    snapshot: true,
+    documentUpdate: true,
+    revisions: true,
+    webfonts: true,
   });
   assert.equal(status.user.name, "editor");
   assert.equal(requests.length, 1);
