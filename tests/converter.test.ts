@@ -298,7 +298,7 @@ test("real Figma bounds produce a high-fidelity editable Elementor document", as
   assert.match(result.previewHtml, /writing-mode:horizontal-tb/);
   assert.match(
     result.previewHtml,
-    /transform:var\(--figmapress-qa-global-transform\) var\(--figmapress-qa-local-transform\) rotate\(7\.54deg\)/,
+    /transform:var\(--figmapress-qa-global-transform\) var\(--figmapress-qa-runtime-global-transform\) var\(--figmapress-qa-local-transform\) var\(--figmapress-qa-runtime-local-transform\) rotate\(7\.54deg\)/,
   );
   assert.match(result.previewHtml, /portrait-rendered\.png/);
   assert.deepEqual(result.qualityReport?.metrics.typography, {
@@ -444,6 +444,7 @@ test("paired PC and SP frames become device-specific Elementor layouts", async (
   );
   assert.equal(desktopNav?.settings.layout_variant, "desktop");
   assert.equal(desktopNav?.settings.figmapress_node_id, "10:0");
+  assert.equal(desktopNav?.settings.figmapress_section, "yes");
   assert.equal(mobileNav?.settings.layout_variant, "mobile");
   assert.equal((desktopNav?.settings.items as Array<{ url: { url: string } }>)[0]?.url.url, "#thoughts-desktop");
   assert.equal((mobileNav?.settings.items as Array<{ url: { url: string } }>)[0]?.url.url, "#thoughts-mobile");

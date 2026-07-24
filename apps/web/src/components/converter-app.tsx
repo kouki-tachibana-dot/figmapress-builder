@@ -13,7 +13,11 @@ import {
 import {
   WordPressDirectError,
   createWordPressDraftDirect,
+  fetchWordPressElementorSnapshotDirect,
   probeWordPressDirect,
+  updateWordPressElementorDocumentDirect,
+  type BrowserElementorSnapshot,
+  type BrowserWordPressConfig,
 } from "@/lib/wordpress-browser";
 import { readWordPressCredentials } from "@/lib/wordpress-form";
 import {
@@ -34,6 +38,7 @@ const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.7.0";
+const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.9.0";
 
 function versionAtLeast(version: string | undefined, minimum: string): boolean {
   if (!version) return false;
@@ -188,7 +193,18 @@ interface WordPressStatus {
     contactForm: boolean;
     accordion: boolean;
   };
+  visualQa?: {
+    snapshot: boolean;
+    documentUpdate: boolean;
+    revisions: boolean;
+  };
   canEditPages: boolean;
+}
+
+interface WordPressVisualCorrectionSummary {
+  wholePage: ElementorVisualCorrection[];
+  sections: ElementorSectionVisualCorrection[];
+  rolledBack: boolean;
 }
 
 const sectionLabels: Record<string, string> = {
@@ -291,6 +307,55 @@ section{padding:64px clamp(24px,7vw,88px);max-width:1100px;margin:0 auto}h1,h2,h
 </style></head><body>${content}</body></html>`;
 }
 
+function snapshotDocument(
+  snapshot: BrowserElementorSnapshot,
+  baseUrl: string,
+): string {
+  const normalizedBaseUrl = `${new URL(baseUrl).toString().replace(/\/+$/, "")}/`;
+  return `<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' https: data:; style-src 'unsafe-inline' https:; font-src https: data:;">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<base href="${normalizedBaseUrl}">
+${snapshot.styles}
+<style>
+html,body{margin:0!important;min-height:100%;padding:0!important;background:#fff}
+*,*::before,*::after{box-sizing:border-box}
+.figmapress-figma-preview{container-type:inline-size;overflow:hidden;position:relative;width:100%}
+</style></head><body>${snapshot.html}</body></html>`;
+}
+
+function visualReferencesFor(
+  targetOutput: ConversionResult,
+): Array<readonly ["desktop" | "mobile", VisualQaReference]> {
+  return (
+    [
+      ["desktop", targetOutput.visualReferences.desktop],
+      ["mobile", targetOutput.visualReferences.mobile],
+    ] as const
+  ).filter(
+    (entry): entry is readonly ["desktop" | "mobile", VisualQaReference] =>
+      Boolean(entry[1]),
+  );
+}
+
+async function compareVisualQuality(
+  targetOutput: ConversionResult,
+  sourceDocument: string,
+  onProgress?: (results: VisualQaBrowserResult[]) => void,
+): Promise<VisualQaBrowserResult[]> {
+  const references = visualReferencesFor(targetOutput);
+  if (!references.length) {
+    throw new Error("Figma基準画像がありません。Figmaからもう一度変換してください。");
+  }
+  const results: VisualQaBrowserResult[] = [];
+  for (const [variant, reference] of references) {
+    results.push(await runVisualQa(reference, sourceDocument, variant));
+    onProgress?.([...results]);
+  }
+  return results;
+}
+
 export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const [mode, setMode] = useState<SourceMode>("figma");
   const [fileKeyOrUrl, setFileKeyOrUrl] = useState("");
@@ -315,6 +380,14 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const [wpStatus, setWpStatus] = useState<WordPressStatus | null>(null);
   const [wpTransport, setWpTransport] = useState<"direct" | "proxy" | null>(null);
   const [wpTarget, setWpTarget] = useState<OutputTarget>("elementor");
+  const [wpVisualQaBusy, setWpVisualQaBusy] = useState(false);
+  const [wpVisualQaError, setWpVisualQaError] = useState("");
+  const [wpVisualQaResults, setWpVisualQaResults] = useState<
+    VisualQaBrowserResult[]
+  >([]);
+  const [wpVisualCorrections, setWpVisualCorrections] = useState<
+    WordPressVisualCorrectionSummary
+  >({ wholePage: [], sections: [], rolledBack: false });
   const [visualQaBusy, setVisualQaBusy] = useState(false);
   const [visualQaError, setVisualQaError] = useState("");
   const [visualQaResults, setVisualQaResults] = useState<VisualQaBrowserResult[]>([]);
@@ -336,6 +409,14 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const connectorSupportsInteractions = wpStatus?.functionalWidgets
     ? Object.values(wpStatus.functionalWidgets).every(Boolean)
     : versionAtLeast(wpStatus?.connectorVersion, FUNCTIONAL_WIDGETS_CONNECTOR_VERSION);
+  const connectorSupportsActualVisualQa = wpStatus?.visualQa
+    ? wpStatus.visualQa.snapshot
+      && wpStatus.visualQa.documentUpdate
+      && wpStatus.visualQa.revisions
+    : versionAtLeast(
+        wpStatus?.connectorVersion,
+        ACTUAL_VISUAL_QA_CONNECTOR_VERSION,
+      );
   const visualQaReferenceCount = output
     ? Number(Boolean(output.visualReferences.desktop)) +
       Number(Boolean(output.visualReferences.mobile))
@@ -372,6 +453,10 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     setError("");
     setOutput(null);
     setWpResult(null);
+    setWpVisualQaBusy(false);
+    setWpVisualQaError("");
+    setWpVisualQaResults([]);
+    setWpVisualCorrections({ wholePage: [], sections: [], rolledBack: false });
     setVisualQaError("");
     setVisualQaResults([]);
     setVisualQaAcknowledged(false);
@@ -424,6 +509,228 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     reader.readAsText(file);
   }
 
+  async function fetchWordPressSnapshot(
+    credentials: BrowserWordPressConfig,
+    postId: number,
+    requestId: string,
+  ): Promise<BrowserElementorSnapshot> {
+    if (wpTransport === "direct") {
+      return fetchWordPressElementorSnapshotDirect(
+        credentials,
+        postId,
+        requestId,
+      );
+    }
+    const response = await fetch("/api/wordpress/elementor", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "snapshot",
+        ...credentials,
+        postId,
+        requestId,
+      }),
+    });
+    return (
+      await readApi<{ ok: true; result: BrowserElementorSnapshot }>(response)
+    ).result;
+  }
+
+  async function updateWordPressDocument(
+    credentials: BrowserWordPressConfig,
+    postId: number,
+    requestId: string,
+    targetOutput: ConversionResult,
+  ): Promise<void> {
+    if (wpTransport === "direct") {
+      await updateWordPressElementorDocumentDirect(credentials, {
+        postId,
+        requestId,
+        template: targetOutput.elementorTemplate,
+        pageTemplate: "elementor_canvas",
+      });
+      return;
+    }
+    const response = await fetch("/api/wordpress/elementor", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "update",
+        ...credentials,
+        postId,
+        requestId,
+        template: targetOutput.elementorTemplate,
+        pageTemplate: "elementor_canvas",
+      }),
+    });
+    await readApi<{ ok: true }>(response);
+  }
+
+  async function verifyWordPressElementorDraft(
+    credentials: BrowserWordPressConfig,
+    result: WordPressResult,
+    requestId: string,
+    initialOutput: ConversionResult,
+  ): Promise<void> {
+    setWpVisualQaBusy(true);
+    setWpVisualQaError("");
+    setWpVisualQaResults([]);
+    setWpVisualCorrections({ wholePage: [], sections: [], rolledBack: false });
+    let currentOutput = initialOutput;
+    let currentResults: VisualQaBrowserResult[] = [];
+    const appliedWholePage: ElementorVisualCorrection[] = [];
+    const appliedSections: ElementorSectionVisualCorrection[] = [];
+    let rolledBack = false;
+
+    const measureStoredDocument = async (
+      targetOutput: ConversionResult,
+    ): Promise<VisualQaBrowserResult[]> => {
+      const snapshot = await fetchWordPressSnapshot(
+        credentials,
+        result.id,
+        requestId,
+      );
+      return compareVisualQuality(
+        targetOutput,
+        snapshotDocument(snapshot, credentials.baseUrl),
+        setWpVisualQaResults,
+      );
+    };
+
+    const tryCorrection = async (
+      candidateOutput: ConversionResult,
+      keep: (
+        before: VisualQaBrowserResult[],
+        after: VisualQaBrowserResult[],
+      ) => boolean,
+    ): Promise<boolean> => {
+      let documentUpdated = false;
+      try {
+        await updateWordPressDocument(
+          credentials,
+          result.id,
+          requestId,
+          candidateOutput,
+        );
+        documentUpdated = true;
+        const correctedResults = await measureStoredDocument(candidateOutput);
+        if (keep(currentResults, correctedResults)) {
+          currentOutput = candidateOutput;
+          currentResults = correctedResults;
+          return true;
+        }
+      } catch (error) {
+        if (!documentUpdated) throw error;
+        try {
+          await updateWordPressDocument(
+            credentials,
+            result.id,
+            requestId,
+            currentOutput,
+          );
+        } catch {
+          throw new Error(
+            "実ページ補正の再測定に失敗し、WordPressへの自動巻き戻しも完了できませんでした。WordPressリビジョンを確認してください。",
+          );
+        }
+        throw error;
+      }
+
+      await updateWordPressDocument(
+        credentials,
+        result.id,
+        requestId,
+        currentOutput,
+      );
+      setWpVisualQaResults(currentResults);
+      rolledBack = true;
+      return false;
+    };
+
+    try {
+      currentResults = await measureStoredDocument(currentOutput);
+      setWpVisualQaResults(currentResults);
+
+      const wholePageCandidates = safeVisualCorrections(currentResults);
+      let wholePageAccepted = true;
+      if (wholePageCandidates.length) {
+        const candidateOutput: ConversionResult = {
+          ...currentOutput,
+          elementorTemplate: applyElementorVisualCorrections(
+            currentOutput.elementorTemplate,
+            wholePageCandidates,
+          ),
+          previewHtml: applyPreviewVisualCorrections(
+            currentOutput.previewHtml,
+            wholePageCandidates,
+            "runtime",
+          ),
+        };
+        wholePageAccepted = await tryCorrection(
+          candidateOutput,
+          (before, after) =>
+            shouldKeepVisualCorrections(
+              before,
+              after,
+              wholePageCandidates.map((correction) => correction.variant),
+            ),
+        );
+        if (wholePageAccepted) {
+          appliedWholePage.push(...wholePageCandidates);
+        }
+      }
+
+      if (wholePageAccepted) {
+        const sectionCandidates = safeSectionVisualCorrections(currentResults);
+        if (sectionCandidates.length) {
+          const candidateOutput: ConversionResult = {
+            ...currentOutput,
+            elementorTemplate: applyElementorSectionVisualCorrections(
+              currentOutput.elementorTemplate,
+              sectionCandidates,
+            ),
+            previewHtml: applyPreviewSectionVisualCorrections(
+              currentOutput.previewHtml,
+              sectionCandidates,
+              "runtime",
+            ),
+          };
+          const sectionAccepted = await tryCorrection(
+            candidateOutput,
+            (before, after) =>
+              shouldKeepSectionVisualCorrections(
+                before,
+                after,
+                sectionCandidates.map((correction) => ({
+                  variant: correction.variant,
+                  nodeId: correction.nodeId,
+                })),
+              ),
+          );
+          if (sectionAccepted) {
+            appliedSections.push(...sectionCandidates);
+          }
+        }
+      }
+
+      setOutput(currentOutput);
+      setWpVisualQaResults(currentResults);
+      setWpVisualCorrections({
+        wholePage: appliedWholePage,
+        sections: appliedSections,
+        rolledBack,
+      });
+    } catch (caught) {
+      setWpVisualQaError(
+        caught instanceof Error
+          ? caught.message
+          : "実Elementorページの自動検証を完了できませんでした。",
+      );
+    } finally {
+      setWpVisualQaBusy(false);
+    }
+  }
+
   async function createWordPressDraft(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!output || !confirmed) return;
@@ -443,6 +750,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     setWpBusy(true);
     setWpError("");
     setWpResult(null);
+    setWpVisualQaError("");
+    setWpVisualQaResults([]);
+    setWpVisualCorrections({ wholePage: [], sections: [], rolledBack: false });
 
     try {
       const page = output.blueprint.pages[0];
@@ -465,6 +775,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
             slug: page?.slug || "/",
             content: output.pageContent,
           };
+      let createdResult: WordPressResult;
       if (wpTransport === "direct") {
         const result = await createWordPressDraftDirect(
           credentials,
@@ -485,6 +796,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
               },
         );
         setWpResult(result);
+        createdResult = result;
       } else {
         const response = await fetch("/api/wordpress", {
           method: "POST",
@@ -493,6 +805,19 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         });
         const data = await readApi<{ ok: true; result: WordPressResult }>(response);
         setWpResult(data.result);
+        createdResult = data.result;
+      }
+      if (
+        wpTarget === "elementor"
+        && connectorSupportsActualVisualQa
+        && visualReferencesFor(output).length > 0
+      ) {
+        await verifyWordPressElementorDraft(
+          credentials,
+          createdResult,
+          requestId,
+          output,
+        );
       }
       setApplicationPassword("");
     } catch (caught) {
@@ -546,16 +871,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   async function measureVisualQuality(
     targetOutput: ConversionResult,
   ): Promise<VisualQaBrowserResult[] | null> {
-    const references = (
-      [
-        ["desktop", targetOutput.visualReferences.desktop],
-        ["mobile", targetOutput.visualReferences.mobile],
-      ] as const
-    ).filter(
-      (entry): entry is readonly ["desktop" | "mobile", VisualQaReference] =>
-        Boolean(entry[1]),
-    );
-    if (!references.length) {
+    if (!visualReferencesFor(targetOutput).length) {
       setVisualQaError("Figma基準画像がありません。Figmaからもう一度変換してください。");
       return null;
     }
@@ -565,13 +881,11 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     setVisualQaResults([]);
     setVisualQaAcknowledged(false);
     try {
-      const results: VisualQaBrowserResult[] = [];
-      const sourceDocument = previewDocument(targetOutput.previewHtml);
-      for (const [variant, reference] of references) {
-        results.push(await runVisualQa(reference, sourceDocument, variant));
-        setVisualQaResults([...results]);
-      }
-      return results;
+      return await compareVisualQuality(
+        targetOutput,
+        previewDocument(targetOutput.previewHtml),
+        setVisualQaResults,
+      );
     } catch (caught) {
       setVisualQaError(
         caught instanceof Error
@@ -704,7 +1018,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.13.0 live</span>
+          <span className="status-pill"><i /> v0.14.0 live</span>
         </nav>
       </header>
 
@@ -1243,6 +1557,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                     {wpStatus.functionalWidgets && (
                       <span>機能Widget {Object.values(wpStatus.functionalWidgets).filter(Boolean).length}/3</span>
                     )}
+                    {wpTarget === "elementor" && (
+                      <span>実ページQA {connectorSupportsActualVisualQa ? "対応" : "更新必要"}</span>
+                    )}
                     <span>{wpTransport === "direct" ? "ブラウザ直結" : "サーバー経由"}</span>
                   </div>
                 )}
@@ -1256,6 +1573,11 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
               {wpStatus && wpTarget === "elementor" && wpStatus.connectorInstalled && !connectorSupportsInteractions && (
                 <div className="alert alert--error" role="alert">
                   メニュー・フォーム・アコーディオンを動作させるにはConnector v{FUNCTIONAL_WIDGETS_CONNECTOR_VERSION}以上が必要です。<a href="/downloads/figmapress-connector.zip" download>最新版ZIPをダウンロード</a>し、WordPressの「プラグインを追加 → プラグインのアップロード」から一度だけ更新してください。
+                </div>
+              )}
+              {wpStatus && wpTarget === "elementor" && visualQaReferenceCount > 0 && wpStatus.connectorInstalled && connectorSupportsInteractions && !connectorSupportsActualVisualQa && (
+                <div className="alert alert--error" role="alert">
+                  実際のElementor下書きをFigmaと再比較して自動補正するにはConnector v{ACTUAL_VISUAL_QA_CONNECTOR_VERSION}以上が必要です。WordPressのプラグイン更新画面から最新版へ更新し、再診断してください。
                 </div>
               )}
               {visualQaGateRequired && !visualQaComplete && (
@@ -1303,14 +1625,57 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                   {wpResult.warnings?.map((warning) => <span key={warning}> {warning}</span>)}
                 </div>
               )}
+              {wpVisualQaBusy && (
+                <div className="visual-qa-progress" role="status">
+                  <span className="spinner" /> 実際のElementor下書きをPC／スマホで再描画し、Figmaと比較しています…
+                </div>
+              )}
+              {wpVisualQaError && (
+                <div className="alert alert--error" role="alert">
+                  下書きは作成済みですが、実ページVisual QAを完了できませんでした。{wpVisualQaError}
+                </div>
+              )}
+              {wpVisualQaResults.length > 0 && !wpVisualQaBusy && (
+                <div className="visual-qa-correction-summary" role="status">
+                  <strong>
+                    ✓ 実ElementorページのPC／スマホ再検証が完了しました
+                  </strong>
+                  <div>
+                    {wpVisualQaResults.map((result) => (
+                      <span key={result.variant}>
+                        <b>{result.variant === "desktop" ? "PC" : "スマホ"}</b>
+                        score {result.score}
+                        <em>差分面積 {result.changedPixelRatio}%</em>
+                      </span>
+                    ))}
+                  </div>
+                  {(wpVisualCorrections.wholePage.length > 0 || wpVisualCorrections.sections.length > 0) && (
+                    <small>
+                      実測で改善した補正だけを下書きへ再保存しました。全体補正 {wpVisualCorrections.wholePage.length}件／セクション補正 {wpVisualCorrections.sections.length}件。
+                    </small>
+                  )}
+                  {wpVisualCorrections.rolledBack && (
+                    <small>
+                      改善しなかった候補は自動的に元のElementorデータへ戻しました。更新前のWordPressリビジョンも保持しています。
+                    </small>
+                  )}
+                  {!wpVisualCorrections.rolledBack && wpVisualCorrections.wholePage.length === 0 && wpVisualCorrections.sections.length === 0 && (
+                    <small>安全に適用できる追加位置補正はありませんでした。Elementor下書きは変更していません。</small>
+                  )}
+                </div>
+              )}
               <div className="wp-footer">
                 <span>常に <code>status: draft</code></span>
                 <button
                   className="button button--dark"
-                  disabled={!confirmed || wpBusy || visualQaBlocksDraft || !wpStatus || !wpStatus.connectorInstalled || !wpStatus.canEditPages || (wpTarget === "elementor" && (!wpStatus.elementor.active || !connectorSupportsInteractions))}
+                  disabled={!confirmed || wpBusy || visualQaBlocksDraft || !wpStatus || !wpStatus.connectorInstalled || !wpStatus.canEditPages || (wpTarget === "elementor" && (!wpStatus.elementor.active || !connectorSupportsInteractions || (visualQaReferenceCount > 0 && !connectorSupportsActualVisualQa)))}
                   type="submit"
                 >
-                  {wpBusy ? "作成中…" : `${wpTarget === "elementor" ? "Elementor" : "Gutenberg"}下書きを作成 →`}
+                  {wpBusy
+                    ? wpVisualQaBusy
+                      ? "実ページ検証中…"
+                      : "作成中…"
+                    : `${wpTarget === "elementor" ? "Elementor" : "Gutenberg"}下書きを作成 →`}
                 </button>
               </div>
             </form>
@@ -1357,7 +1722,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.13.0</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.14.0</span></div>
       </footer>
     </main>
   );

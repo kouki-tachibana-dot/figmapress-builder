@@ -238,7 +238,14 @@ function renderRootElement(
   const rootBounds = context.rootBounds;
   const children = (root.children ?? [])
     .map((node) => renderElement(node, rootBounds, root, context))
-    .filter((element): element is ElementorElement => element !== null);
+    .filter((element): element is ElementorElement => element !== null)
+    .map((element) => ({
+      ...element,
+      settings: {
+        ...element.settings,
+        figmapress_section: "yes",
+      },
+    }));
   return {
     id: context.ids.create(`${root.id}:root`),
     elType: "container",
@@ -1154,7 +1161,7 @@ function dimensions(
 
 function previewTransform(node: FigmaNode): string {
   const rotation = node.rotation ? ` rotate(${round(node.rotation)}deg)` : "";
-  return `--figmapress-qa-global-transform:translate(0px,0px);--figmapress-qa-local-transform:translate(0px,0px);transform:var(--figmapress-qa-global-transform) var(--figmapress-qa-local-transform)${rotation};transform-origin:center;`;
+  return `--figmapress-qa-global-transform:translate(0px,0px);--figmapress-qa-runtime-global-transform:translate(0px,0px);--figmapress-qa-local-transform:translate(0px,0px);--figmapress-qa-runtime-local-transform:translate(0px,0px);transform:var(--figmapress-qa-global-transform) var(--figmapress-qa-runtime-global-transform) var(--figmapress-qa-local-transform) var(--figmapress-qa-runtime-local-transform)${rotation};transform-origin:center;`;
 }
 
 function positive(value: number | undefined): value is number {

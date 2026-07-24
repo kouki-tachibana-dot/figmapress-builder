@@ -16,6 +16,11 @@ export interface BrowserWordPressStatus {
     contactForm: boolean;
     accordion: boolean;
   };
+  visualQa?: {
+    snapshot: boolean;
+    documentUpdate: boolean;
+    revisions: boolean;
+  };
   canEditPages: boolean;
 }
 
@@ -31,12 +36,28 @@ export interface BrowserWordPressResult {
   warnings?: string[];
 }
 
-interface BrowserElementorTemplate {
+export interface BrowserElementorTemplate {
   title: string;
   type: "page";
   version: "0.4";
   page_settings: Record<string, unknown>;
   content: unknown[];
+}
+
+export interface BrowserElementorSnapshot {
+  postId: number;
+  html: string;
+  styles: string;
+  storedElements: number;
+  embeddedAssetsBytes?: number;
+  generatedAt: string;
+}
+
+export interface BrowserElementorDocumentResult {
+  postId: number;
+  status: "draft";
+  storedElements: number;
+  revisionId?: number | null;
 }
 
 export type BrowserDraftInput =
@@ -227,6 +248,11 @@ export async function probeWordPressDirect(
       contactForm?: unknown;
       accordion?: unknown;
     };
+    visualQa?: {
+      snapshot?: unknown;
+      documentUpdate?: unknown;
+      revisions?: unknown;
+    };
   }>(response);
   return {
     authenticated: true,
@@ -242,6 +268,11 @@ export async function probeWordPressDirect(
       navigation: status.functionalWidgets.navigation === true,
       contactForm: status.functionalWidgets.contactForm === true,
       accordion: status.functionalWidgets.accordion === true,
+    } : undefined,
+    visualQa: status.visualQa ? {
+      snapshot: status.visualQa.snapshot === true,
+      documentUpdate: status.visualQa.documentUpdate === true,
+      revisions: status.visualQa.revisions === true,
     } : undefined,
     canEditPages: status.canEditPages === true,
   };
@@ -305,4 +336,42 @@ export async function createWordPressDraftDirect(
     rawLink: result.link,
     target: "gutenberg",
   };
+}
+
+export async function fetchWordPressElementorSnapshotDirect(
+  config: BrowserWordPressConfig,
+  postId: number,
+  requestId: string,
+): Promise<BrowserElementorSnapshot> {
+  return responseJson<BrowserElementorSnapshot>(
+    await directFetch(config, `/figmapress/v1/elementor/pages/${postId}/snapshot`, {
+      method: "POST",
+      body: JSON.stringify({ requestId }),
+    }),
+  );
+}
+
+export async function updateWordPressElementorDocumentDirect(
+  config: BrowserWordPressConfig,
+  input: {
+    postId: number;
+    requestId: string;
+    template: BrowserElementorTemplate;
+    pageTemplate: "elementor_canvas" | "elementor_header_footer" | "default";
+  },
+): Promise<BrowserElementorDocumentResult> {
+  return responseJson<BrowserElementorDocumentResult>(
+    await directFetch(
+      config,
+      `/figmapress/v1/elementor/pages/${input.postId}/document`,
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          requestId: input.requestId,
+          template: input.template,
+          pageTemplate: input.pageTemplate,
+        }),
+      },
+    ),
+  );
 }
