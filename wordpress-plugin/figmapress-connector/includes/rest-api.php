@@ -190,6 +190,7 @@ function figmapress_connector_rest_status() {
                 'webfonts'       => true,
                 'gradients'      => true,
                 'effects'        => true,
+                'imageTransforms' => true,
             ),
         )
     );

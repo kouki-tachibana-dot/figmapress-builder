@@ -258,6 +258,27 @@ test("Connector renders only structured and bounded Figma effects", async () => 
   assert.match(rest, /'effects'\s*=>\s*true/);
 });
 
+test("Connector renders only structured and bounded Figma image transforms", async () => {
+  const [plugin, rest, style] = await Promise.all([
+    readFile(pluginPath, "utf8"),
+    readFile(restApiPath, "utf8"),
+    readFile(interactionStylePath, "utf8"),
+  ]);
+  assert.match(plugin, /figmapress_connector_image_css/);
+  assert.match(plugin, /in_array\( \$mode, array\( 'fill', 'fit', 'stretch', 'tile' \), true \)/);
+  assert.match(plugin, /--figmapress-image-transform:translate\(/);
+  assert.match(plugin, /matrix\(' \. \$a \. ',' \. \$c \. ',' \. \$b \. ',' \. \$d/);
+  assert.match(plugin, /pow\( 2, \(float\) \$exposure \)/);
+  assert.match(plugin, /--figmapress-image-tile-url:url\("/);
+  assert.match(plugin, /isset\( \$settings\['figmapress_image'\] \)/);
+  assert.match(plugin, /data-figmapress-image-mode/);
+  assert.match(style, /\.elementor-widget-image\.figmapress-image-adjusted/);
+  assert.match(style, /transform: var\(--figmapress-image-transform, none\)/);
+  assert.match(style, /translate: var\(--figmapress-image-translate, 0 0\)/);
+  assert.match(style, /background-repeat: repeat/);
+  assert.match(rest, /'imageTransforms'\s*=>\s*true/);
+});
+
 test("Connector revisions and verifies a matching draft before visual QA updates", async () => {
   const [plugin, rest] = await Promise.all([
     readFile(pluginPath, "utf8"),

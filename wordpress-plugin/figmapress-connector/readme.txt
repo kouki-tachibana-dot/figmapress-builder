@@ -3,7 +3,7 @@ Contributors: figmapress
 Tags: blocks, figma, gutenberg, elementor
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 0.13.0
+Stable tag: 0.14.0
 License: GPLv2 or later
 
 Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
@@ -15,6 +15,12 @@ Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
    create a draft page containing figmapress/* blocks.
 
 == Changelog ==
+= 0.14.0 =
+* Figma画像の切り抜き、拡大縮小、せん断、回転を編集可能な構造化データとして保持。
+* TILE画像の繰り返しと倍率、露出・コントラスト・彩度のフォールバック描画に対応。
+* 正確なFigmaレンダーを優先し、取得上限時だけ元画像と変形行列へ安全に切り替え。
+* 品質診断で正確レンダー、構造化変形、標準フィットを分けて確認可能。
+
 = 0.13.0 =
 * FigmaのCarousel／Sliderレイヤーを編集可能なElementorカルーセルへ変換。
 * 前後ボタン、ドット、キーボード、スワイプ、動きの軽減設定に対応。

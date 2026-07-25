@@ -1,11 +1,11 @@
 {
   "name": "FigmaPress Connector",
   "slug": "figmapress-connector",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "requires": "6.4",
   "requires_php": "7.4",
   "tested": "7.0",
   "homepage": "https://figmapress-builder.vercel.app",
   "download_url": "https://figmapress-builder.vercel.app/downloads/figmapress-connector.zip",
-  "changelog": "<h4>0.13.0</h4><ul><li>FigmaのCarousel／Sliderレイヤーを編集可能なElementorカルーセルへ変換。</li><li>前後ボタン、ドット、キーボード、スワイプ、動きの軽減設定に対応。</li><li>FigmaプロトタイプのURL・セクション遷移と、CTA・電話・メールのリンクを実動化。</li><li>PC版とスマホ版の表示枚数を独立して保持。</li></ul><h4>0.12.0</h4><ul><li>Figmaレイヤーの透明度、複数の外側／内側シャドウ、レイヤーぼかし、背景ぼかしを再現。</li><li>Elementor標準の編集可能なシャドウ設定も同時保存。</li><li>構造化された色・座標・半径だけを受け付け、任意CSSの実行を防止。</li><li>実ページVisual QAでもプレビューと同じ複数効果を描画。</li></ul><h4>0.11.0</h4><ul><li>Figmaの線形・放射グラデーションを角度、中心、半径、最大8色のストップまで再現。</li><li>Elementor標準の編集可能なグラデーション設定も同時保存。</li><li>構造化された色・位置・角度だけを受け付け、任意CSSの実行を防止。</li><li>実ページVisual QAでもプレビューと同じ複数色グラデーションを描画。</li></ul>"
+  "changelog": "<h4>0.14.0</h4><ul><li>Figma画像の切り抜き、拡大縮小、せん断、回転を編集可能な構造化データとして保持。</li><li>TILE画像の繰り返しと倍率、露出・コントラスト・彩度のフォールバック描画に対応。</li><li>正確なFigmaレンダーを優先し、取得上限時だけ元画像と変形行列へ安全に切り替え。</li><li>品質診断で正確レンダー、構造化変形、標準フィットを分けて確認可能。</li></ul><h4>0.13.0</h4><ul><li>FigmaのCarousel／Sliderレイヤーを編集可能なElementorカルーセルへ変換。</li><li>前後ボタン、ドット、キーボード、スワイプ、動きの軽減設定に対応。</li><li>FigmaプロトタイプのURL・セクション遷移と、CTA・電話・メールのリンクを実動化。</li><li>PC版とスマホ版の表示枚数を独立して保持。</li></ul><h4>0.12.0</h4><ul><li>Figmaレイヤーの透明度、複数の外側／内側シャドウ、レイヤーぼかし、背景ぼかしを再現。</li><li>Elementor標準の編集可能なシャドウ設定も同時保存。</li><li>構造化された色・座標・半径だけを受け付け、任意CSSの実行を防止。</li><li>実ページVisual QAでもプレビューと同じ複数効果を描画。</li></ul>"
 }

@@ -18,6 +18,48 @@
     z-index: 20;
 }
 
+.elementor-widget-image.figmapress-image-adjusted,
+.elementor-widget-image.figmapress-image-adjusted > .elementor-widget-container {
+    overflow: hidden;
+}
+
+.elementor-widget-image.figmapress-image-adjusted > .elementor-widget-container {
+    position: relative;
+}
+
+.elementor-widget-image.figmapress-image-adjusted:not(.figmapress-image-tile) img {
+    display: block;
+    filter: var(--figmapress-image-filter, none);
+    max-width: none;
+    object-fit: fill;
+    transform: var(--figmapress-image-transform, none);
+    transform-origin: 0 0;
+    width: 100%;
+}
+
+@supports (translate: 1%) {
+    .elementor-widget-image.figmapress-image-adjusted:not(.figmapress-image-tile) img {
+        transform: var(--figmapress-image-matrix, none);
+        translate: var(--figmapress-image-translate, 0 0);
+    }
+}
+
+.elementor-widget-image.figmapress-image-tile > .elementor-widget-container::before {
+    background-image: var(--figmapress-image-tile-url);
+    background-position: 0 0;
+    background-repeat: repeat;
+    background-size: var(--figmapress-image-tile-size, 100%) auto;
+    content: "";
+    filter: var(--figmapress-image-filter, none);
+    inset: 0;
+    pointer-events: none;
+    position: absolute;
+}
+
+.elementor-widget-image.figmapress-image-tile img {
+    opacity: 0;
+}
+
 .figmapress-link {
     display: block;
 }

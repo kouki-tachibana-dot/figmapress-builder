@@ -94,6 +94,7 @@ export interface WordPressConnectionStatus {
     webfonts?: boolean;
     gradients?: boolean;
     effects?: boolean;
+    imageTransforms?: boolean;
   };
   canEditPages: boolean;
 }
@@ -224,6 +225,7 @@ export async function probeWordPressConnection(
       webfonts?: unknown;
       gradients?: unknown;
       effects?: unknown;
+      imageTransforms?: unknown;
     };
   };
   return {
@@ -257,6 +259,7 @@ export async function probeWordPressConnection(
       webfonts: status.visualQa.webfonts === true,
       gradients: status.visualQa.gradients === true,
       effects: status.visualQa.effects === true,
+      imageTransforms: status.visualQa.imageTransforms === true,
     } : undefined,
     canEditPages: status.canEditPages === true,
   };
