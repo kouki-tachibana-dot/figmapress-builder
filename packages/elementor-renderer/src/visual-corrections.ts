@@ -30,8 +30,25 @@ export interface AppliedElementorSectionVisualCorrection
   translateY: string;
 }
 
+export interface ElementorTextGeometryCorrection
+  extends ElementorVisualCorrection {
+  nodeId: string;
+  nodeName: string;
+  scaleX: number;
+  scaleY: number;
+}
+
+export interface AppliedElementorTextGeometryCorrection
+  extends ElementorTextGeometryCorrection {
+  translateX: string;
+  translateY: string;
+}
+
 const MAX_CAPTURE_OFFSET = 16;
 const MAX_SECTION_CAPTURE_OFFSET = 10;
+const MAX_TEXT_CAPTURE_OFFSET = 6;
+const MIN_TEXT_SCALE = 0.95;
+const MAX_TEXT_SCALE = 1.05;
 const MIN_CAPTURE_WIDTH = 200;
 const MAX_CAPTURE_WIDTH = 2_000;
 const SAFE_NODE_ID = /^[A-Za-z0-9:_-]{1,160}$/;
@@ -43,6 +60,10 @@ function round(value: number, digits = 4): number {
 
 function customSize(value: string): Record<string, unknown> {
   return { unit: "custom", size: value, sizes: [] };
+}
+
+function numericSize(value: number): Record<string, unknown> {
+  return { unit: "px", size: round(value, 4), sizes: [] };
 }
 
 function toViewportWidth(offset: number, captureWidth: number): string {
@@ -116,6 +137,54 @@ export function normalizeElementorSectionVisualCorrections(
       nodeName: correction.nodeName.slice(0, 200),
       offsetX: round(correction.offsetX),
       offsetY: round(correction.offsetY),
+      captureWidth: Math.round(correction.captureWidth),
+      errorReductionRatio: round(correction.errorReductionRatio, 1),
+      translateX: toViewportWidth(correction.offsetX, correction.captureWidth),
+      translateY: toViewportWidth(correction.offsetY, correction.captureWidth),
+    });
+  }
+  return Array.from(byTarget.values()).slice(0, 4);
+}
+
+export function normalizeElementorTextGeometryCorrections(
+  corrections: ElementorTextGeometryCorrection[],
+): AppliedElementorTextGeometryCorrection[] {
+  const byTarget = new Map<string, AppliedElementorTextGeometryCorrection>();
+  for (const correction of corrections) {
+    if (
+      !SAFE_NODE_ID.test(correction.nodeId)
+      || !Number.isFinite(correction.offsetX)
+      || !Number.isFinite(correction.offsetY)
+      || !Number.isFinite(correction.scaleX)
+      || !Number.isFinite(correction.scaleY)
+      || !Number.isFinite(correction.captureWidth)
+      || !Number.isFinite(correction.errorReductionRatio)
+      || correction.captureWidth < MIN_CAPTURE_WIDTH
+      || correction.captureWidth > MAX_CAPTURE_WIDTH
+      || Math.abs(correction.offsetX) > MAX_TEXT_CAPTURE_OFFSET
+      || Math.abs(correction.offsetY) > MAX_TEXT_CAPTURE_OFFSET
+      || correction.scaleX < MIN_TEXT_SCALE
+      || correction.scaleX > MAX_TEXT_SCALE
+      || correction.scaleY < MIN_TEXT_SCALE
+      || correction.scaleY > MAX_TEXT_SCALE
+      || (
+        Math.abs(correction.offsetX) < 0.001
+        && Math.abs(correction.offsetY) < 0.001
+        && Math.abs(correction.scaleX - 1) < 0.008
+        && Math.abs(correction.scaleY - 1) < 0.008
+      )
+      || correction.errorReductionRatio < 18
+      || !["high", "medium"].includes(correction.confidence)
+    ) {
+      continue;
+    }
+    byTarget.set(`${correction.variant}:${correction.nodeId}`, {
+      ...correction,
+      nodeName: correction.nodeName.slice(0, 200),
+      offsetX: round(correction.offsetX),
+      offsetY: round(correction.offsetY),
+      scaleX: round(correction.scaleX, 3),
+      scaleY: round(correction.scaleY, 3),
       captureWidth: Math.round(correction.captureWidth),
       errorReductionRatio: round(correction.errorReductionRatio, 1),
       translateX: toViewportWidth(correction.offsetX, correction.captureWidth),
@@ -214,6 +283,72 @@ function applyCorrectionToTree(
     : { ...corrected, elements };
 }
 
+function scaleElementGeometry(
+  element: ElementorElement,
+  correction: AppliedElementorTextGeometryCorrection,
+): ElementorElement {
+  const translateX = round(
+    numericSetting(element.settings.figmapress_visual_translate_x_vw)
+      + toViewportWidthNumber(correction.offsetX, correction.captureWidth),
+  );
+  const translateY = round(
+    numericSetting(element.settings.figmapress_visual_translate_y_vw)
+      + toViewportWidthNumber(correction.offsetY, correction.captureWidth),
+  );
+  const scaleX = round(
+    (numericScaleSetting(element.settings.figmapress_visual_scale_x) || 1)
+      * correction.scaleX,
+    4,
+  );
+  const scaleY = round(
+    (numericScaleSetting(element.settings.figmapress_visual_scale_y) || 1)
+      * correction.scaleY,
+    4,
+  );
+  return {
+    ...element,
+    settings: {
+      ...element.settings,
+      _transform_translate_popover: "transform",
+      _transform_translateX_effect: customSize(
+        Math.abs(translateX) < 0.0001 ? "0px" : `${translateX}vw`,
+      ),
+      _transform_translateY_effect: customSize(
+        Math.abs(translateY) < 0.0001 ? "0px" : `${translateY}vw`,
+      ),
+      _transform_scale_popover: "transform",
+      _transform_keep_proportions: "",
+      _transform_scaleX_effect: numericSize(scaleX),
+      _transform_scaleY_effect: numericSize(scaleY),
+      figmapress_visual_translate_x_vw: translateX,
+      figmapress_visual_translate_y_vw: translateY,
+      figmapress_visual_scale_x: scaleX,
+      figmapress_visual_scale_y: scaleY,
+    },
+  };
+}
+
+function numericScaleSetting(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 1;
+}
+
+function applyTextGeometryCorrectionToTree(
+  element: ElementorElement,
+  correction: AppliedElementorTextGeometryCorrection,
+): ElementorElement {
+  const corrected =
+    element.settings.figmapress_node_id === correction.nodeId
+      ? scaleElementGeometry(element, correction)
+      : element;
+  if (!corrected.elements.length) return corrected;
+  const elements = corrected.elements.map((child) =>
+    applyTextGeometryCorrectionToTree(child, correction)
+  );
+  return elements.every((child, index) => child === corrected.elements[index])
+    ? corrected
+    : { ...corrected, elements };
+}
+
 export function applyElementorVisualCorrections(
   template: ElementorTemplate,
   corrections: ElementorVisualCorrection[],
@@ -278,6 +413,35 @@ export function applyElementorSectionVisualCorrections(
   };
 }
 
+export function applyElementorTextGeometryCorrections(
+  template: ElementorTemplate,
+  corrections: ElementorTextGeometryCorrection[],
+): ElementorTemplate {
+  const normalized = normalizeElementorTextGeometryCorrections(corrections);
+  if (!normalized.length) return template;
+
+  return {
+    ...template,
+    page_settings: {
+      ...template.page_settings,
+      figmapress_text_geometry_corrections: normalized,
+    },
+    content: template.content.map((root) => {
+      const variant = rootVariant(root);
+      const targetVariant =
+        variant === "mobile"
+          ? "mobile"
+          : variant === "desktop" || variant === "single"
+            ? "desktop"
+            : null;
+      if (!targetVariant) return root;
+      return normalized
+        .filter((correction) => correction.variant === targetVariant)
+        .reduce(applyTextGeometryCorrectionToTree, root);
+    }),
+  };
+}
+
 function previewSelector(variant: VisualCorrectionVariant): string {
   return variant === "mobile"
     ? '.figmapress-figma-preview[data-figmapress-layout="mobile"]'
@@ -318,4 +482,22 @@ export function applyPreviewSectionVisualCorrections(
     )
     .join("");
   return `<style data-figmapress-section-visual-corrections>${rules}</style>${previewHtml}`;
+}
+
+export function applyPreviewTextGeometryCorrections(
+  previewHtml: string,
+  corrections: ElementorTextGeometryCorrection[],
+  channel: "primary" | "runtime" = "primary",
+): string {
+  const normalized = normalizeElementorTextGeometryCorrections(corrections);
+  if (!normalized.length) return previewHtml;
+  const property = channel === "runtime"
+    ? "--figmapress-qa-runtime-geometry-transform"
+    : "--figmapress-qa-geometry-transform";
+  const rules = normalized
+    .map((correction) =>
+      `${previewSelector(correction.variant)} [data-figmapress-kind="text"][data-figmapress-node-id="${correction.nodeId}"]{${property}:translate(${correction.translateX},${correction.translateY}) scale(${correction.scaleX},${correction.scaleY})!important}`,
+    )
+    .join("");
+  return `<style data-figmapress-text-geometry-corrections>${rules}</style>${previewHtml}`;
 }

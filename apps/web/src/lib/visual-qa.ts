@@ -67,11 +67,25 @@ export interface VisualQaRegionMetrics {
   meanColorError: number;
   impactRatio: number;
   alignment?: VisualQaAlignment;
+  geometry?: VisualQaGeometry;
 }
 
 export interface VisualQaAlignment {
   offsetX: number;
   offsetY: number;
+  baselineError: number;
+  correctedError: number;
+  errorReductionRatio: number;
+  confidence: "high" | "medium" | "low";
+  safeToApply: boolean;
+  reason: string;
+}
+
+export interface VisualQaGeometry {
+  offsetX: number;
+  offsetY: number;
+  scaleX: number;
+  scaleY: number;
   baselineError: number;
   correctedError: number;
   errorReductionRatio: number;
@@ -114,6 +128,11 @@ export interface VisualQaSectionCorrectionTarget {
 export interface VisualQaSectionCorrectionOutcome
   extends VisualQaCorrectionOutcome {
   sections: VisualQaRegionMetrics[];
+}
+
+export interface VisualQaTextCorrectionOutcome
+  extends VisualQaCorrectionOutcome {
+  textNodes: VisualQaRegionMetrics[];
 }
 
 export function shouldKeepVisualCorrections(
@@ -193,6 +212,50 @@ export function shouldKeepSectionVisualCorrections(
   }
 
   return improvedTargets > 0;
+}
+
+export function shouldKeepTextGeometryCorrections(
+  before: VisualQaTextCorrectionOutcome[],
+  after: VisualQaTextCorrectionOutcome[],
+  targets: VisualQaSectionCorrectionTarget[],
+): boolean {
+  if (!targets.length) return false;
+  const beforeByVariant = new Map(before.map((result) => [result.variant, result]));
+  const afterByVariant = new Map(after.map((result) => [result.variant, result]));
+  let improvedTargets = 0;
+
+  for (const target of targets) {
+    const baselinePage = beforeByVariant.get(target.variant);
+    const correctedPage = afterByVariant.get(target.variant);
+    if (!baselinePage || !correctedPage) return false;
+    if (
+      correctedPage.score < baselinePage.score - 0.15
+      || correctedPage.changedPixelRatio > baselinePage.changedPixelRatio + 0.15
+    ) {
+      return false;
+    }
+    const baseline = baselinePage.textNodes.find(
+      (textNode) => textNode.nodeId === target.nodeId,
+    );
+    const corrected = correctedPage.textNodes.find(
+      (textNode) => textNode.nodeId === target.nodeId,
+    );
+    if (!baseline || !corrected) return false;
+    if (
+      corrected.changedPixelRatio > baseline.changedPixelRatio + 0.3
+      || corrected.impactRatio > baseline.impactRatio + 0.02
+    ) {
+      return false;
+    }
+    if (
+      baseline.changedPixelRatio - corrected.changedPixelRatio >= 0.15
+      || baseline.impactRatio - corrected.impactRatio >= 0.005
+    ) {
+      improvedTargets += 1;
+    }
+  }
+
+  return improvedTargets === targets.length;
 }
 
 interface BandAccumulator {
@@ -447,6 +510,286 @@ export function estimateVisualAlignment(
   };
 }
 
+function geometryError(
+  reference: Uint8ClampedArray,
+  target: Uint8ClampedArray,
+  width: number,
+  height: number,
+  offsetX: number,
+  offsetY: number,
+  scaleX: number,
+  scaleY: number,
+  marginX: number,
+  marginY: number,
+  sampleStride: number,
+): AlignmentError {
+  const left = marginX;
+  const top = marginY;
+  const right = width - marginX - 1;
+  const bottom = height - marginY - 1;
+  const centerX = (width - 1) / 2;
+  const centerY = (height - 1) / 2;
+  let weightedError = 0;
+  let totalWeight = 0;
+  let signalSamples = 0;
+  let samples = 0;
+
+  for (let y = top; y < bottom; y += sampleStride) {
+    for (let x = left; x < right; x += sampleStride) {
+      const targetX = Math.round(
+        centerX + (x - centerX - offsetX) / scaleX,
+      );
+      const targetY = Math.round(
+        centerY + (y - centerY - offsetY) / scaleY,
+      );
+      if (
+        targetX < 0
+        || targetX >= width
+        || targetY < 0
+        || targetY >= height
+      ) {
+        continue;
+      }
+      const referenceOffset = (y * width + x) * 4;
+      const targetOffset = (targetY * width + targetX) * 4;
+      const rightOffset = referenceOffset + 4;
+      const lowerOffset = referenceOffset + width * 4;
+      const referenceLuminance =
+        reference[referenceOffset] * 0.2126 +
+        reference[referenceOffset + 1] * 0.7152 +
+        reference[referenceOffset + 2] * 0.0722;
+      const rightLuminance =
+        reference[rightOffset] * 0.2126 +
+        reference[rightOffset + 1] * 0.7152 +
+        reference[rightOffset + 2] * 0.0722;
+      const lowerLuminance =
+        reference[lowerOffset] * 0.2126 +
+        reference[lowerOffset + 1] * 0.7152 +
+        reference[lowerOffset + 2] * 0.0722;
+      const edgeStrength = Math.max(
+        Math.abs(referenceLuminance - rightLuminance),
+        Math.abs(referenceLuminance - lowerLuminance),
+      );
+      const weight = 1 + Math.min(8, edgeStrength / 20);
+      const pixelError =
+        (
+          Math.abs(reference[referenceOffset] - target[targetOffset]) +
+          Math.abs(reference[referenceOffset + 1] - target[targetOffset + 1]) +
+          Math.abs(reference[referenceOffset + 2] - target[targetOffset + 2])
+        ) / 3;
+
+      weightedError += pixelError * weight;
+      totalWeight += weight;
+      if (edgeStrength >= 8) signalSamples += 1;
+      samples += 1;
+    }
+  }
+
+  return {
+    error: totalWeight ? weightedError / totalWeight : 0,
+    signalRatio: samples ? signalSamples / samples : 0,
+  };
+}
+
+export function estimateVisualGeometry(
+  reference: Uint8ClampedArray,
+  target: Uint8ClampedArray,
+  width: number,
+  height: number,
+  maximumShift = 6,
+  maximumScaleDelta = 0.05,
+): VisualQaGeometry {
+  validatePixelBuffers(reference, target, width, height);
+  const safeMaximumShift = Math.max(0, Math.min(6, Math.round(maximumShift)));
+  const safeScaleDelta = Math.max(
+    0.01,
+    Math.min(0.05, maximumScaleDelta),
+  );
+  const marginX = Math.max(
+    safeMaximumShift + 2,
+    Math.ceil((width * safeScaleDelta) / 2) + safeMaximumShift + 2,
+  );
+  const marginY = Math.max(
+    safeMaximumShift + 2,
+    Math.ceil((height * safeScaleDelta) / 2) + safeMaximumShift + 2,
+  );
+  if (width - marginX * 2 < 24 || height - marginY * 2 < 12) {
+    return {
+      offsetX: 0,
+      offsetY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      baselineError: 0,
+      correctedError: 0,
+      errorReductionRatio: 0,
+      confidence: "low",
+      safeToApply: false,
+      reason: "文字領域が小さいため、寸法補正を安全に判定できません。",
+    };
+  }
+
+  const sampleStride = Math.max(
+    1,
+    Math.ceil(Math.sqrt((width * height) / 8_000)),
+  );
+  const baseline = geometryError(
+    reference,
+    target,
+    width,
+    height,
+    0,
+    0,
+    1,
+    1,
+    marginX,
+    marginY,
+    sampleStride,
+  );
+  let bestX = 0;
+  let bestY = 0;
+  let bestScaleX = 1;
+  let bestScaleY = 1;
+  let bestError = baseline.error;
+  const minimumScale = 1 - safeScaleDelta;
+  const maximumScale = 1 + safeScaleDelta;
+  const scales = Array.from(
+    new Set(
+      [-1, -0.6, -0.2, 0, 0.2, 0.6, 1].map((factor) =>
+        round(1 + safeScaleDelta * factor, 3)
+      ),
+    ),
+  );
+  const offsets: number[] = [];
+  for (
+    let offset = -safeMaximumShift;
+    offset <= safeMaximumShift;
+    offset += 3
+  ) {
+    offsets.push(offset);
+  }
+  if (!offsets.includes(0)) offsets.push(0);
+  if (!offsets.includes(safeMaximumShift)) offsets.push(safeMaximumShift);
+
+  for (const scaleY of scales) {
+    for (const scaleX of scales) {
+      if (Math.abs(scaleX - scaleY) > 0.061) continue;
+      for (const offsetY of offsets) {
+        for (const offsetX of offsets) {
+          const measurement = geometryError(
+            reference,
+            target,
+            width,
+            height,
+            offsetX,
+            offsetY,
+            scaleX,
+            scaleY,
+            marginX,
+            marginY,
+            sampleStride,
+          );
+          if (measurement.error < bestError) {
+            bestX = offsetX;
+            bestY = offsetY;
+            bestScaleX = scaleX;
+            bestScaleY = scaleY;
+            bestError = measurement.error;
+          }
+        }
+      }
+    }
+  }
+
+  const refinedScalesX = [-0.01, -0.005, 0, 0.005, 0.01].map((delta) =>
+    clamp(bestScaleX + delta, minimumScale, maximumScale)
+  );
+  const refinedScalesY = [-0.01, -0.005, 0, 0.005, 0.01].map((delta) =>
+    clamp(bestScaleY + delta, minimumScale, maximumScale)
+  );
+  const refinedOffsetsX = [-1, 0, 1].map((delta) =>
+    clamp(bestX + delta, -safeMaximumShift, safeMaximumShift)
+  );
+  const refinedOffsetsY = [-1, 0, 1].map((delta) =>
+    clamp(bestY + delta, -safeMaximumShift, safeMaximumShift)
+  );
+  for (const scaleY of refinedScalesY) {
+    for (const scaleX of refinedScalesX) {
+      if (Math.abs(scaleX - scaleY) > 0.061) continue;
+      for (const offsetY of refinedOffsetsY) {
+        for (const offsetX of refinedOffsetsX) {
+          const measurement = geometryError(
+            reference,
+            target,
+            width,
+            height,
+            offsetX,
+            offsetY,
+            scaleX,
+            scaleY,
+            marginX,
+            marginY,
+            sampleStride,
+          );
+          if (measurement.error < bestError) {
+            bestX = offsetX;
+            bestY = offsetY;
+            bestScaleX = scaleX;
+            bestScaleY = scaleY;
+            bestError = measurement.error;
+          }
+        }
+      }
+    }
+  }
+
+  const errorReductionRatio =
+    baseline.error > 0
+      ? ((baseline.error - bestError) / baseline.error) * 100
+      : 0;
+  const scaleChanged =
+    Math.abs(bestScaleX - 1) >= 0.008
+    || Math.abs(bestScaleY - 1) >= 0.008;
+  const offsetChanged = bestX !== 0 || bestY !== 0;
+  const hitsBoundary =
+    Math.abs(bestX) === safeMaximumShift
+    || Math.abs(bestY) === safeMaximumShift
+    || Math.abs(bestScaleX - minimumScale) < 0.0001
+    || Math.abs(bestScaleX - maximumScale) < 0.0001
+    || Math.abs(bestScaleY - minimumScale) < 0.0001
+    || Math.abs(bestScaleY - maximumScale) < 0.0001;
+  const hasUsableSignal = baseline.signalRatio >= 0.006;
+  const confidence =
+    hasUsableSignal && errorReductionRatio >= 30 && baseline.error >= 8
+      ? "high"
+      : hasUsableSignal && errorReductionRatio >= 18 && baseline.error >= 4
+        ? "medium"
+        : "low";
+  const safeToApply =
+    (scaleChanged || offsetChanged)
+    && !hitsBoundary
+    && confidence !== "low";
+  const reason = !hasUsableSignal
+    ? "文字輪郭が少ないため、寸法差を確定できません。"
+    : hitsBoundary
+      ? "安全な探索範囲を超える差があり、自動的な文字寸法補正を見送りました。"
+      : !safeToApply
+        ? "文字差分を幅・高さの微調整だけで改善できる確度が不足しています。"
+        : `X ${bestX >= 0 ? "+" : ""}${bestX}px / Y ${bestY >= 0 ? "+" : ""}${bestY}px、幅 ${round(bestScaleX * 100)}% / 高さ ${round(bestScaleY * 100)}%で、文字領域の画素誤差を約${round(errorReductionRatio)}%削減できる見込みです。`;
+
+  return {
+    offsetX: bestX,
+    offsetY: bestY,
+    scaleX: round(bestScaleX, 3),
+    scaleY: round(bestScaleY, 3),
+    baselineError: round(baseline.error),
+    correctedError: round(bestError),
+    errorReductionRatio: round(errorReductionRatio),
+    confidence,
+    safeToApply,
+    reason,
+  };
+}
+
 function recommendationsFor(
   score: number,
   changedPixelRatio: number,
@@ -501,10 +844,11 @@ export function analyzeVisualRegions(
   regions: VisualQaRegionInput[],
   threshold = 24,
   maximumAlignmentShift = 0,
+  estimateGeometry = false,
 ): VisualQaRegionMetrics[] {
   validatePixelBuffers(reference, target, width, height);
   const pagePixels = width * height;
-  return regions
+  const analyzed = regions
     .map((region): VisualQaRegionMetrics | null => {
       const startX = clamp(Math.floor(region.x), 0, width);
       const startY = clamp(Math.floor(region.y), 0, height);
@@ -579,7 +923,6 @@ export function analyzeVisualRegions(
                 reason: `「${region.name}」は単純な位置移動だけで安全に改善できる確度が不足しています。`,
               };
       }
-
       return {
         nodeId: region.nodeId,
         name: region.name,
@@ -598,6 +941,50 @@ export function analyzeVisualRegions(
       right.impactRatio - left.impactRatio ||
       right.changedPixelRatio - left.changedPixelRatio,
     );
+
+  if (!estimateGeometry) return analyzed;
+  return analyzed.map((region, index) => {
+    if (
+      index >= 4
+      || region.width < 48
+      || region.height < 20
+      || region.changedPixelRatio < 4
+      || region.impactRatio < 0.002
+    ) {
+      return region;
+    }
+    const referenceCrop = cropPixelBuffer(
+      reference,
+      width,
+      region.x,
+      region.y,
+      region.width,
+      region.height,
+    );
+    const targetCrop = cropPixelBuffer(
+      target,
+      width,
+      region.x,
+      region.y,
+      region.width,
+      region.height,
+    );
+    const estimated = estimateVisualGeometry(
+      referenceCrop,
+      targetCrop,
+      region.width,
+      region.height,
+    );
+    return {
+      ...region,
+      geometry: estimated.safeToApply
+        ? {
+            ...estimated,
+            reason: `「${region.name}」は${estimated.reason}`,
+          }
+        : estimated,
+    };
+  });
 }
 
 function cropPixelBuffer(

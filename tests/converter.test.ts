@@ -305,7 +305,7 @@ test("real Figma bounds produce a high-fidelity editable Elementor document", as
   assert.match(result.previewHtml, /writing-mode:horizontal-tb/);
   assert.match(
     result.previewHtml,
-    /transform:var\(--figmapress-qa-global-transform\) var\(--figmapress-qa-runtime-global-transform\) var\(--figmapress-qa-local-transform\) var\(--figmapress-qa-runtime-local-transform\) rotate\(7\.54deg\)/,
+    /transform:var\(--figmapress-qa-global-transform\) var\(--figmapress-qa-runtime-global-transform\) var\(--figmapress-qa-local-transform\) var\(--figmapress-qa-runtime-local-transform\) var\(--figmapress-qa-geometry-transform\) var\(--figmapress-qa-runtime-geometry-transform\) rotate\(7\.54deg\)/,
   );
   assert.match(result.previewHtml, /portrait-rendered\.png/);
   assert.deepEqual(result.qualityReport?.metrics.typography, {
