@@ -3,7 +3,7 @@
  * Plugin Name:       FigmaPress Connector
  * Plugin URI:        https://github.com/kouki-tachibana-dot/figmapress-builder
  * Description:       Connects FigmaPress to Gutenberg and Elementor draft pages.
- * Version:           0.13.0
+ * Version:           0.14.0
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Update URI:        https://figmapress-builder.vercel.app/downloads/figmapress-connector.json
@@ -20,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 define( 'FIGMAPRESS_CONNECTOR_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FIGMAPRESS_CONNECTOR_URL', plugin_dir_url( __FILE__ ) );
-define( 'FIGMAPRESS_CONNECTOR_VERSION', '0.13.0' );
+define( 'FIGMAPRESS_CONNECTOR_VERSION', '0.14.0' );
 
 require_once FIGMAPRESS_CONNECTOR_DIR . 'includes/rest-api.php';
 require_once FIGMAPRESS_CONNECTOR_DIR . 'includes/contact-form.php';
@@ -363,6 +363,97 @@ function figmapress_connector_effects_css( $effects ) {
 }
 
 /**
+ * Build safe CSS custom properties for an editable Figma image crop.
+ *
+ * Figma stores crop geometry as a normalized 2x3 affine matrix. The generated
+ * manifest contains numbers only; this function bounds every value and rebuilds
+ * the CSS instead of accepting an arbitrary transform string from post meta.
+ */
+function figmapress_connector_image_css( $image, $source = array() ) {
+    if ( ! is_array( $image ) ) {
+        return array();
+    }
+    $mode = isset( $image['mode'] ) ? sanitize_key( $image['mode'] ) : '';
+    if ( ! in_array( $mode, array( 'fill', 'fit', 'stretch', 'tile' ), true ) ) {
+        return array();
+    }
+
+    $declarations = array();
+    $translate_x  = '0';
+    $translate_y  = '0';
+    $matrix       = '';
+    if ( isset( $image['transform'] ) && is_array( $image['transform'] ) ) {
+        $transform = $image['transform'];
+        $a         = figmapress_connector_css_number( isset( $transform['a'] ) ? $transform['a'] : null, -100, 100 );
+        $b         = figmapress_connector_css_number( isset( $transform['b'] ) ? $transform['b'] : null, -100, 100 );
+        $c         = figmapress_connector_css_number( isset( $transform['c'] ) ? $transform['c'] : null, -100, 100 );
+        $d         = figmapress_connector_css_number( isset( $transform['d'] ) ? $transform['d'] : null, -100, 100 );
+        $tx        = figmapress_connector_css_number( isset( $transform['tx'] ) ? 100 * (float) $transform['tx'] : null, -10000, 10000 );
+        $ty        = figmapress_connector_css_number( isset( $transform['ty'] ) ? 100 * (float) $transform['ty'] : null, -10000, 10000 );
+        if ( null !== $a && null !== $b && null !== $c && null !== $d && null !== $tx && null !== $ty ) {
+            $translate_x = $tx;
+            $translate_y = $ty;
+            $matrix      = 'matrix(' . $a . ',' . $c . ',' . $b . ',' . $d . ',0,0)';
+        }
+    }
+
+    $rotation = isset( $image['rotation'] )
+        ? figmapress_connector_css_number( $image['rotation'], -3600, 3600 )
+        : null;
+    $parts    = array();
+    if ( '' !== $matrix ) {
+        $parts[] = $matrix;
+    }
+    if ( null !== $rotation && abs( (float) $rotation ) > 0.0001 ) {
+        $parts[] = 'rotate(' . $rotation . 'deg)';
+    }
+    $transform_css = $parts ? implode( ' ', $parts ) : 'none';
+    $declarations[] = '--figmapress-image-translate:' . $translate_x . '% ' . $translate_y . '%';
+    $declarations[] = '--figmapress-image-matrix:' . $transform_css;
+    $declarations[] = '--figmapress-image-transform:translate(' . $translate_x . '%,' . $translate_y . '%) ' . $transform_css;
+
+    $filters = isset( $image['filters'] ) && is_array( $image['filters'] ) ? $image['filters'] : array();
+    $filter  = array();
+    if ( isset( $filters['exposure'] ) ) {
+        $exposure = figmapress_connector_css_number( $filters['exposure'], -1, 1 );
+        if ( null !== $exposure ) {
+            $filter[] = 'brightness(' . figmapress_connector_css_number( pow( 2, (float) $exposure ), 0.05, 20 ) . ')';
+        }
+    }
+    if ( isset( $filters['contrast'] ) ) {
+        $contrast = figmapress_connector_css_number( $filters['contrast'], -1, 1 );
+        if ( null !== $contrast ) {
+            $filter[] = 'contrast(' . figmapress_connector_css_number( 1 + (float) $contrast, 0, 2 ) . ')';
+        }
+    }
+    if ( isset( $filters['saturation'] ) ) {
+        $saturation = figmapress_connector_css_number( $filters['saturation'], -1, 1 );
+        if ( null !== $saturation ) {
+            $filter[] = 'saturate(' . figmapress_connector_css_number( 1 + (float) $saturation, 0, 2 ) . ')';
+        }
+    }
+    $declarations[] = '--figmapress-image-filter:' . ( $filter ? implode( ' ', $filter ) : 'none' );
+
+    if ( 'tile' === $mode ) {
+        $scale = isset( $image['scalingFactor'] )
+            ? figmapress_connector_css_number( 100 * (float) $image['scalingFactor'], 1, 2000 )
+            : '100';
+        $declarations[] = '--figmapress-image-tile-size:' . $scale . '%';
+        $url    = is_array( $source ) && isset( $source['url'] ) ? esc_url_raw( $source['url'], array( 'http', 'https' ) ) : '';
+        $scheme = $url ? wp_parse_url( $url, PHP_URL_SCHEME ) : '';
+        if ( $url && in_array( strtolower( (string) $scheme ), array( 'http', 'https' ), true ) ) {
+            $quoted_url     = str_replace( array( '\\', '"' ), array( '\\\\', '\\"' ), $url );
+            $declarations[] = '--figmapress-image-tile-url:url("' . $quoted_url . '")';
+        }
+    }
+
+    return array(
+        'mode'  => $mode,
+        'style' => implode( ';', $declarations ) . ';',
+    );
+}
+
+/**
  * Expose stable Figma node identities in Elementor's rendered DOM.
  *
  * The authenticated snapshot endpoint uses these attributes to measure the
@@ -405,6 +496,16 @@ function figmapress_connector_add_elementor_render_attributes( $element ) {
     );
     if ( '' !== $effects_css ) {
         $element->add_render_attribute( '_wrapper', 'style', $effects_css );
+    }
+    $image_css = figmapress_connector_image_css(
+        isset( $settings['figmapress_image'] ) ? $settings['figmapress_image'] : null,
+        isset( $settings['image'] ) ? $settings['image'] : array()
+    );
+    if ( $image_css ) {
+        $element->add_render_attribute( '_wrapper', 'class', 'figmapress-image-adjusted' );
+        $element->add_render_attribute( '_wrapper', 'class', 'figmapress-image-' . $image_css['mode'] );
+        $element->add_render_attribute( '_wrapper', 'data-figmapress-image-mode', $image_css['mode'] );
+        $element->add_render_attribute( '_wrapper', 'style', $image_css['style'] );
     }
     $element_type = method_exists( $element, 'get_type' ) ? $element->get_type() : '';
     $widget_name  = method_exists( $element, 'get_name' ) ? $element->get_name() : '';

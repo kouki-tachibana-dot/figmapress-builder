@@ -38,7 +38,7 @@ const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
-const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.12.0";
+const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.14.0";
 
 function versionAtLeast(version: string | undefined, minimum: string): boolean {
   if (!version) return false;
@@ -149,6 +149,7 @@ interface ConversionResult {
         mapped: number;
         exactRendered: number;
         nativeFit: number;
+        structuredAdjusted: number;
         adjusted: number;
         masks: number;
       };
@@ -225,6 +226,7 @@ interface WordPressStatus {
     webfonts?: boolean;
     gradients?: boolean;
     effects?: boolean;
+    imageTransforms?: boolean;
   };
   canEditPages: boolean;
 }
@@ -487,6 +489,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       && wpStatus.visualQa.webfonts === true
       && wpStatus.visualQa.gradients === true
       && wpStatus.visualQa.effects === true
+      && wpStatus.visualQa.imageTransforms === true
     : versionAtLeast(
         wpStatus?.connectorVersion,
         ACTUAL_VISUAL_QA_CONNECTOR_VERSION,
@@ -1095,7 +1098,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.19.0 live</span>
+          <span className="status-pill"><i /> v0.20.0 live</span>
         </nav>
       </header>
 
@@ -1799,7 +1802,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.19.0</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.20.0</span></div>
       </footer>
     </main>
   );

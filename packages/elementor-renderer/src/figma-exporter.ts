@@ -72,6 +72,21 @@ interface FigmaEffectsManifest {
   backgroundBlur?: number;
 }
 
+interface FigmaImageManifest {
+  mode: "fill" | "fit" | "stretch" | "tile";
+  transform?: {
+    a: number;
+    b: number;
+    c: number;
+    d: number;
+    tx: number;
+    ty: number;
+  };
+  rotation?: number;
+  scalingFactor?: number;
+  filters?: NonNullable<FigmaPaint["filters"]>;
+}
+
 interface FigmaVisualAsset {
   url: string;
   rendered: boolean;
@@ -1072,6 +1087,8 @@ function imageElement(
   if (typeof node.opacity === "number" && node.opacity < 1) {
     settings.opacity = size(node.opacity);
   }
+  const imageManifest = asset.rendered ? null : figmaImageManifest(asset.paint);
+  if (imageManifest) settings.figmapress_image = imageManifest;
   applyEffects(settings, node, "image");
   applyRotation(settings, node);
   return widget(context.ids, node.id, "image", settings);
@@ -1230,6 +1247,13 @@ function previewNode(
   const attributes = previewNodeAttributes(node);
   const asset = visualAsset(node, context.assets);
   if (asset) {
+    const imageManifest = asset.rendered ? null : figmaImageManifest(asset.paint);
+    if (imageManifest) {
+      if (imageManifest.mode === "tile") {
+        return `<div aria-label="${escapeAttribute(node.name)}" ${attributes} data-figmapress-kind="visual" data-figmapress-image-mode="tile" data-figmapress-image-source="native" style="${position};background-image:url(&quot;${escapeAttribute(asset.url)}&quot;);background-position:0 0;background-repeat:repeat;background-size:${round((imageManifest.scalingFactor ?? 1) * 100)}% auto;overflow:hidden;${previewRadius(node)}${previewTransform(node)}${previewEffects(node)}"></div>`;
+      }
+      return `<div aria-label="${escapeAttribute(node.name)}" ${attributes} data-figmapress-kind="visual" data-figmapress-image-mode="${imageManifest.mode}" data-figmapress-image-source="native" style="${position};overflow:hidden;${previewRadius(node)}${previewTransform(node)}${previewEffects(node)}"><img alt="${escapeAttribute(node.name)}" src="${escapeAttribute(asset.url)}" style="display:block;height:100%;max-width:none;object-fit:${imageObjectFit(asset)};object-position:center center;width:100%;${previewImagePaint(imageManifest)}" /></div>`;
+    }
     return `<img alt="${escapeAttribute(node.name)}" ${attributes} data-figmapress-kind="visual" data-figmapress-image-source="${asset.rendered ? "rendered" : "native"}" src="${escapeAttribute(asset.url)}" style="${position};object-fit:${imageObjectFit(asset)};object-position:center center;${previewRadius(node)}${previewTransform(node)}${previewEffects(node)}" />`;
   }
 
@@ -1423,6 +1447,113 @@ function imageBackgroundSize(paint: FigmaPaint | undefined): "auto" | "contain" 
     default:
       return "cover";
   }
+}
+
+function figmaImageManifest(paint: FigmaPaint | undefined): FigmaImageManifest | null {
+  if (!paint) return null;
+  const mode = imageMode(paint.scaleMode);
+  const transform = imageTransformManifest(paint.imageTransform);
+  const filters = imageFiltersManifest(paint.filters);
+  const rotation = finite(paint.rotation) && Math.abs(paint.rotation!) > 0.0001
+    ? round(paint.rotation!)
+    : undefined;
+  const scalingFactor = mode === "tile" && positive(paint.scalingFactor)
+    ? round(Math.max(0.01, Math.min(20, paint.scalingFactor!)))
+    : undefined;
+  if (!transform && rotation === undefined && !filters && mode !== "tile") return null;
+  return {
+    mode,
+    ...(transform ? { transform } : {}),
+    ...(rotation === undefined ? {} : { rotation }),
+    ...(scalingFactor === undefined ? {} : { scalingFactor }),
+    ...(filters ? { filters } : {}),
+  };
+}
+
+function imageMode(scaleMode: string | undefined): FigmaImageManifest["mode"] {
+  switch (scaleMode?.toUpperCase()) {
+    case "FIT":
+      return "fit";
+    case "STRETCH":
+      return "stretch";
+    case "TILE":
+      return "tile";
+    case "FILL":
+    default:
+      return "fill";
+  }
+}
+
+function imageTransformManifest(
+  transform: FigmaPaint["imageTransform"],
+): FigmaImageManifest["transform"] | undefined {
+  if (
+    !transform
+    || transform.length !== 2
+    || transform[0].length !== 3
+    || transform[1].length !== 3
+    || !transform.flat().every(finite)
+  ) {
+    return undefined;
+  }
+  return {
+    a: round(transform[0][0]),
+    b: round(transform[0][1]),
+    c: round(transform[1][0]),
+    d: round(transform[1][1]),
+    tx: round(transform[0][2]),
+    ty: round(transform[1][2]),
+  };
+}
+
+function imageFiltersManifest(
+  filters: FigmaPaint["filters"],
+): FigmaImageManifest["filters"] | undefined {
+  if (!filters) return undefined;
+  const result = Object.fromEntries(
+    Object.entries(filters)
+      .filter((entry): entry is [string, number] =>
+        finite(entry[1]) && Math.abs(entry[1]) > 0.0001
+      )
+      .map(([key, value]) => [key, round(Math.max(-1, Math.min(1, value)))]),
+  ) as NonNullable<FigmaPaint["filters"]>;
+  return Object.keys(result).length ? result : undefined;
+}
+
+function previewImagePaint(manifest: FigmaImageManifest): string {
+  const declarations: string[] = ["transform-origin:0 0"];
+  if (manifest.transform) {
+    declarations.push(
+      `translate:${round(manifest.transform.tx * 100)}% ${round(manifest.transform.ty * 100)}%`,
+    );
+  }
+  const transforms: string[] = [];
+  if (manifest.transform) {
+    const { a, b, c, d } = manifest.transform;
+    transforms.push(`matrix(${round(a)},${round(c)},${round(b)},${round(d)},0,0)`);
+  }
+  if (manifest.rotation !== undefined) {
+    transforms.push(`rotate(${round(manifest.rotation)}deg)`);
+  }
+  if (transforms.length) declarations.push(`transform:${transforms.join(" ")}`);
+  const filter = imageFilterCss(manifest.filters);
+  if (filter) declarations.push(`filter:${filter}`);
+  return `${declarations.join(";")};`;
+}
+
+function imageFilterCss(filters: FigmaImageManifest["filters"]): string {
+  if (!filters) return "";
+  const values: string[] = [];
+  if (finite(filters.exposure)) {
+    values.push(`brightness(${round(Math.max(0.05, Math.min(20, 2 ** filters.exposure!)))})`);
+  }
+  if (finite(filters.contrast)) {
+    values.push(`contrast(${round(Math.max(0, Math.min(2, 1 + filters.contrast!)))})`);
+  }
+  if (finite(filters.saturation)) {
+    values.push(`saturate(${round(Math.max(0, Math.min(2, 1 + filters.saturation!)))})`);
+  }
+  return values.join(" ");
 }
 
 function containsText(node: FigmaNode): boolean {

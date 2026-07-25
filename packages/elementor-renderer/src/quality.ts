@@ -52,6 +52,7 @@ export interface FigmaQualityReport {
       mapped: number;
       exactRendered: number;
       nativeFit: number;
+      structuredAdjusted: number;
       adjusted: number;
       masks: number;
     };
@@ -120,7 +121,12 @@ export function createFigmaQualityReport(
     visible: imageEntries.length,
     mapped: imageEntries.filter((entry) => entry.mapped).length,
     exactRendered: imageEntries.filter((entry) => entry.exactRendered).length,
-    nativeFit: imageEntries.filter((entry) => entry.mapped && !entry.exactRendered).length,
+    nativeFit: imageEntries.filter((entry) =>
+      entry.mapped && !entry.exactRendered && !adjustedImagePaint(entry.paint)
+    ).length,
+    structuredAdjusted: imageEntries.filter((entry) =>
+      entry.mapped && !entry.exactRendered && adjustedImagePaint(entry.paint)
+    ).length,
     adjusted: imageEntries.filter((entry) => adjustedImagePaint(entry.paint)).length,
     masks: boundedNodes.filter((node) =>
       node.isMask || /(?:^|\s)mask(?:\s|$)/i.test(node.name)
@@ -206,7 +212,7 @@ export function createFigmaQualityReport(
       detail: images.visible === 0
         ? "画像の変換対象はありません"
         : images.mapped === images.visible
-          ? `${images.mapped}画像を再現（正確な切り抜き${images.exactRendered}・標準フィット${images.nativeFit}・マスク${images.masks}）`
+          ? `${images.mapped}画像を再現（正確な切り抜き${images.exactRendered}・構造化変形${images.structuredAdjusted}・標準フィット${images.nativeFit}・マスク${images.masks}）`
           : `${images.visible - images.mapped}画像は切り抜き・フィルターの正確な描画を取得できませんでした`,
     },
     {
@@ -318,7 +324,7 @@ function collectImageEntries(
       result.push({
         paint,
         exactRendered,
-        mapped: exactRendered || (hasNativeImage && nativeImageFitSupported(paint)),
+        mapped: exactRendered || (hasNativeImage && nativeImageSupported(paint)),
       });
     }
     for (const child of node.children ?? []) visit(child, exactRendered);
@@ -338,10 +344,28 @@ function adjustedImagePaint(paint: NonNullable<FigmaNode["fills"]>[number]): boo
     || filters;
 }
 
-function nativeImageFitSupported(paint: NonNullable<FigmaNode["fills"]>[number]): boolean {
-  if (adjustedImagePaint(paint)) return false;
+function nativeImageSupported(paint: NonNullable<FigmaNode["fills"]>[number]): boolean {
   const mode = paint.scaleMode?.toUpperCase();
-  return !mode || mode === "FILL" || mode === "FIT";
+  if (mode && !["FILL", "FIT", "STRETCH", "TILE"].includes(mode)) return false;
+  if (
+    paint.imageTransform
+    && (
+      paint.imageTransform.length !== 2
+      || paint.imageTransform[0].length !== 3
+      || paint.imageTransform[1].length !== 3
+      || !paint.imageTransform.flat().every(Number.isFinite)
+    )
+  ) {
+    return false;
+  }
+  if (mode === "TILE" && paint.scalingFactor !== undefined && !Number.isFinite(paint.scalingFactor)) {
+    return false;
+  }
+  if (paint.rotation !== undefined && !Number.isFinite(paint.rotation)) return false;
+  return Object.entries(paint.filters ?? {}).every(([name, value]) =>
+    ["exposure", "contrast", "saturation"].includes(name)
+    && Number.isFinite(value)
+  );
 }
 
 function isAutoLayout(node: FigmaNode | null): boolean {

@@ -412,6 +412,19 @@ test("Figma image fit modes use exact renders first and safe native fallbacks", 
               scaleMode: "TILE",
               scalingFactor: 0.5,
             }],
+          }, {
+            id: "3:4",
+            name: "Editable adjusted crop",
+            type: "RECTANGLE",
+            absoluteBoundingBox: { x: 360, y: 280, width: 300, height: 200 },
+            fills: [{
+              type: "IMAGE",
+              imageRef: "editable-crop-ref",
+              scaleMode: "STRETCH",
+              imageTransform: [[1.25, 0.1, -0.15], [-0.05, 1.4, -0.2]],
+              rotation: 7.5,
+              filters: { exposure: 0.5, contrast: 0.2, saturation: -0.25 },
+            }],
           }],
         }],
       }],
@@ -426,6 +439,7 @@ test("Figma image fit modes use exact renders first and safe native fallbacks", 
       "fill-ref": "https://images.example/fill.png",
       "crop-ref": "https://images.example/crop.png",
       "tile-ref": "https://images.example/tile.png",
+      "editable-crop-ref": "https://images.example/editable-crop.png",
     },
     [],
     { "3:2": "https://images.example/crop-rendered.png" },
@@ -444,19 +458,43 @@ test("Figma image fit modes use exact renders first and safe native fallbacks", 
     (byNodeId.get("3:2")?.image as { url?: string })?.url,
     "https://images.example/crop-rendered.png",
   );
+  assert.deepEqual(byNodeId.get("3:3")?.figmapress_image, {
+    mode: "tile",
+    scalingFactor: 0.5,
+  });
+  assert.deepEqual(byNodeId.get("3:4")?.figmapress_image, {
+    mode: "stretch",
+    transform: {
+      a: 1.25,
+      b: 0.1,
+      c: -0.05,
+      d: 1.4,
+      tx: -0.15,
+      ty: -0.2,
+    },
+    rotation: 7.5,
+    filters: { exposure: 0.5, contrast: 0.2, saturation: -0.25 },
+  });
   assert.match(result.previewHtml, /data-figmapress-image-source="native"[^>]+object-fit:contain/);
   assert.match(result.previewHtml, /data-figmapress-image-source="rendered"[^>]+crop-rendered\.png/);
+  assert.match(result.previewHtml, /data-figmapress-image-mode="tile"/);
+  assert.match(result.previewHtml, /background-size:50% auto/);
+  assert.match(result.previewHtml, /data-figmapress-image-mode="stretch"/);
+  assert.match(result.previewHtml, /translate:-15% -20%/);
+  assert.match(result.previewHtml, /matrix\(1\.25,-0\.05,0\.1,1\.4,0,0\) rotate\(7\.5deg\)/);
+  assert.match(result.previewHtml, /brightness\(1\.414\) contrast\(1\.2\) saturate\(0\.75\)/);
   assert.deepEqual(result.qualityReport?.metrics.images, {
-    visible: 4,
-    mapped: 3,
+    visible: 5,
+    mapped: 5,
     exactRendered: 1,
     nativeFit: 2,
-    adjusted: 2,
+    structuredAdjusted: 2,
+    adjusted: 3,
     masks: 0,
   });
   assert.equal(
     result.qualityReport?.checks.find((check) => check.id === "images")?.status,
-    "warning",
+    "pass",
   );
 });
 

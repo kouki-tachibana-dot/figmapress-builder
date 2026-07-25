@@ -42,6 +42,7 @@ test("browser connection probes the Connector directly with Basic auth", async (
         webfonts: true,
         gradients: true,
         effects: true,
+        imageTransforms: true,
       },
     });
   });
@@ -63,6 +64,7 @@ test("browser connection probes the Connector directly with Basic auth", async (
     webfonts: true,
     gradients: true,
     effects: true,
+    imageTransforms: true,
   });
   assert.match(requests[0]?.url ?? "", /figmapress\/v1\/status$/);
   assert.match(requests[0]?.authorization ?? "", /^Basic /);
