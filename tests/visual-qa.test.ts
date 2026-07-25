@@ -5,19 +5,23 @@ import {
   analyzeVisualPixels,
   estimateVisualGeometry,
   resolveVisualQaDraftGate,
+  shouldKeepMediaGeometryCorrections,
   shouldKeepSectionVisualCorrections,
   shouldKeepTextGeometryCorrections,
   shouldKeepVisualCorrections,
 } from "../apps/web/src/lib/visual-qa.ts";
 import {
+  applyElementorMediaGeometryCorrections,
   applyElementorSectionVisualCorrections,
   applyElementorTextGeometryCorrections,
   applyElementorVisualCorrections,
+  applyPreviewMediaGeometryCorrections,
   applyPreviewSectionVisualCorrections,
   applyPreviewTextGeometryCorrections,
   applyPreviewVisualCorrections,
   normalizeElementorVisualCorrections,
   normalizeElementorSectionVisualCorrections,
+  normalizeElementorMediaGeometryCorrections,
   normalizeElementorTextGeometryCorrections,
   type ElementorTemplate,
 } from "@figmapress/elementor-renderer";
@@ -404,9 +408,18 @@ test("safe visual corrections become viewport-scaled Elementor transforms", () =
         elements: [
           {
             id: "hero",
-            elType: "container",
-            isInner: true,
+            elType: "widget",
+            widgetType: "text-editor",
+            isInner: false,
             settings: { figmapress_node_id: "10:hero" },
+            elements: [],
+          },
+          {
+            id: "portrait",
+            elType: "widget",
+            widgetType: "image",
+            isInner: false,
+            settings: { figmapress_node_id: "10:portrait" },
             elements: [],
           },
         ],
@@ -421,8 +434,9 @@ test("safe visual corrections become viewport-scaled Elementor transforms", () =
         elements: [
           {
             id: "mobile-hero",
-            elType: "container",
-            isInner: true,
+            elType: "widget",
+            widgetType: "text-editor",
+            isInner: false,
             settings: { figmapress_node_id: "20:hero" },
             elements: [],
           },
@@ -596,6 +610,41 @@ test("safe visual corrections become viewport-scaled Elementor transforms", () =
     textGeometryPreview,
     /--figmapress-qa-runtime-geometry-transform:translate\(0\.125vw,-0\.25vw\) scale\(1\.03,0\.98\)!important/,
   );
+
+  const mediaGeometryCorrection = [{
+    ...textGeometryCorrection[0],
+    nodeId: "10:portrait",
+    nodeName: "Portrait",
+  }];
+  const mediaGeometryCorrected = applyElementorMediaGeometryCorrections(
+    template,
+    mediaGeometryCorrection,
+  );
+  assert.deepEqual(
+    mediaGeometryCorrected.content[0]?.elements[1]?.settings._transform_scaleX_effect,
+    { unit: "px", size: 1.03, sizes: [] },
+  );
+  assert.equal(
+    mediaGeometryCorrected.content[0]?.elements[0]?.settings._transform_scaleX_effect,
+    undefined,
+  );
+  assert.equal(
+    Array.isArray(
+      mediaGeometryCorrected.page_settings
+        .figmapress_media_geometry_corrections,
+    ),
+    true,
+  );
+  const mediaGeometryPreview = applyPreviewMediaGeometryCorrections(
+    preview,
+    mediaGeometryCorrection,
+  );
+  assert.match(mediaGeometryPreview, /data-figmapress-media-geometry-corrections/);
+  assert.match(mediaGeometryPreview, /data-figmapress-kind="visual"/);
+  assert.match(
+    mediaGeometryPreview,
+    /--figmapress-qa-geometry-transform:translate\(0\.125vw,-0\.25vw\) scale\(1\.03,0\.98\)!important/,
+  );
 });
 
 test("unsafe or oversized visual corrections are ignored without mutation", () => {
@@ -642,6 +691,23 @@ test("unsafe or oversized visual corrections are ignored without mutation", () =
         offsetX: 1,
         offsetY: 0,
         scaleX: 1.09,
+        scaleY: 1,
+        captureWidth: 800,
+        confidence: "high",
+        errorReductionRatio: 30,
+      },
+    ]),
+    [],
+  );
+  assert.deepEqual(
+    normalizeElementorMediaGeometryCorrections([
+      {
+        variant: "desktop",
+        nodeId: "unsafe media id",
+        nodeName: "Unsafe media",
+        offsetX: 1,
+        offsetY: 0,
+        scaleX: 1.02,
         scaleY: 1,
         captureWidth: 800,
         confidence: "high",
@@ -785,6 +851,78 @@ test("text geometry rollback guard checks the targeted text node", () => {
         }],
       }],
       [{ variant: "desktop", nodeId: "headline" }],
+    ),
+    false,
+  );
+});
+
+test("media geometry rollback guard checks every targeted visual node", () => {
+  const before = [{
+    variant: "desktop" as const,
+    score: 82,
+    changedPixelRatio: 18,
+    visualNodes: [
+      {
+        nodeId: "portrait",
+        name: "Portrait",
+        x: 300,
+        y: 80,
+        width: 360,
+        height: 500,
+        changedPixelRatio: 34,
+        meanColorError: 24,
+        impactRatio: 5,
+      },
+      {
+        nodeId: "logo",
+        name: "Logo",
+        x: 40,
+        y: 20,
+        width: 160,
+        height: 60,
+        changedPixelRatio: 22,
+        meanColorError: 14,
+        impactRatio: 0.4,
+      },
+    ],
+  }];
+  assert.equal(
+    shouldKeepMediaGeometryCorrections(
+      before,
+      [{
+        ...before[0],
+        score: 82.5,
+        changedPixelRatio: 17.4,
+        visualNodes: before[0].visualNodes.map((region) => ({
+          ...region,
+          changedPixelRatio: region.changedPixelRatio - 4,
+          impactRatio: region.impactRatio - 0.1,
+        })),
+      }],
+      [
+        { variant: "desktop", nodeId: "portrait" },
+        { variant: "desktop", nodeId: "logo" },
+      ],
+    ),
+    true,
+  );
+  assert.equal(
+    shouldKeepMediaGeometryCorrections(
+      before,
+      [{
+        ...before[0],
+        visualNodes: [
+          {
+            ...before[0].visualNodes[0],
+            changedPixelRatio: 28,
+          },
+          before[0].visualNodes[1],
+        ],
+      }],
+      [
+        { variant: "desktop", nodeId: "portrait" },
+        { variant: "desktop", nodeId: "logo" },
+      ],
     ),
     false,
   );
