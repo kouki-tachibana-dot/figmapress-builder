@@ -290,11 +290,22 @@ export async function runVisualQa(
       width,
       height,
       textRegions,
+      24,
+      0,
+      true,
     ).slice(0, 8);
+    const topTextGeometry = textNodes.find(
+      (region) => region.geometry?.safeToApply,
+    );
     const topTextDifference = textNodes.find(
       (region) => region.changedPixelRatio >= 8 && region.impactRatio >= 0.01,
     );
-    const recommendations = topTextDifference
+    const recommendations = topTextGeometry
+      ? [
+          ...analysis.metrics.recommendations,
+          topTextGeometry.geometry!.reason,
+        ]
+      : topTextDifference
       ? [
           ...analysis.metrics.recommendations,
           `文字「${topTextDifference.name}」の差分影響が大きいため、文字幅・明示改行・行高を優先して確認してください。`,

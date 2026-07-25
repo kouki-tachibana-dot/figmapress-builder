@@ -3,17 +3,22 @@ import test from "node:test";
 import {
   analyzeVisualRegions,
   analyzeVisualPixels,
+  estimateVisualGeometry,
   resolveVisualQaDraftGate,
   shouldKeepSectionVisualCorrections,
+  shouldKeepTextGeometryCorrections,
   shouldKeepVisualCorrections,
 } from "../apps/web/src/lib/visual-qa.ts";
 import {
   applyElementorSectionVisualCorrections,
+  applyElementorTextGeometryCorrections,
   applyElementorVisualCorrections,
   applyPreviewSectionVisualCorrections,
+  applyPreviewTextGeometryCorrections,
   applyPreviewVisualCorrections,
   normalizeElementorVisualCorrections,
   normalizeElementorSectionVisualCorrections,
+  normalizeElementorTextGeometryCorrections,
   type ElementorTemplate,
 } from "@figmapress/elementor-renderer";
 
@@ -118,6 +123,42 @@ function translatePixelRegion(
   return target;
 }
 
+function transformPixels(
+  source: Uint8ClampedArray,
+  width: number,
+  height: number,
+  scaleX: number,
+  scaleY: number,
+  offsetX: number,
+  offsetY: number,
+): Uint8ClampedArray {
+  const target = solidPixels(width, height, 247, 247, 243);
+  const centerX = (width - 1) / 2;
+  const centerY = (height - 1) / 2;
+  for (let row = 0; row < height; row += 1) {
+    for (let column = 0; column < width; column += 1) {
+      const sourceX = Math.round(
+        centerX + (column - centerX - offsetX) / scaleX,
+      );
+      const sourceY = Math.round(
+        centerY + (row - centerY - offsetY) / scaleY,
+      );
+      if (
+        sourceX < 0
+        || sourceX >= width
+        || sourceY < 0
+        || sourceY >= height
+      ) {
+        continue;
+      }
+      const sourceOffset = (sourceY * width + sourceX) * 4;
+      const targetOffset = (row * width + column) * 4;
+      target.set(source.subarray(sourceOffset, sourceOffset + 4), targetOffset);
+    }
+  }
+  return target;
+}
+
 test("identical images receive a perfect visual QA score", () => {
   const reference = solidPixels(20, 20, 248, 248, 248);
   const analysis = analyzeVisualPixels(reference, reference.slice(), 20, 20);
@@ -210,6 +251,32 @@ test("visual QA isolates a safe alignment correction to one shifted section", ()
   assert.equal(bottom?.alignment?.offsetX, -4);
   assert.equal(bottom?.alignment?.offsetY, 3);
   assert.equal(bottom?.alignment?.safeToApply, true);
+});
+
+test("visual QA estimates a bounded inverse transform for a shifted text region", () => {
+  const width = 160;
+  const height = 80;
+  const reference = patternedPixels(width, height);
+  const target = transformPixels(reference, width, height, 0.97, 1.02, 2, -2);
+  const geometry = estimateVisualGeometry(reference, target, width, height);
+
+  assert.equal(geometry.safeToApply, true);
+  assert.notEqual(geometry.confidence, "low");
+  assert.ok(Math.abs(geometry.scaleX - (1 / 0.97)) <= 0.011);
+  assert.ok(Math.abs(geometry.scaleY - (1 / 1.02)) <= 0.011);
+  assert.ok(geometry.errorReductionRatio >= 18);
+});
+
+test("visual QA can measure a wide single-line text box", () => {
+  const width = 360;
+  const height = 40;
+  const reference = patternedPixels(width, height);
+  const target = transformPixels(reference, width, height, 0.98, 1.01, 2, -1);
+  const geometry = estimateVisualGeometry(reference, target, width, height);
+
+  assert.equal(geometry.safeToApply, true);
+  assert.ok(Math.abs(geometry.scaleX - (1 / 0.98)) <= 0.011);
+  assert.ok(geometry.errorReductionRatio >= 18);
 });
 
 test("visual QA rejects pixel buffers with mismatched dimensions", () => {
@@ -485,6 +552,50 @@ test("safe visual corrections become viewport-scaled Elementor transforms", () =
     runtimePreview,
     /--figmapress-qa-runtime-global-transform:translate\(0\.25vw,-0\.125vw\)!important/,
   );
+
+  const textGeometryCorrection = [{
+    variant: "desktop" as const,
+    nodeId: "10:hero",
+    nodeName: "Hero heading",
+    offsetX: 1,
+    offsetY: -2,
+    scaleX: 1.03,
+    scaleY: 0.98,
+    captureWidth: 800,
+    confidence: "high" as const,
+    errorReductionRatio: 34,
+  }];
+  const textGeometryCorrected = applyElementorTextGeometryCorrections(
+    template,
+    textGeometryCorrection,
+  );
+  assert.deepEqual(
+    textGeometryCorrected.content[0]?.elements[0]?.settings._transform_scaleX_effect,
+    { unit: "px", size: 1.03, sizes: [] },
+  );
+  assert.deepEqual(
+    textGeometryCorrected.content[0]?.elements[0]?.settings._transform_scaleY_effect,
+    { unit: "px", size: 0.98, sizes: [] },
+  );
+  assert.deepEqual(
+    textGeometryCorrected.content[0]?.elements[0]?.settings._transform_translateY_effect,
+    { unit: "custom", size: "-0.25vw", sizes: [] },
+  );
+  assert.equal(
+    textGeometryCorrected.content[1]?.elements[0]?.settings._transform_scale_popover,
+    undefined,
+  );
+
+  const textGeometryPreview = applyPreviewTextGeometryCorrections(
+    preview,
+    textGeometryCorrection,
+    "runtime",
+  );
+  assert.match(textGeometryPreview, /data-figmapress-text-geometry-corrections/);
+  assert.match(
+    textGeometryPreview,
+    /--figmapress-qa-runtime-geometry-transform:translate\(0\.125vw,-0\.25vw\) scale\(1\.03,0\.98\)!important/,
+  );
 });
 
 test("unsafe or oversized visual corrections are ignored without mutation", () => {
@@ -515,6 +626,23 @@ test("unsafe or oversized visual corrections are ignored without mutation", () =
         nodeName: "Unsafe",
         offsetX: 2,
         offsetY: 1,
+        captureWidth: 800,
+        confidence: "high",
+        errorReductionRatio: 30,
+      },
+    ]),
+    [],
+  );
+  assert.deepEqual(
+    normalizeElementorTextGeometryCorrections([
+      {
+        variant: "desktop",
+        nodeId: "hero",
+        nodeName: "Hero",
+        offsetX: 1,
+        offsetY: 0,
+        scaleX: 1.09,
+        scaleY: 1,
         captureWidth: 800,
         confidence: "high",
         errorReductionRatio: 30,
@@ -606,6 +734,57 @@ test("section visual correction rollback guard checks the targeted node", () => 
         }],
       }],
       [{ variant: "desktop", nodeId: "hero" }],
+    ),
+    false,
+  );
+});
+
+test("text geometry rollback guard checks the targeted text node", () => {
+  const before = [{
+    variant: "desktop" as const,
+    score: 82,
+    changedPixelRatio: 18,
+    textNodes: [{
+      nodeId: "headline",
+      name: "Headline",
+      x: 100,
+      y: 80,
+      width: 480,
+      height: 100,
+      changedPixelRatio: 38,
+      meanColorError: 24,
+      impactRatio: 2.4,
+    }],
+  }];
+  assert.equal(
+    shouldKeepTextGeometryCorrections(
+      before,
+      [{
+        ...before[0],
+        score: 82.4,
+        changedPixelRatio: 17.9,
+        textNodes: [{
+          ...before[0].textNodes[0],
+          changedPixelRatio: 31,
+          impactRatio: 1.8,
+        }],
+      }],
+      [{ variant: "desktop", nodeId: "headline" }],
+    ),
+    true,
+  );
+  assert.equal(
+    shouldKeepTextGeometryCorrections(
+      before,
+      [{
+        ...before[0],
+        changedPixelRatio: 18.3,
+        textNodes: [{
+          ...before[0].textNodes[0],
+          changedPixelRatio: 39,
+        }],
+      }],
+      [{ variant: "desktop", nodeId: "headline" }],
     ),
     false,
   );

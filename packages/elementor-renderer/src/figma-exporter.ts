@@ -2010,7 +2010,7 @@ function dimensions(
 
 function previewTransform(node: FigmaNode): string {
   const rotation = node.rotation ? ` rotate(${round(node.rotation)}deg)` : "";
-  return `--figmapress-qa-global-transform:translate(0px,0px);--figmapress-qa-runtime-global-transform:translate(0px,0px);--figmapress-qa-local-transform:translate(0px,0px);--figmapress-qa-runtime-local-transform:translate(0px,0px);transform:var(--figmapress-qa-global-transform) var(--figmapress-qa-runtime-global-transform) var(--figmapress-qa-local-transform) var(--figmapress-qa-runtime-local-transform)${rotation};transform-origin:center;`;
+  return `--figmapress-qa-global-transform:translate(0px,0px);--figmapress-qa-runtime-global-transform:translate(0px,0px);--figmapress-qa-local-transform:translate(0px,0px);--figmapress-qa-runtime-local-transform:translate(0px,0px);--figmapress-qa-geometry-transform:translate(0px,0px) scale(1,1);--figmapress-qa-runtime-geometry-transform:translate(0px,0px) scale(1,1);transform:var(--figmapress-qa-global-transform) var(--figmapress-qa-runtime-global-transform) var(--figmapress-qa-local-transform) var(--figmapress-qa-runtime-local-transform) var(--figmapress-qa-geometry-transform) var(--figmapress-qa-runtime-geometry-transform)${rotation};transform-origin:center;`;
 }
 
 function positive(value: number | undefined): value is number {
