@@ -21,6 +21,7 @@ export interface VisualQaBrowserResult extends VisualQaMetrics {
   referenceNodeId: string;
   sections: VisualQaRegionMetrics[];
   textNodes: VisualQaRegionMetrics[];
+  visualNodes: VisualQaRegionMetrics[];
   diffImageUrl: string;
 }
 
@@ -235,6 +236,39 @@ export async function runVisualQa(
         )
           .map(regionInput)
           .filter((region): region is VisualQaRegionInput => region !== null)
+          .filter(
+            (region) =>
+              region.x < width
+              && region.y < height
+              && region.x + region.width > 0
+              && region.y + region.height > 0,
+          )
+          .sort(
+            (left, right) =>
+              right.width * right.height - left.width * left.height,
+          )
+          .slice(0, 24)
+      : [];
+    const visualRegions = visiblePreview
+      ? Array.from(
+          visiblePreview.querySelectorAll<HTMLElement>(
+            '[data-figmapress-kind="visual"]',
+          ),
+        )
+          .map(regionInput)
+          .filter((region): region is VisualQaRegionInput => region !== null)
+          .filter(
+            (region) =>
+              region.x < width
+              && region.y < height
+              && region.x + region.width > 0
+              && region.y + region.height > 0,
+          )
+          .sort(
+            (left, right) =>
+              right.width * right.height - left.width * left.height,
+          )
+          .slice(0, 24)
       : [];
 
     const targetCanvas = await html2canvas(frameDocument.documentElement, {
@@ -294,7 +328,20 @@ export async function runVisualQa(
       0,
       true,
     ).slice(0, 8);
+    const visualNodes = analyzeVisualRegions(
+      referencePixels.data,
+      targetPixels.data,
+      width,
+      height,
+      visualRegions,
+      24,
+      0,
+      true,
+    ).slice(0, 8);
     const topTextGeometry = textNodes.find(
+      (region) => region.geometry?.safeToApply,
+    );
+    const topVisualGeometry = visualNodes.find(
       (region) => region.geometry?.safeToApply,
     );
     const topTextDifference = textNodes.find(
@@ -305,6 +352,11 @@ export async function runVisualQa(
           ...analysis.metrics.recommendations,
           topTextGeometry.geometry!.reason,
         ]
+      : topVisualGeometry
+        ? [
+            ...analysis.metrics.recommendations,
+            `画像・装飾「${topVisualGeometry.name}」は${topVisualGeometry.geometry!.reason}`,
+          ]
       : topTextDifference
       ? [
           ...analysis.metrics.recommendations,
@@ -330,6 +382,7 @@ export async function runVisualQa(
       referenceNodeId: reference.nodeId,
       sections,
       textNodes,
+      visualNodes,
       diffImageUrl: diffCanvas.toDataURL("image/png"),
     };
   } finally {

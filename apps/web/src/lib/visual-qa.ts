@@ -135,6 +135,11 @@ export interface VisualQaTextCorrectionOutcome
   textNodes: VisualQaRegionMetrics[];
 }
 
+export interface VisualQaMediaCorrectionOutcome
+  extends VisualQaCorrectionOutcome {
+  visualNodes: VisualQaRegionMetrics[];
+}
+
 export function shouldKeepVisualCorrections(
   before: VisualQaCorrectionOutcome[],
   after: VisualQaCorrectionOutcome[],
@@ -239,6 +244,50 @@ export function shouldKeepTextGeometryCorrections(
     );
     const corrected = correctedPage.textNodes.find(
       (textNode) => textNode.nodeId === target.nodeId,
+    );
+    if (!baseline || !corrected) return false;
+    if (
+      corrected.changedPixelRatio > baseline.changedPixelRatio + 0.3
+      || corrected.impactRatio > baseline.impactRatio + 0.02
+    ) {
+      return false;
+    }
+    if (
+      baseline.changedPixelRatio - corrected.changedPixelRatio >= 0.15
+      || baseline.impactRatio - corrected.impactRatio >= 0.005
+    ) {
+      improvedTargets += 1;
+    }
+  }
+
+  return improvedTargets === targets.length;
+}
+
+export function shouldKeepMediaGeometryCorrections(
+  before: VisualQaMediaCorrectionOutcome[],
+  after: VisualQaMediaCorrectionOutcome[],
+  targets: VisualQaSectionCorrectionTarget[],
+): boolean {
+  if (!targets.length) return false;
+  const beforeByVariant = new Map(before.map((result) => [result.variant, result]));
+  const afterByVariant = new Map(after.map((result) => [result.variant, result]));
+  let improvedTargets = 0;
+
+  for (const target of targets) {
+    const baselinePage = beforeByVariant.get(target.variant);
+    const correctedPage = afterByVariant.get(target.variant);
+    if (!baselinePage || !correctedPage) return false;
+    if (
+      correctedPage.score < baselinePage.score - 0.15
+      || correctedPage.changedPixelRatio > baselinePage.changedPixelRatio + 0.15
+    ) {
+      return false;
+    }
+    const baseline = baselinePage.visualNodes.find(
+      (visualNode) => visualNode.nodeId === target.nodeId,
+    );
+    const corrected = correctedPage.visualNodes.find(
+      (visualNode) => visualNode.nodeId === target.nodeId,
     );
     if (!baseline || !corrected) return false;
     if (

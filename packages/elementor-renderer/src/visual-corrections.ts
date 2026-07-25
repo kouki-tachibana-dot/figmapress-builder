@@ -44,6 +44,12 @@ export interface AppliedElementorTextGeometryCorrection
   translateY: string;
 }
 
+export type ElementorMediaGeometryCorrection =
+  ElementorTextGeometryCorrection;
+
+export type AppliedElementorMediaGeometryCorrection =
+  AppliedElementorTextGeometryCorrection;
+
 const MAX_CAPTURE_OFFSET = 16;
 const MAX_SECTION_CAPTURE_OFFSET = 10;
 const MAX_TEXT_CAPTURE_OFFSET = 6;
@@ -194,6 +200,12 @@ export function normalizeElementorTextGeometryCorrections(
   return Array.from(byTarget.values()).slice(0, 4);
 }
 
+export function normalizeElementorMediaGeometryCorrections(
+  corrections: ElementorMediaGeometryCorrection[],
+): AppliedElementorMediaGeometryCorrection[] {
+  return normalizeElementorTextGeometryCorrections(corrections);
+}
+
 function rootVariant(
   element: ElementorElement,
 ): VisualCorrectionVariant | "single" | null {
@@ -332,17 +344,22 @@ function numericScaleSetting(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 1;
 }
 
-function applyTextGeometryCorrectionToTree(
+function applyGeometryCorrectionToTree(
   element: ElementorElement,
   correction: AppliedElementorTextGeometryCorrection,
+  kind: "text" | "visual",
 ): ElementorElement {
+  const matchesKind =
+    kind === "text"
+      ? element.widgetType === "text-editor"
+      : element.widgetType === "image";
   const corrected =
-    element.settings.figmapress_node_id === correction.nodeId
+    matchesKind && element.settings.figmapress_node_id === correction.nodeId
       ? scaleElementGeometry(element, correction)
       : element;
   if (!corrected.elements.length) return corrected;
   const elements = corrected.elements.map((child) =>
-    applyTextGeometryCorrectionToTree(child, correction)
+    applyGeometryCorrectionToTree(child, correction, kind)
   );
   return elements.every((child, index) => child === corrected.elements[index])
     ? corrected
@@ -437,7 +454,44 @@ export function applyElementorTextGeometryCorrections(
       if (!targetVariant) return root;
       return normalized
         .filter((correction) => correction.variant === targetVariant)
-        .reduce(applyTextGeometryCorrectionToTree, root);
+        .reduce(
+          (element, correction) =>
+            applyGeometryCorrectionToTree(element, correction, "text"),
+          root,
+        );
+    }),
+  };
+}
+
+export function applyElementorMediaGeometryCorrections(
+  template: ElementorTemplate,
+  corrections: ElementorMediaGeometryCorrection[],
+): ElementorTemplate {
+  const normalized = normalizeElementorMediaGeometryCorrections(corrections);
+  if (!normalized.length) return template;
+
+  return {
+    ...template,
+    page_settings: {
+      ...template.page_settings,
+      figmapress_media_geometry_corrections: normalized,
+    },
+    content: template.content.map((root) => {
+      const variant = rootVariant(root);
+      const targetVariant =
+        variant === "mobile"
+          ? "mobile"
+          : variant === "desktop" || variant === "single"
+            ? "desktop"
+            : null;
+      if (!targetVariant) return root;
+      return normalized
+        .filter((correction) => correction.variant === targetVariant)
+        .reduce(
+          (element, correction) =>
+            applyGeometryCorrectionToTree(element, correction, "visual"),
+          root,
+        );
     }),
   };
 }
@@ -500,4 +554,22 @@ export function applyPreviewTextGeometryCorrections(
     )
     .join("");
   return `<style data-figmapress-text-geometry-corrections>${rules}</style>${previewHtml}`;
+}
+
+export function applyPreviewMediaGeometryCorrections(
+  previewHtml: string,
+  corrections: ElementorMediaGeometryCorrection[],
+  channel: "primary" | "runtime" = "primary",
+): string {
+  const normalized = normalizeElementorMediaGeometryCorrections(corrections);
+  if (!normalized.length) return previewHtml;
+  const property = channel === "runtime"
+    ? "--figmapress-qa-runtime-geometry-transform"
+    : "--figmapress-qa-geometry-transform";
+  const rules = normalized
+    .map((correction) =>
+      `${previewSelector(correction.variant)} [data-figmapress-kind="visual"][data-figmapress-node-id="${correction.nodeId}"]{${property}:translate(${correction.translateX},${correction.translateY}) scale(${correction.scaleX},${correction.scaleY})!important}`,
+    )
+    .join("");
+  return `<style data-figmapress-media-geometry-corrections>${rules}</style>${previewHtml}`;
 }
