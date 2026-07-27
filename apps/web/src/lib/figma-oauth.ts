@@ -370,6 +370,21 @@ export function figmaOAuthStateCookie(
   );
 }
 
+export function figmaOAuthAuthorizationResponse(
+  authorizationUrl: string,
+  stateCookie: string,
+  secure: boolean,
+): Response {
+  return new Response(null, {
+    status: 302,
+    headers: {
+      "Cache-Control": "no-store, max-age=0",
+      Location: authorizationUrl,
+      "Set-Cookie": figmaOAuthStateCookie(stateCookie, secure),
+    },
+  });
+}
+
 export function clearFigmaOAuthCookie(
   name: string,
   secure: boolean,

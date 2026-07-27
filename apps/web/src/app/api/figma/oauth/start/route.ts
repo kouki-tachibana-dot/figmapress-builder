@@ -1,9 +1,9 @@
 import { NextRequest } from "next/server";
 import {
   createFigmaOAuthAuthorization,
+  figmaOAuthAuthorizationResponse,
   figmaOAuthConfiguration,
   figmaOAuthRedirectUri,
-  figmaOAuthStateCookie,
 } from "@/lib/figma-oauth";
 
 export const runtime = "nodejs";
@@ -21,14 +21,9 @@ export async function GET(request: NextRequest): Promise<Response> {
     redirectUri,
     configuration,
   );
-  const response = Response.redirect(authorization.authorizationUrl, 302);
-  response.headers.append(
-    "Set-Cookie",
-    figmaOAuthStateCookie(
-      authorization.stateCookie,
-      request.nextUrl.protocol === "https:",
-    ),
+  return figmaOAuthAuthorizationResponse(
+    authorization.authorizationUrl,
+    authorization.stateCookie,
+    request.nextUrl.protocol === "https:",
   );
-  response.headers.set("Cache-Control", "no-store, max-age=0");
-  return response;
 }
