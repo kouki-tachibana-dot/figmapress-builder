@@ -5,6 +5,7 @@ import {
   FIGMA_OAUTH_SESSION_COOKIE,
   createFigmaOAuthAuthorization,
   exchangeFigmaOAuthCode,
+  figmaOAuthAuthorizationResponse,
   figmaOAuthConfiguration,
   figmaOAuthCookie,
   figmaOAuthRedirectUri,
@@ -122,4 +123,23 @@ test("Figma OAuth uses a fixed production callback and hardened cookies", () => 
   assert.match(cookie, /SameSite=Lax/);
   assert.match(cookie, /Secure/);
   assert.match(cookie, /Path=\//);
+});
+
+test("Figma OAuth start returns a mutable redirect response with the state cookie", () => {
+  const response = figmaOAuthAuthorizationResponse(
+    "https://www.figma.com/oauth?client_id=test",
+    "encrypted-state",
+    true,
+  );
+  assert.equal(response.status, 302);
+  assert.equal(
+    response.headers.get("Location"),
+    "https://www.figma.com/oauth?client_id=test",
+  );
+  assert.match(
+    response.headers.get("Set-Cookie") ?? "",
+    /figmapress_figma_oauth_state=encrypted-state/,
+  );
+  assert.equal(response.headers.get("Cache-Control"), "no-store, max-age=0");
+  assert.doesNotThrow(() => response.headers.set("X-Test", "mutable"));
 });
