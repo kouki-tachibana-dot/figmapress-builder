@@ -3,6 +3,10 @@
 Figma の構造を、WordPress で扱える Gutenberg ブロックまたはElementorページへ変換する
 オープンソースの Web アプリ＋CLIです。
 
+## v0.24.0 — One-click Connections
+
+Figmaは公式OAuth（PKCE・`file_content:read`のみ）で接続し、暗号化したHttpOnly Cookieから自動更新します。WordPressはConnector v0.15.0の「ツール → FigmaPress接続」で、Application Passwordを繰り返し入力しない90日間の専用接続を作成できます。専用トークンは `figmapress/v1` 経路だけに限定され、WordPressの通常ログインや他のREST APIには利用できません。複数サイトの接続プロファイルをブラウザから選べます。
+
 ## v0.23.0 — Decoration Geometry
 
 Figmaのカード背景・フォーム枠・CTA背景・区切り線など、内容を持たない装飾Containerを独立して追跡します。PC／スマホ別に位置・幅・高さの補正候補を測定し、子要素のないElementor Containerだけへ反映します。機能Widgetや内容を含むContainerには触れず、対象装飾すべてとページ全体が改善した場合だけ採用します。
@@ -29,11 +33,12 @@ FigmaのCarousel／Slider、プロトタイプリンク、CTA、電話、メー�
 
 ブラウザ版では次の操作を登録不要で行えます。
 
-- Figma URL／ファイルキーと Personal Access Token から直接変換
+- Figma URL／ファイルキーを公式OAuthまたはPersonal Access Tokenで直接変換
 - Figma JSONを貼り付け、またはファイルとして読み込んで変換
 - Site Blueprint、Gutenberg HTML、Elementor Template JSON、`theme.json` のダウンロード
 - 生成ページの安全なサンドボックスプレビュー
 - WordPress接続診断（認証、権限、Connector、Elementor）
+- Connector専用のワンクリック接続と、最大8サイトの接続プロファイル
 - HTTPSのWordPressサイトへGutenberg／Elementor下書き固定ページを作成
 - Figma画像をWordPressメディアライブラリへ取り込み、期限切れを防止
 - Figmaの座標・サイズ・文字スタイルをElementorへ直接反映
@@ -105,17 +110,20 @@ FigmaのCarousel／Slider、プロトタイプリンク、CTA、電話、メー�
 
 ### 認証情報の扱い
 
-Figma Tokenは標準では同じタブの `sessionStorage` だけに保持します。利用者が
-「このブラウザに保存する」を選んだ場合だけ `localStorage` へ移し、画面の「消去」で削除します。
-共有端末ではブラウザ保存を使用しないでください。WordPress Application Passwordはアプリでは保持しません。どちらも
-サーバー側のデータベース・ファイル・Cookieへ保存しません。APIレスポンスは
-`no-store` です。WordPress接続はHTTPS公開ホストだけを許可し、内部IP、localhost、
-リダイレクトを拒否します。詳細は [SECURITY.md](./SECURITY.md) と
+Figma OAuthのアクセストークンと更新トークンは暗号化したHttpOnly Cookieで保持し、
+画面・URL・JavaScriptから読み取れないようにします。PATは標準では同じタブの
+`sessionStorage` だけに保持し、利用者が「このブラウザに保存する」を選んだ場合だけ
+`localStorage` へ移します。WordPress Application Passwordは保持しません。Connector専用接続を
+選んだ場合だけ、サイトURL、ユーザー名、90日間の限定トークンをブラウザの
+`localStorage` に保存します。トークンはWordPress側でハッシュ化され、「ツール →
+FigmaPress接続」から直ちに失効できます。サーバー側のデータベース・ファイルへ認証情報を
+保存せず、APIレスポンスは `no-store` です。WordPress接続はHTTPS公開ホストだけを許可し、
+内部IP、localhost、リダイレクトを拒否します。詳細は [SECURITY.md](./SECURITY.md) と
 [PRIVACY.md](./PRIVACY.md) を参照してください。
 
 ### 制約
 
-- Figma OAuthは未実装で、現時点では利用者自身のPersonal Access Tokenが必要
+- 公開環境でFigma OAuthを使うにはFigma OAuth AppのClient ID／Secret設定が必要。未設定環境ではPATへ自動フォールバック
 - Elementor高忠実度変換は任意のレイヤー名に対応。Gutenberg変換では `section/*` または Hero / Services / Features / FAQ / CTA / Contact の意味が分かる名前を推奨
 - 同一Figmaページに `PC` / `Desktop` と `SP` / `Mobile` の名前を含むトップレベルフレームを配置すると端末別に自動統合。スマホフレームがない場合はPCデザインを画面幅へ連続追従
 - WordPressへの送信は固定ページの `draft` 作成だけ
@@ -157,7 +165,7 @@ Figma → Site Blueprint → Gutenberg / Elementor → WordPress Draft Page
 - Figma Plugin / SaaS 管理画面 / 複数ユーザー管理 / 課金
 - Bricks 対応 / Next.js 出力
 - カスタム投稿タイプ / マルチページ生成
-- Figma OAuth / Webhook / 複数ユーザー管理 / 課金
+- Figma Webhook / SaaS管理画面 / 複数ユーザー管理 / 課金
 - WordPressでの自動公開（安全のため `status: draft` のみ）
 
 ---
@@ -219,9 +227,16 @@ cp .env.example .env
 | `WORDPRESS_APPLICATION_PASSWORD` | Application Password | 同上 |
 | `FIGMA_ACCESS_TOKEN` | 実 Figma API 接続 | 不要 |
 | `FIGMA_FILE_KEY` | 同上 | 不要 |
+| `FIGMA_OAUTH_CLIENT_ID` | Web版のFigma OAuth App Client ID | OAuth利用時 |
+| `FIGMA_OAUTH_CLIENT_SECRET` | Web版のFigma OAuth App Client Secret | OAuth利用時 |
+| `FIGMA_OAUTH_COOKIE_SECRET` | OAuth Cookie暗号化用の32文字以上のランダム値 | OAuth利用時 |
+| `FIGMA_OAUTH_REDIRECT_URI` | OAuth callback。公開版は通常省略可能 | 不要 |
 
 Application Password は WordPress 管理画面の **ユーザー → プロフィール →
 アプリケーションパスワード** から発行できます。
+
+公開版のFigma OAuth Appには次のcallback URLを登録します。
+`https://figmapress-builder.vercel.app/api/figma/oauth/callback`
 
 ---
 
@@ -357,8 +372,8 @@ export interface SiteExporter {
 
 Web画面から `elementor-template.json` をダウンロードしてElementorへ手動importできるほか、
 FigmaPress Connector v0.4以上を有効化したWordPressへ直接下書きを作成できます。
-ConnectorはApplication Passwordで認証された `edit_pages` 権限ユーザーだけを許可し、
-Elementorの非公開post metaへJSONを保存します。
+ConnectorはApplication Passwordまたは `figmapress/v1` に限定した専用接続で認証し、
+`edit_pages` 権限ユーザーだけを許可してElementorの非公開post metaへJSONを保存します。
 
 ### Figma section → Elementor ウィジェット
 

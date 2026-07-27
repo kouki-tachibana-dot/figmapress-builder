@@ -8,15 +8,15 @@ export default function SecurityPage() {
     <LegalLayout
       eyebrow="Security"
       title="セキュリティ"
-      summary="認証情報をサーバー保存せず、WordPressへの操作をHTTPSの下書き作成だけに限定しています。"
+      summary="認証情報をサーバーのデータベースやファイルへ保存せず、WordPressへの操作をHTTPSの下書き作成だけに限定しています。"
     >
       <section>
         <h2>認証情報</h2>
-        <p>Figma Tokenは標準では同じタブのセッションストレージだけに保持します。利用者が明示的に「このブラウザに保存する」を選んだ場合だけローカルストレージへ移し、サーバーでは1回のリクエスト中だけ利用します。WordPress Application Passwordはアプリでは保存せず、ブラウザから対象サイトへの直接接続を優先します。CORSで接続できない場合だけサーバーで1回のリクエスト中に利用し、応答には含めません。Figma Tokenには、短い有効期限と <code>file_content:read</code> だけを設定することを推奨します。</p>
+        <p>Figma OAuthはPKCEを使い、<code>file_content:read</code> だけを要求します。アクセストークンと更新トークンはAES-256-GCMで暗号化したHttpOnly・SameSite Cookieに保持し、画面やURLへ返しません。PATは標準で同じタブのセッションストレージだけに保持し、明示的に選んだ場合だけローカルストレージへ移します。WordPress Application Passwordは保存しません。Connector専用接続を選んだ場合だけ、サイトURL、ユーザー名、90日限定トークンをブラウザに保存します。</p>
       </section>
       <section>
         <h2>WordPress接続</h2>
-        <p>HTTPSの公開ホストだけを許可します。localhost、プライベートIP、リンクローカル、予約済みIP、外部リダイレクトを拒否します。作成する固定ページは常に <code>status: draft</code> です。Elementor作成はConnectorプラグインで <code>edit_pages</code> 権限、Widget許可リスト、再帰サニタイズを検査します。同じ作成リクエストを再送しても既存の下書きを再利用し、タイムアウト後の重複作成を防ぎます。</p>
+        <p>HTTPSの公開ホストだけを許可します。localhost、プライベートIP、リンクローカル、予約済みIP、外部リダイレクトを拒否します。専用トークンはWordPress側にHMACハッシュだけを保存し、<code>figmapress/v1</code> REST経路だけで認証します。通常ログインや他のREST APIには使えず、新規発行または管理画面の解除で直ちに失効します。作成する固定ページは常に <code>status: draft</code> です。Elementor作成は <code>edit_pages</code> 権限、Widget許可リスト、再帰サニタイズを検査し、再送時は既存下書きを再利用します。</p>
       </section>
       <section>
         <h2>画像の永続化</h2>

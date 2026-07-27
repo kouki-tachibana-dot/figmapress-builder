@@ -1,6 +1,12 @@
 import { z } from "zod";
+import { cookies } from "next/headers";
 import type { MockFigmaFile } from "@figmapress/figma-parser";
 import { convertFile } from "@/lib/converter";
+import {
+  FIGMA_OAUTH_SESSION_COOKIE,
+  figmaOAuthCookie,
+  resolveFigmaOAuthAccess,
+} from "@/lib/figma-oauth";
 import {
   fetchFigmaFile,
   type FigmaVisualReferences,
@@ -30,7 +36,7 @@ const RequestSchema = z.discriminatedUnion("mode", [
     .object({
       mode: z.literal("figma"),
       fileKeyOrUrl: z.string().trim().min(6).max(500),
-      token: z.string().trim().min(10).max(500),
+      token: z.string().trim().min(10).max(500).optional(),
     })
     .strict(),
 ]);
@@ -46,10 +52,33 @@ export async function POST(request: Request): Promise<Response> {
 
     let output;
     let visualReferences: FigmaVisualReferences = {};
+    let refreshedOAuthCookie: string | undefined;
     if (parsed.data.mode === "figma") {
+      const cookieStore = await cookies();
+      let oauth = null;
+      if (!parsed.data.token) {
+        try {
+          oauth = await resolveFigmaOAuthAccess(
+            cookieStore.get(FIGMA_OAUTH_SESSION_COOKIE)?.value,
+          );
+        } catch {
+          throw new RequestError(
+            "Figma接続の有効期限を更新できませんでした。接続を解除して、もう一度接続してください。",
+            401,
+          );
+        }
+      }
+      const token = parsed.data.token || oauth?.accessToken;
+      if (!token) {
+        throw new RequestError(
+          "Figmaアカウントを接続するか、Personal Access Tokenを入力してください。",
+          401,
+        );
+      }
+      refreshedOAuthCookie = oauth?.refreshedCookie;
       const fetched = await fetchFigmaFile(
         parsed.data.fileKeyOrUrl,
-        parsed.data.token,
+        token,
       );
       output = await convertFile(
         fetched.file,
@@ -70,7 +99,22 @@ export async function POST(request: Request): Promise<Response> {
       }
     }
 
-    return jsonResponse({ ok: true, ...output, visualReferences });
+    const response = jsonResponse({
+      ok: true,
+      ...output,
+      visualReferences,
+    });
+    if (refreshedOAuthCookie) {
+      response.headers.append(
+        "Set-Cookie",
+        figmaOAuthCookie(
+          FIGMA_OAUTH_SESSION_COOKIE,
+          refreshedOAuthCookie,
+          new URL(request.url).protocol === "https:",
+        ),
+      );
+    }
+    return response;
   } catch (error) {
     return errorResponse(error);
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useSyncExternalStore, type ChangeEvent, type FormEvent, type MouseEvent } from "react";
+import { useEffect, useState, useSyncExternalStore, type ChangeEvent, type FormEvent, type MouseEvent } from "react";
 import {
   applyElementorDecorationGeometryCorrections,
   applyElementorMediaGeometryCorrections,
@@ -30,6 +30,13 @@ import {
 } from "@/lib/wordpress-browser";
 import { readWordPressCredentials } from "@/lib/wordpress-form";
 import {
+  decodeWordPressPairingFragment,
+  pruneWordPressProfiles,
+  removeWordPressProfile,
+  saveWordPressProfile,
+  type WordPressConnectionProfile,
+} from "@/lib/wordpress-profile";
+import {
   runVisualQa,
   type VisualQaBrowserResult,
   type VisualQaReference,
@@ -51,6 +58,7 @@ const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.14.0";
+const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
 
 function versionAtLeast(version: string | undefined, minimum: string): boolean {
   if (!version) return false;
@@ -61,6 +69,19 @@ function versionAtLeast(version: string | undefined, minimum: string): boolean {
     if ((current[index] ?? 0) < (required[index] ?? 0)) return false;
   }
   return true;
+}
+
+function wordpressPairingAdminUrl(baseUrl: string): string | null {
+  try {
+    const url = new URL(baseUrl);
+    if (url.protocol !== "https:" || url.username || url.password) return null;
+    url.pathname = `${url.pathname.replace(/\/+$/, "")}/wp-admin/tools.php`;
+    url.search = "?page=figmapress-connection";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return null;
+  }
 }
 
 function readSessionFigmaToken(): string {
@@ -241,6 +262,10 @@ interface WordPressStatus {
     imageTransforms?: boolean;
   };
   canEditPages: boolean;
+  pairing?: {
+    supported: boolean;
+    active: boolean;
+  };
 }
 
 interface WordPressVisualCorrectionSummary {
@@ -250,6 +275,23 @@ interface WordPressVisualCorrectionSummary {
   mediaGeometry: ElementorMediaGeometryCorrection[];
   decorationGeometry: ElementorDecorationGeometryCorrection[];
   rolledBack: boolean;
+}
+
+interface FigmaOAuthClientStatus {
+  configured: boolean;
+  connected: boolean;
+  expiresAt?: number;
+}
+
+async function fetchFigmaOAuthStatus(): Promise<FigmaOAuthClientStatus> {
+  const response = await fetch("/api/figma/oauth/status", {
+    cache: "no-store",
+    credentials: "same-origin",
+  });
+  if (!response.ok) {
+    return { configured: false, connected: false };
+  }
+  return await response.json() as FigmaOAuthClientStatus;
 }
 
 const sectionLabels: Record<string, string> = {
@@ -538,6 +580,8 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     readPersistentTokenFlag,
     () => false,
   );
+  const [figmaOAuthStatus, setFigmaOAuthStatus] =
+    useState<FigmaOAuthClientStatus | null>(null);
   const [jsonText, setJsonText] = useState(sampleJson);
   const [output, setOutput] = useState<ConversionResult | null>(null);
   const [converting, setConverting] = useState(false);
@@ -587,7 +631,75 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const [baseUrl, setBaseUrl] = useState("");
   const [username, setUsername] = useState("");
   const [applicationPassword, setApplicationPassword] = useState("");
+  const [connectorToken, setConnectorToken] = useState("");
+  const [wordpressProfiles, setWordpressProfiles] = useState<
+    WordPressConnectionProfile[]
+  >([]);
   const [confirmed, setConfirmed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const updateStatus = async () => {
+      const status = await fetchFigmaOAuthStatus();
+      if (active) setFigmaOAuthStatus(status);
+    };
+    const onMessage = (event: MessageEvent) => {
+      if (
+        event.origin !== window.location.origin
+        || typeof event.data !== "object"
+        || event.data === null
+        || (event.data as { type?: unknown }).type
+          !== "figmapress:figma-oauth"
+      ) {
+        return;
+      }
+      const result = event.data as {
+        success?: unknown;
+        message?: unknown;
+      };
+      if (result.success === true) {
+        writeFigmaToken("");
+        void updateStatus();
+        setError("");
+      } else if (typeof result.message === "string") {
+        setError(result.message);
+      }
+    };
+    window.addEventListener("message", onMessage);
+    void updateStatus();
+    return () => {
+      active = false;
+      window.removeEventListener("message", onMessage);
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      const paired = decodeWordPressPairingFragment(window.location.hash);
+      let profiles = pruneWordPressProfiles(window.localStorage);
+      if (paired) {
+        profiles = saveWordPressProfile(window.localStorage, paired);
+        window.history.replaceState(
+          null,
+          "",
+          `${window.location.pathname}${window.location.search}`,
+        );
+      }
+      const selected = paired ?? profiles[0];
+      if (selected) {
+        setBaseUrl(selected.baseUrl);
+        setUsername(selected.username);
+        setConnectorToken(selected.connectorToken ?? "");
+        setApplicationPassword("");
+      }
+      setWordpressProfiles(profiles);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const srcDoc = output
     ? previewDocument(
@@ -683,6 +795,32 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     writeFigmaToken(figmaToken, persistent);
   }
 
+  function connectFigmaAccount() {
+    const popup = window.open(
+      "/api/figma/oauth/start",
+      "figmapress-figma-oauth",
+      "popup,width=620,height=760",
+    );
+    if (!popup) {
+      setError(
+        "Figma接続画面を開けませんでした。ポップアップを許可して再試行してください。",
+      );
+    }
+  }
+
+  async function disconnectFigmaAccount() {
+    const response = await fetch("/api/figma/oauth/disconnect", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!response.ok) {
+      setError("Figma接続を解除できませんでした。");
+      return;
+    }
+    setFigmaOAuthStatus(await fetchFigmaOAuthStatus());
+  }
+
   async function convert(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setConverting(true);
@@ -713,7 +851,15 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     try {
       let body: Record<string, unknown>;
       if (mode === "figma") {
-        body = { mode, fileKeyOrUrl, token: figmaToken };
+        body = {
+          mode,
+          fileKeyOrUrl,
+          ...(
+            figmaToken && !figmaOAuthStatus?.connected
+              ? { token: figmaToken }
+              : {}
+          ),
+        };
       } else {
         let data: unknown;
         try {
@@ -1105,6 +1251,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       baseUrl,
       username,
       applicationPassword,
+      connectorToken,
     });
     setWpBusy(true);
     setWpError("");
@@ -1200,11 +1347,13 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         baseUrl,
         username,
         applicationPassword,
+        connectorToken,
       },
     );
     setBaseUrl(credentials.baseUrl);
     setUsername(credentials.username);
     setApplicationPassword(credentials.applicationPassword);
+    setConnectorToken(credentials.connectorToken ?? "");
     setWpChecking(true);
     setWpError("");
     setWpStatus(null);
@@ -1227,11 +1376,64 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         setWpStatus(data.status);
         setWpTransport("proxy");
       }
+      setWordpressProfiles(
+        saveWordPressProfile(
+          window.localStorage,
+          {
+            baseUrl: credentials.baseUrl,
+            username: credentials.username,
+            connectorToken: credentials.connectorToken,
+            expiresAt: wordpressProfiles.find(
+              (profile) => profile.baseUrl === credentials.baseUrl,
+            )?.expiresAt,
+            updatedAt: Date.now(),
+          },
+        ),
+      );
     } catch (caught) {
       setWpError(caught instanceof Error ? caught.message : "接続診断に失敗しました。");
     } finally {
       setWpChecking(false);
     }
+  }
+
+  function selectWordPressProfile(selectedBaseUrl: string) {
+    if (!selectedBaseUrl) {
+      setBaseUrl("");
+      setUsername("");
+      setConnectorToken("");
+      setApplicationPassword("");
+      setWpStatus(null);
+      setWpTransport(null);
+      setWpError("");
+      return;
+    }
+    const selected = wordpressProfiles.find(
+      (profile) => profile.baseUrl === selectedBaseUrl,
+    );
+    if (!selected) return;
+    setBaseUrl(selected.baseUrl);
+    setUsername(selected.username);
+    setConnectorToken(selected.connectorToken ?? "");
+    setApplicationPassword("");
+    setWpStatus(null);
+    setWpTransport(null);
+    setWpError("");
+  }
+
+  function forgetWordPressProfile() {
+    const profiles = removeWordPressProfile(
+      window.localStorage,
+      baseUrl,
+    );
+    setWordpressProfiles(profiles);
+    const next = profiles[0];
+    setBaseUrl(next?.baseUrl ?? "");
+    setUsername(next?.username ?? "");
+    setConnectorToken(next?.connectorToken ?? "");
+    setApplicationPassword("");
+    setWpStatus(null);
+    setWpTransport(null);
   }
 
   async function measureVisualQuality(
@@ -1546,7 +1748,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.23.0 live</span>
+          <span className="status-pill"><i /> v0.24.0 live</span>
         </nav>
       </header>
 
@@ -1646,32 +1848,69 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                   />
                 </label>
                 <div className="field field--wide">
-                  <label htmlFor="figma-personal-access-token">Figma Personal Access Token</label>
-                  <div className="token-input-row">
-                    <input
-                      autoComplete="off"
-                      id="figma-personal-access-token"
-                      onChange={(event) => updateFigmaToken(event.target.value)}
-                      placeholder="figd_…"
-                      required
-                      type="password"
-                      value={figmaToken}
-                    />
-                    {figmaToken && (
-                      <button onClick={() => updateFigmaToken("")} type="button">消去</button>
+                  <span>Figma接続</span>
+                  <div className={`oauth-connect-card ${figmaOAuthStatus?.connected ? "is-connected" : ""}`}>
+                    {figmaOAuthStatus === null ? (
+                      <small>接続状態を確認しています…</small>
+                    ) : figmaOAuthStatus.configured ? (
+                      figmaOAuthStatus.connected ? (
+                        <>
+                          <div>
+                            <strong>✓ Figmaアカウント接続済み</strong>
+                            <small>トークンは暗号化されたHttpOnly Cookieで保持され、画面やURLには表示されません。</small>
+                          </div>
+                          <button onClick={disconnectFigmaAccount} type="button">接続解除</button>
+                        </>
+                      ) : (
+                        <>
+                          <div>
+                            <strong>毎回のトークン入力は不要です</strong>
+                            <small>Figma公式OAuthでfile_content:readだけを許可します。</small>
+                          </div>
+                          <button onClick={connectFigmaAccount} type="button">Figmaアカウントを接続</button>
+                        </>
+                      )
+                    ) : (
+                      <div>
+                        <strong>OAuthは準備中です</strong>
+                        <small>現在は下のPersonal Access Tokenを利用してください。</small>
+                      </div>
                     )}
                   </div>
-                  <small>
-                    file_content:read 権限が必要です。標準ではこのタブ内だけに保持します。
-                  </small>
-                  <label className="token-persistence">
-                    <input
-                      checked={persistFigmaToken}
-                      onChange={(event) => updateFigmaTokenPersistence(event.target.checked)}
-                      type="checkbox"
-                    />
-                    <span>このブラウザに保存する（共有端末ではオフ）</span>
-                  </label>
+                  <details
+                    className="pat-fallback"
+                    open={!figmaOAuthStatus?.connected}
+                  >
+                    <summary>Personal Access Tokenを使う</summary>
+                    <label htmlFor="figma-personal-access-token">
+                      Figma Personal Access Token
+                    </label>
+                    <div className="token-input-row">
+                      <input
+                        autoComplete="off"
+                        id="figma-personal-access-token"
+                        onChange={(event) => updateFigmaToken(event.target.value)}
+                        placeholder="figd_…"
+                        required={!figmaOAuthStatus?.connected}
+                        type="password"
+                        value={figmaToken}
+                      />
+                      {figmaToken && (
+                        <button onClick={() => updateFigmaToken("")} type="button">消去</button>
+                      )}
+                    </div>
+                    <small>
+                      OAuth未接続時のフォールバックです。file_content:read権限が必要です。
+                    </small>
+                    <label className="token-persistence">
+                      <input
+                        checked={persistFigmaToken}
+                        onChange={(event) => updateFigmaTokenPersistence(event.target.checked)}
+                        type="checkbox"
+                      />
+                      <span>このブラウザに保存する（共有端末ではオフ）</span>
+                    </label>
+                  </details>
                 </div>
               </div>
             ) : (
@@ -1705,7 +1944,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
 
             {error && <div className="alert alert--error" role="alert">{error}</div>}
             <div className="form-footer">
-              <p><span className="lock">⌁</span> サーバー保存なし。標準はタブ内、選択時のみこのブラウザに保持します。</p>
+              <p><span className="lock">⌁</span> OAuth認証情報は暗号化HttpOnly Cookie、PATは標準でこのタブ内だけに保持します。</p>
               <button className="button button--primary button--submit" disabled={converting} type="submit">
                 {converting ? <><span className="spinner" /> 変換中…</> : <>WordPress用に変換 <span>→</span></>}
               </button>
@@ -2206,22 +2445,64 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                   <span><strong>Elementor（推奨）</strong><small>Figmaレイアウト・文字・画像を保持</small></span>
                 </label>
               </fieldset>
+              {wordpressProfiles.length > 0 && (
+                <div className="wp-profile-row">
+                  <label>
+                    <span>保存済み接続</span>
+                    <select
+                      onChange={(event) =>
+                        selectWordPressProfile(event.target.value)
+                      }
+                      value={
+                        wordpressProfiles.some(
+                          (profile) => profile.baseUrl === baseUrl,
+                        )
+                          ? baseUrl
+                          : ""
+                      }
+                    >
+                      <option value="">新しいサイト</option>
+                      {wordpressProfiles.map((profile) => (
+                        <option key={profile.baseUrl} value={profile.baseUrl}>
+                          {new URL(profile.baseUrl).host} — {profile.username}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {wordpressProfiles.some(
+                    (profile) => profile.baseUrl === baseUrl,
+                  ) && (
+                    <button onClick={forgetWordPressProfile} type="button">
+                      このブラウザから削除
+                    </button>
+                  )}
+                </div>
+              )}
+              {connectorToken && (
+                <div className="paired-connection" role="status">
+                  <strong>✓ Connector専用接続を使用します</strong>
+                  <span>
+                    Application Passwordは不要です。このブラウザだけに保存され、WordPressの「ツール → FigmaPress接続」からいつでも無効化できます。
+                  </span>
+                </div>
+              )}
               <div className="form-grid form-grid--three">
                 <label className="field">
                   <span>WordPress URL</span>
-                  <input name="baseUrl" onChange={(event) => { setBaseUrl(event.target.value); setWpStatus(null); setWpTransport(null); }} placeholder="https://example.com" required type="url" value={baseUrl} />
+                  <input name="baseUrl" onChange={(event) => { setBaseUrl(event.target.value); setConnectorToken(""); setWpStatus(null); setWpTransport(null); }} placeholder="https://example.com" readOnly={Boolean(connectorToken)} required type="url" value={baseUrl} />
                 </label>
                 <label className="field">
                   <span>ユーザー名</span>
-                  <input autoComplete="username" name="username" onChange={(event) => { setUsername(event.target.value); setWpStatus(null); setWpTransport(null); }} required value={username} />
+                  <input autoComplete="username" name="username" onChange={(event) => { setUsername(event.target.value); setConnectorToken(""); setWpStatus(null); setWpTransport(null); }} readOnly={Boolean(connectorToken)} required value={username} />
                 </label>
                 <label className="field">
                   <span>Application Password</span>
-                  <input autoComplete="current-password" name="applicationPassword" onChange={(event) => { setApplicationPassword(event.target.value); setWpStatus(null); setWpTransport(null); }} required type="password" value={applicationPassword} />
+                  <input autoComplete="current-password" disabled={Boolean(connectorToken)} name="applicationPassword" onChange={(event) => { setApplicationPassword(event.target.value); setWpStatus(null); setWpTransport(null); }} placeholder={connectorToken ? "Connector専用接続では不要" : ""} required={!connectorToken} type="password" value={applicationPassword} />
                 </label>
+                <input name="connectorToken" type="hidden" value={connectorToken} />
               </div>
               <div className="connection-row">
-                <button className="connection-button" disabled={wpChecking || !baseUrl || !username || applicationPassword.length < 8} onClick={checkWordPressConnection} type="button">
+                <button className="connection-button" disabled={wpChecking || !baseUrl || !username || (!connectorToken && applicationPassword.length < 8)} onClick={checkWordPressConnection} type="button">
                   {wpChecking ? "診断中…" : "接続を診断"}
                 </button>
                 {wpStatus && (
@@ -2236,12 +2517,26 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                     {wpTarget === "elementor" && (
                       <span>実ページQA {connectorSupportsActualVisualQa ? "対応" : "更新必要"}</span>
                     )}
-                    <span>{wpTransport === "direct" ? "ブラウザ直結" : "サーバー経由"}</span>
+                    <span>{connectorToken ? "Connector専用接続" : wpTransport === "direct" ? "ブラウザ直結" : "サーバー経由"}</span>
                   </div>
                 )}
               </div>
               {wpStatus && !wpStatus.connectorInstalled && (
                 <div className="alert alert--error" role="alert">Connectorプラグインをインストールしてから再診断してください。</div>
+              )}
+              {wpStatus && wpStatus.connectorInstalled && !connectorToken && !versionAtLeast(wpStatus.connectorVersion, ONE_CLICK_CONNECTOR_VERSION) && (
+                <div className="alert alert--error" role="alert">
+                  毎回のApplication Password入力をなくすにはConnector v{ONE_CLICK_CONNECTOR_VERSION}以上が必要です。<a href="/downloads/figmapress-connector.zip" download>最新版ZIPをダウンロード</a>して更新してください。
+                </div>
+              )}
+              {wpStatus && wpStatus.connectorInstalled && !connectorToken && versionAtLeast(wpStatus.connectorVersion, ONE_CLICK_CONNECTOR_VERSION) && wordpressPairingAdminUrl(baseUrl) && (
+                <div className="paired-connection paired-connection--setup">
+                  <strong>次回から入力不要にできます</strong>
+                  <span>WordPressで専用接続を作ると、このサイトを保存済み接続から選ぶだけになります。</span>
+                  <a href={wordpressPairingAdminUrl(baseUrl) ?? "#"} rel="noreferrer" target="_blank">
+                    WordPressでワンクリック接続を有効化 ↗
+                  </a>
+                </div>
               )}
               {wpStatus && wpTarget === "elementor" && !wpStatus.elementor.active && (
                 <div className="alert alert--error" role="alert">このサイトではElementorが有効化されていません。</div>
@@ -2290,7 +2585,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
               )}
               <label className="consent">
                 <input checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} type="checkbox" />
-                <span>認証情報がこの処理のためだけに一時利用され、保存されないことを確認しました。</span>
+                <span>Application Passwordは保存されません。Connector専用接続を使う場合だけ、対象サイト・ユーザー名・90日限定トークンがこのブラウザに保存されることを確認しました。</span>
               </label>
               {wpError && <div className="alert alert--error" role="alert">{wpError}</div>}
               {wpResult && (
@@ -2382,8 +2677,8 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
           </article>
           <article>
             <span className="setup-icon">03</span>
-            <h3>変換して下書き作成</h3>
-            <p>このページに戻り、WordPress接続情報を入力して送信します。</p>
+            <h3>ワンクリック接続</h3>
+            <p>WordPressの「ツール → FigmaPress接続」からこの画面を開けば、以後のApplication Password入力は不要です。</p>
             <a href="/downloads/figmapress-block-theme.zip" download>Theme ZIP（任意）をダウンロード ↓</a>
           </article>
         </div>
@@ -2392,13 +2687,13 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <section className="scope-strip">
         <div><span>READY</span><strong>Gutenberg blocks</strong><p>編集可能な6セクション</p></div>
         <div><span>READY</span><strong>Elementor documents</strong><p>機能Widget化・画像永続化</p></div>
-        <div><span>SECURITY</span><strong>Local-only token</strong><p>サーバー保存なし・ブラウザ保存を選択可能</p></div>
+        <div><span>SECURITY</span><strong>Scoped connections</strong><p>権限限定・暗号化・いつでも失効</p></div>
       </section>
 
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.23.0</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.24.0</span></div>
       </footer>
     </main>
   );

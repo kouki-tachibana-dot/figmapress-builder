@@ -65,6 +65,15 @@ function figmapress_connector_register_rest_routes() {
     );
     register_rest_route(
         'figmapress/v1',
+        '/gutenberg/pages',
+        array(
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => 'figmapress_connector_rest_create_gutenberg_page',
+            'permission_callback' => 'figmapress_connector_rest_can_edit_pages',
+        )
+    );
+    register_rest_route(
+        'figmapress/v1',
         '/elementor/pages',
         array(
             'methods'             => WP_REST_Server::CREATABLE,
@@ -167,11 +176,22 @@ function figmapress_connector_rest_is_authenticated() {
 
 function figmapress_connector_rest_status() {
     global $wp_version;
+    $current_user = wp_get_current_user();
     return rest_ensure_response(
         array(
             'connectorVersion' => FIGMAPRESS_CONNECTOR_VERSION,
             'wordpressVersion' => $wp_version,
             'canEditPages'      => current_user_can( 'edit_pages' ),
+            'user'              => array(
+                'id'   => absint( $current_user->ID ),
+                'name' => $current_user->display_name
+                    ? $current_user->display_name
+                    : $current_user->user_login,
+            ),
+            'pairing'           => array(
+                'supported' => true,
+                'active'    => ! empty( $GLOBALS['figmapress_pairing_authenticated'] ),
+            ),
             'elementor'         => array(
                 'active'  => did_action( 'elementor/loaded' ) > 0 || defined( 'ELEMENTOR_VERSION' ),
                 'version' => defined( 'ELEMENTOR_VERSION' ) ? ELEMENTOR_VERSION : null,
@@ -192,6 +212,51 @@ function figmapress_connector_rest_status() {
                 'effects'        => true,
                 'imageTransforms' => true,
             ),
+        )
+    );
+}
+
+function figmapress_connector_rest_create_gutenberg_page( WP_REST_Request $request ) {
+    $params  = $request->get_json_params();
+    $title   = isset( $params['title'] )
+        ? sanitize_text_field( $params['title'] )
+        : '';
+    $slug    = isset( $params['slug'] )
+        ? sanitize_title( $params['slug'] )
+        : '';
+    $content = isset( $params['content'] ) && is_string( $params['content'] )
+        ? wp_kses_post( $params['content'] )
+        : '';
+    if ( '' === $title || '' === $content ) {
+        return new WP_Error(
+            'figmapress_invalid_gutenberg_page',
+            'The Gutenberg page payload is invalid.',
+            array( 'status' => 422 )
+        );
+    }
+
+    $post_id = wp_insert_post(
+        array(
+            'post_type'    => 'page',
+            'post_status'  => 'draft',
+            'post_title'   => $title,
+            'post_name'    => $slug,
+            'post_content' => $content,
+        ),
+        true
+    );
+    if ( is_wp_error( $post_id ) ) {
+        return $post_id;
+    }
+    return rest_ensure_response(
+        array(
+            'id'          => $post_id,
+            'slug'        => get_post_field( 'post_name', $post_id ),
+            'status'      => 'draft',
+            'target'      => 'gutenberg',
+            'editLink'    => admin_url( 'post.php?post=' . $post_id . '&action=edit' ),
+            'previewLink' => get_preview_post_link( $post_id ),
+            'rawLink'     => get_permalink( $post_id ),
         )
     );
 }

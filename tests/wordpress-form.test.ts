@@ -30,3 +30,25 @@ test("WordPress credential reading falls back when no form is available", () => 
   };
   assert.equal(readWordPressCredentials(null, fallback), fallback);
 });
+
+test("WordPress credential reading carries the scoped Connector token", () => {
+  const form = new FormData();
+  form.set("baseUrl", "https://wordpress.example");
+  form.set("username", "editor");
+  form.set("applicationPassword", "");
+  form.set("connectorToken", `fp1.7.${"a".repeat(43)}`);
+
+  assert.deepEqual(
+    readWordPressCredentials(form, {
+      baseUrl: "",
+      username: "",
+      applicationPassword: "",
+    }),
+    {
+      baseUrl: "https://wordpress.example",
+      username: "editor",
+      applicationPassword: "",
+      connectorToken: `fp1.7.${"a".repeat(43)}`,
+    },
+  );
+});

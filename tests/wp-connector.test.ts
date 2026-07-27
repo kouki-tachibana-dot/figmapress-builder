@@ -115,6 +115,41 @@ test("server connection retries with the Connector header after HTTP 401", async
   assert.match(fallbackHeaders[1] ?? "", /^Basic /);
 });
 
+test("server pairing sends no Basic credentials and reports the paired user", async (context) => {
+  const connectorToken = `fp1.7.${"c".repeat(43)}`;
+  const headersSeen: Array<{
+    authorization: string | null;
+    pairing: string | null;
+  }> = [];
+  context.mock.method(globalThis, "fetch", async (_input, init) => {
+    const headers = new Headers(init?.headers);
+    headersSeen.push({
+      authorization: headers.get("Authorization"),
+      pairing: headers.get("X-FigmaPress-Token"),
+    });
+    return Response.json({
+      connectorVersion: "0.15.0",
+      wordpressVersion: "7.0.1",
+      canEditPages: true,
+      user: { id: 7, name: "Paired editor" },
+      pairing: { supported: true, active: true },
+      elementor: { active: true, version: "3.30.0" },
+    });
+  });
+
+  const status = await probeWordPressConnection({
+    baseUrl: "https://wordpress.example",
+    username: "editor",
+    applicationPassword: "",
+    connectorToken,
+  });
+  assert.equal(status.user.name, "Paired editor");
+  assert.deepEqual(status.pairing, { supported: true, active: true });
+  assert.equal(headersSeen.length, 1);
+  assert.equal(headersSeen[0]?.authorization, null);
+  assert.equal(headersSeen[0]?.pairing, connectorToken);
+});
+
 test("Elementor draft creation uses one Connector request and remains draft", async (context) => {
   const requests: Array<{ url: string; method?: string; body?: string }> = [];
   context.mock.method(globalThis, "fetch", async (input, init) => {
