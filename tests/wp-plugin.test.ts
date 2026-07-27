@@ -19,6 +19,10 @@ const updatePath = new URL(
   "../wordpress-plugin/figmapress-connector/includes/update-checker.php",
   import.meta.url,
 );
+const pairingPath = new URL(
+  "../wordpress-plugin/figmapress-connector/includes/pairing.php",
+  import.meta.url,
+);
 const interactionScriptPath = new URL(
   "../wordpress-plugin/figmapress-connector/assets/elementor-interactions.js",
   import.meta.url,
@@ -88,8 +92,14 @@ test("Connector saves through Elementor and verifies persisted elements", async 
 
 test("Connector ensures Elementor Containers are available before creating a page", async () => {
   const source = await readFile(restApiPath, "utf8");
-  const ensureContainers = source.indexOf("figmapress_connector_ensure_elementor_containers()");
-  const insertPost = source.indexOf("$post_id = wp_insert_post(");
+  const elementorHandler = source.indexOf(
+    "function figmapress_connector_rest_create_elementor_page",
+  );
+  const ensureContainers = source.indexOf(
+    "figmapress_connector_ensure_elementor_containers()",
+    elementorHandler,
+  );
+  const insertPost = source.indexOf("$post_id = wp_insert_post(", elementorHandler);
 
   assert.ok(ensureContainers > 0, "Container compatibility check must exist");
   assert.ok(insertPost > ensureContainers, "Container compatibility must be checked before creating the draft");
@@ -135,9 +145,18 @@ test("public contact form verifies origin, token, rate limit, and stored widget"
 
 test("Connector reuses an existing Elementor draft for the same request identifier", async () => {
   const source = await readFile(restApiPath, "utf8");
-  const lookup = source.indexOf("'meta_key'               => '_figmapress_request_id'");
-  const insert = source.indexOf("$post_id = wp_insert_post(");
-  const record = source.indexOf("add_post_meta( $post_id, '_figmapress_request_id'");
+  const elementorHandler = source.indexOf(
+    "function figmapress_connector_rest_create_elementor_page",
+  );
+  const lookup = source.indexOf(
+    "'meta_key'               => '_figmapress_request_id'",
+    elementorHandler,
+  );
+  const insert = source.indexOf("$post_id = wp_insert_post(", elementorHandler);
+  const record = source.indexOf(
+    "add_post_meta( $post_id, '_figmapress_request_id'",
+    elementorHandler,
+  );
 
   assert.ok(lookup > 0, "request identifier lookup must exist");
   assert.ok(lookup < insert, "existing drafts must be checked before inserting a page");
@@ -187,6 +206,27 @@ test("Connector checks the pinned HTTPS manifest for native WordPress updates", 
   assert.match(source, /figmapress-builder\.vercel\.app/);
   assert.match(source, /version_compare/);
   assert.match(source, /'plugins_api'/);
+});
+
+test("Connector pairing is revocable, hashed, expiring, and namespace scoped", async () => {
+  const [plugin, pairing, rest] = await Promise.all([
+    readFile(pluginPath, "utf8"),
+    readFile(pairingPath, "utf8"),
+    readFile(restApiPath, "utf8"),
+  ]);
+  assert.match(plugin, /includes\/pairing\.php/);
+  assert.match(pairing, /90 \* DAY_IN_SECONDS/);
+  assert.match(pairing, /hash_hmac\( 'sha256'/);
+  assert.match(pairing, /hash_equals\(/);
+  assert.match(pairing, /HTTP_X_FIGMAPRESS_TOKEN/);
+  assert.match(pairing, /query_vars\['rest_route'\]/);
+  assert.match(pairing, /wp_parse_url\( \$request_uri, PHP_URL_PATH \)/);
+  assert.match(pairing, /#\^\/\?figmapress\/v1/);
+  assert.doesNotMatch(pairing, /strpos\( \$request_uri/);
+  assert.match(pairing, /#figmapress-connect=/);
+  assert.match(pairing, /delete_user_meta\( \$user_id, '_figmapress_pairing_token_hash'/);
+  assert.match(rest, /'\/gutenberg\/pages'/);
+  assert.match(rest, /'post_status'\s*=>\s*'draft'/);
 });
 
 test("Connector exposes authenticated Elementor snapshots with stable Figma node identities", async () => {

@@ -20,8 +20,11 @@ export const maxDuration = 30;
 
 const RequestSchema = z.object({
   baseUrl: z.string().trim().min(8).max(500),
-  username: z.string().trim().min(1).max(160),
-  applicationPassword: z.string().trim().min(8).max(500),
+  username: z.string().trim().max(160).default(""),
+  applicationPassword: z.string().trim().max(500).default(""),
+  connectorToken: z.string().trim()
+    .regex(/^fp1\.[1-9][0-9]{0,19}\.[A-Za-z0-9_-]{32,128}$/)
+    .optional(),
 }).strict();
 
 export async function POST(request: Request): Promise<Response> {
@@ -32,13 +35,24 @@ export async function POST(request: Request): Promise<Response> {
     if (!parsed.success) {
       throw new RequestError("WordPress接続情報を確認してください。", 422);
     }
+    if (
+      !parsed.data.connectorToken
+      && (!parsed.data.username || parsed.data.applicationPassword.length < 8)
+    ) {
+      throw new RequestError("WordPress接続情報を確認してください。", 422);
+    }
     const baseUrl = await assertSafeWordPressUrl(parsed.data.baseUrl);
     try {
       const status = await probeWordPressConnection({ ...parsed.data, baseUrl });
       return jsonResponse({ ok: true, status });
     } catch (error) {
       if (error instanceof WpAuthError) {
-        throw new RequestError("WordPressの認証に失敗しました。Application Passwordを確認してください。", 401);
+        throw new RequestError(
+          parsed.data.connectorToken
+            ? "WordPress接続が無効または期限切れです。Connectorから再接続してください。"
+            : "WordPressの認証に失敗しました。Application Passwordを確認してください。",
+          401,
+        );
       }
       if (error instanceof WpRequestError) {
         console.warn("WordPress status probe failed", {

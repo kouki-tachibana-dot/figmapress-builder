@@ -224,6 +224,18 @@ a { color: inherit; }
 .token-input-row button:hover { background: #e3e8e4; color: var(--ink); }
 .token-persistence { align-items: center; color: #5f6f75; cursor: pointer; display: flex; font-size: 11px; gap: 8px; margin-top: 8px; }
 .token-persistence input { accent-color: var(--ink); height: 16px; margin: 0; width: 16px; }
+.oauth-connect-card { align-items: center; background: #eef2f1; border: 1px solid #d3dcda; border-radius: 14px; display: flex; gap: 14px; justify-content: space-between; min-height: 74px; padding: 13px 15px; }
+.oauth-connect-card.is-connected { background: #eff8e4; border-color: #bad78d; }
+.oauth-connect-card > div { display: flex; flex-direction: column; }
+.oauth-connect-card strong { color: #29434d; font-size: 11px; }
+.oauth-connect-card.is-connected strong { color: #4b7024; }
+.oauth-connect-card small { color: #6e7e84; font-size: 8px; line-height: 1.5; }
+.oauth-connect-card button { background: var(--ink); border: 0; border-radius: 999px; color: #fff; cursor: pointer; flex: 0 0 auto; font-size: 9px; font-weight: 800; min-height: 34px; padding: 0 13px; }
+.oauth-connect-card.is-connected button { background: transparent; border: 1px solid #a9c77a; color: #58742d; }
+.pat-fallback { border-top: 1px solid #dde3e1; margin-top: 12px; padding-top: 9px; }
+.pat-fallback summary { color: #536970; cursor: pointer; font-size: 9px; font-weight: 800; }
+.pat-fallback > label { display: block; font-size: 9px; margin-top: 10px; }
+.pat-fallback > small { color: var(--muted); display: block; font-size: 8px; margin-top: 5px; }
 .field input:focus, .json-field textarea:focus { background: #fff; border-color: #7da63d; box-shadow: 0 0 0 4px rgba(185,231,89,.18); }
 .field small { color: #7b878b; font-size: 10px; }
 
@@ -367,6 +379,17 @@ a { color: inherit; }
 .target-picker strong { font-size: 13px; }
 .target-picker small { color: #718087; font-size: 9px; }
 .connection-row { align-items: center; display: flex; gap: 14px; margin-top: 17px; }
+.wp-profile-row { align-items: flex-end; background: #f3f6f4; border: 1px solid #dce3df; border-radius: 13px; display: flex; gap: 12px; justify-content: space-between; margin-bottom: 15px; padding: 12px 14px; }
+.wp-profile-row label { display: flex; flex: 1 1 auto; flex-direction: column; gap: 4px; }
+.wp-profile-row label span { color: #68797f; font-size: 8px; font-weight: 800; }
+.wp-profile-row select { background: #fff; border: 1px solid #cdd7d3; border-radius: 9px; color: #29414a; min-height: 36px; padding: 0 10px; }
+.wp-profile-row button { background: transparent; border: 0; color: #8a5549; cursor: pointer; font-size: 8px; font-weight: 800; padding: 9px; }
+.paired-connection { align-items: center; background: #eff8e4; border: 1px solid #bad78d; border-radius: 13px; color: #4b7024; display: flex; gap: 12px; margin-bottom: 15px; padding: 11px 14px; }
+.paired-connection strong { flex: 0 0 auto; font-size: 9px; }
+.paired-connection span { color: #627650; font-size: 8px; }
+.paired-connection--setup { align-items: flex-start; flex-wrap: wrap; }
+.paired-connection--setup span { flex: 1 1 260px; }
+.paired-connection--setup a { background: #557a2a; border-radius: 999px; color: #fff; flex: 0 0 auto; font-size: 8px; font-weight: 800; padding: 8px 12px; text-decoration: none; }
 .connection-button { background: transparent; border: 1px solid #bdc8c4; border-radius: 999px; color: #304750; cursor: pointer; flex: 0 0 auto; font-size: 10px; font-weight: 800; min-height: 35px; padding: 0 15px; }
 .connection-button:disabled { cursor: not-allowed; opacity: .5; }
 .connection-status { align-items: center; display: flex; flex-wrap: wrap; gap: 7px; }

@@ -12,9 +12,13 @@ tab. Include the affected route, reproduction steps, and expected impact.
 
 ## Security model
 
-- Credentials are never written to server-side application storage. The Figma
-  token can be retained only in the current tab's session storage; WordPress
-  credentials are processed in memory for one request.
+- Credentials are never written to the application database or server files.
+  Figma OAuth tokens are AES-256-GCM encrypted in an HttpOnly, SameSite cookie.
+  Personal Access Tokens use tab session storage unless the user explicitly
+  opts into local browser storage.
+- WordPress Application Passwords are processed in memory for one request and
+  are not retained. One-click pairing stores a 90-day scoped token in browser
+  storage and only an HMAC hash in WordPress user metadata.
 - Conversion and WordPress responses use `Cache-Control: no-store`.
 - WordPress requests require HTTPS and reject loopback, private, link-local,
   multicast, and reserved network destinations.
@@ -29,7 +33,8 @@ tab. Include the affected route, reproduction steps, and expected impact.
 - Request body limits, timeouts, same-origin checks, validation, and
   best-effort per-instance rate limits are enabled.
 - The preview runs in a sandboxed iframe with scripts disabled.
-
-This beta does not yet use Figma OAuth. Users should issue a narrowly scoped,
-short-lived Personal Access Token with `file_content:read` only and revoke it
-when it is no longer needed.
+- Connector pairing tokens are accepted only under the `figmapress/v1` REST
+  namespace, cannot authenticate general WordPress REST or login requests, and
+  can be immediately replaced or revoked by the WordPress user.
+- Figma OAuth uses PKCE and requests only `file_content:read`. Environments
+  without configured OAuth credentials fall back to a narrowly scoped PAT.

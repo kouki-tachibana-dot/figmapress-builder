@@ -71,6 +71,76 @@ test("browser connection probes the Connector directly with Basic auth", async (
   assert.equal(requests[0]?.cache, undefined);
 });
 
+test("browser pairing uses only the scoped Connector header", async (context) => {
+  const connectorToken = `fp1.7.${"a".repeat(43)}`;
+  const requests: Array<{
+    url: string;
+    authorization: string | null;
+    pairing: string | null;
+  }> = [];
+  context.mock.method(globalThis, "fetch", async (input, init) => {
+    const headers = new Headers(init?.headers);
+    requests.push({
+      url: String(input),
+      authorization: headers.get("Authorization"),
+      pairing: headers.get("X-FigmaPress-Token"),
+    });
+    return Response.json({
+      connectorVersion: "0.15.0",
+      wordpressVersion: "7.0.1",
+      canEditPages: true,
+      user: { id: 7, name: "Editor" },
+      pairing: { supported: true, active: true },
+      elementor: { active: true, version: "3.30.0" },
+    });
+  });
+
+  const status = await probeWordPressDirect({
+    ...config,
+    applicationPassword: "",
+    connectorToken,
+  });
+  assert.equal(status.user.id, 7);
+  assert.deepEqual(status.pairing, { supported: true, active: true });
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0]?.authorization, null);
+  assert.equal(requests[0]?.pairing, connectorToken);
+  assert.match(requests[0]?.url ?? "", /figmapress\/v1\/status$/);
+});
+
+test("browser pairing creates Gutenberg drafts through the Connector namespace", async (context) => {
+  const connectorToken = `fp1.7.${"b".repeat(43)}`;
+  const requests: Array<{ url: string; pairing: string | null }> = [];
+  context.mock.method(globalThis, "fetch", async (input, init) => {
+    const headers = new Headers(init?.headers);
+    requests.push({
+      url: String(input),
+      pairing: headers.get("X-FigmaPress-Token"),
+    });
+    return Response.json({
+      id: 51,
+      slug: "home",
+      status: "draft",
+      editLink: "https://wordpress.example/wp-admin/post.php?post=51&action=edit",
+    });
+  });
+
+  const result = await createWordPressDraftDirect({
+    ...config,
+    applicationPassword: "",
+    connectorToken,
+  }, {
+    target: "gutenberg",
+    title: "ホーム",
+    slug: "/",
+    content: "<!-- wp:paragraph --><p>本文</p><!-- /wp:paragraph -->",
+  });
+  assert.equal(result.status, "draft");
+  assert.equal(requests.length, 1);
+  assert.match(requests[0]?.url ?? "", /figmapress\/v1\/gutenberg\/pages$/);
+  assert.equal(requests[0]?.pairing, connectorToken);
+});
+
 test("browser connection keeps authentication failures out of the server fallback", async (context) => {
   const warnings: unknown[][] = [];
   context.mock.method(globalThis, "fetch", async () =>

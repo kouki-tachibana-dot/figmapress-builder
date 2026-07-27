@@ -11,6 +11,7 @@ export interface WpConfig {
   baseUrl: string;
   username: string;
   applicationPassword: string;
+  connectorToken?: string;
 }
 
 export interface CreateDraftInput {
@@ -97,6 +98,10 @@ export interface WordPressConnectionStatus {
     imageTransforms?: boolean;
   };
   canEditPages: boolean;
+  pairing?: {
+    supported: boolean;
+    active: boolean;
+  };
 }
 
 export class WpAuthError extends Error {}
@@ -139,8 +144,13 @@ async function wpFetch(
 ): Promise<Response> {
   const url = `${cfg.baseUrl}/wp-json${path}`;
   const headers = new Headers(init.headers);
-  const authorization = authHeader(cfg);
-  headers.set("Authorization", authorization);
+  const connectorToken = cfg.connectorToken?.trim();
+  const authorization = connectorToken ? "" : authHeader(cfg);
+  if (connectorToken) {
+    headers.set("X-FigmaPress-Token", connectorToken);
+  } else {
+    headers.set("Authorization", authorization);
+  }
   headers.set("Accept", "application/json");
   if (init.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
@@ -152,7 +162,7 @@ async function wpFetch(
     signal: init.signal ?? AbortSignal.timeout(15_000),
   };
   let res = await fetch(url, requestInit);
-  if (res.status === 401) {
+  if (res.status === 401 && !connectorToken) {
     const fallbackHeaders = new Headers(headers);
     fallbackHeaders.set("X-FigmaPress-Authorization", authorization);
     res = await fetch(url, { ...requestInit, headers: fallbackHeaders });
@@ -160,7 +170,9 @@ async function wpFetch(
   if (res.status === 401) {
     const body = await res.text();
     throw new WpAuthError(
-      `WordPress authentication failed (${res.status}). Verify WORDPRESS_USERNAME and WORDPRESS_APPLICATION_PASSWORD.\n${body}`,
+      connectorToken
+        ? `FigmaPress Connector pairing expired or was revoked (${res.status}).\n${body}`
+        : `WordPress authentication failed (${res.status}). Verify WORDPRESS_USERNAME and WORDPRESS_APPLICATION_PASSWORD.\n${body}`,
     );
   }
   return res;
@@ -210,6 +222,8 @@ export async function probeWordPressConnection(
     connectorVersion?: unknown;
     wordpressVersion?: unknown;
     canEditPages?: unknown;
+    user?: { id?: unknown; name?: unknown };
+    pairing?: { supported?: unknown; active?: unknown };
     elementor?: { active?: unknown; version?: unknown };
     functionalWidgets?: {
       navigation?: unknown;
@@ -231,8 +245,10 @@ export async function probeWordPressConnection(
   return {
     authenticated: true,
     user: {
-      id: 0,
-      name: cfg.username,
+      id: typeof status.user?.id === "number" ? status.user.id : 0,
+      name: typeof status.user?.name === "string"
+        ? status.user.name
+        : cfg.username,
     },
     connectorInstalled: true,
     connectorVersion: typeof status.connectorVersion === "string" ? status.connectorVersion : undefined,
@@ -262,6 +278,10 @@ export async function probeWordPressConnection(
       imageTransforms: status.visualQa.imageTransforms === true,
     } : undefined,
     canEditPages: status.canEditPages === true,
+    pairing: status.pairing ? {
+      supported: status.pairing.supported === true,
+      active: status.pairing.active === true,
+    } : undefined,
   };
 }
 
@@ -272,7 +292,12 @@ export async function createDraftPage(
   // WordPress is authoritative for slug uniqueness and can adjust it as needed.
   const slug = normalizeSlug(input.slug);
 
-  const res = await wpFetch(cfg, "/wp/v2/pages", {
+  const res = await wpFetch(
+    cfg,
+    cfg.connectorToken
+      ? "/figmapress/v1/gutenberg/pages"
+      : "/wp/v2/pages",
+    {
     method: "POST",
     body: JSON.stringify({
       title: input.title,
@@ -280,7 +305,8 @@ export async function createDraftPage(
       status: "draft",
       content: input.content,
     }),
-  });
+    },
+  );
 
   const text = await res.text();
   if (!res.ok) {

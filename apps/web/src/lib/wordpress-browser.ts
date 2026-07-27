@@ -2,6 +2,7 @@ export interface BrowserWordPressConfig {
   baseUrl: string;
   username: string;
   applicationPassword: string;
+  connectorToken?: string;
 }
 
 export interface BrowserWordPressStatus {
@@ -28,6 +29,10 @@ export interface BrowserWordPressStatus {
     imageTransforms?: boolean;
   };
   canEditPages: boolean;
+  pairing?: {
+    supported: boolean;
+    active: boolean;
+  };
 }
 
 export interface BrowserWordPressResult {
@@ -125,8 +130,15 @@ async function directFetch(
   const timeoutMs = method === "GET" || method === "HEAD" ? 20_000 : 120_000;
   const headers = new Headers(init.headers);
   headers.set("Accept", "application/json");
-  const authorization = basicAuthorization(config.username, config.applicationPassword);
-  headers.set("Authorization", authorization);
+  const connectorToken = config.connectorToken?.trim();
+  const authorization = connectorToken
+    ? ""
+    : basicAuthorization(config.username, config.applicationPassword);
+  if (connectorToken) {
+    headers.set("X-FigmaPress-Token", connectorToken);
+  } else {
+    headers.set("Authorization", authorization);
+  }
   if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
 
   try {
@@ -142,7 +154,7 @@ async function directFetch(
       signal: init.signal ?? AbortSignal.timeout(timeoutMs),
     };
     const response = await fetch(url, requestInit);
-    if (response.status !== 401) {
+    if (response.status !== 401 || connectorToken) {
       if (!response.ok) {
         console.warn("[wordpress-direct] WordPress request rejected", {
           path,
@@ -197,10 +209,15 @@ async function directFetch(
   }
 }
 
-async function failureMessage(response: Response): Promise<WordPressDirectError> {
+async function failureMessage(
+  response: Response,
+  connectorToken?: string,
+): Promise<WordPressDirectError> {
   if (response.status === 401) {
     return new WordPressDirectError(
-      "WordPressのユーザー名またはApplication Passwordが無効です。",
+      connectorToken
+        ? "WordPress接続が無効または期限切れです。Connectorから再接続してください。"
+        : "WordPressのユーザー名またはApplication Passwordが無効です。",
       "auth",
       401,
     );
@@ -216,8 +233,13 @@ async function failureMessage(response: Response): Promise<WordPressDirectError>
   return new WordPressDirectError(`${message}（HTTP ${response.status}）`, "request", response.status);
 }
 
-async function responseJson<T>(response: Response): Promise<T> {
-  if (!response.ok) throw await failureMessage(response);
+async function responseJson<T>(
+  response: Response,
+  connectorToken?: string,
+): Promise<T> {
+  if (!response.ok) {
+    throw await failureMessage(response, connectorToken);
+  }
   try {
     return await response.json() as T;
   } catch {
@@ -232,6 +254,7 @@ export async function probeWordPressDirect(
   if (response.status === 404) {
     const user = await responseJson<{ id?: unknown; name?: unknown }>(
       await directFetch(config, "/wp/v2/users/me"),
+      config.connectorToken,
     );
     return {
       authenticated: true,
@@ -249,6 +272,8 @@ export async function probeWordPressDirect(
     connectorVersion?: unknown;
     wordpressVersion?: unknown;
     canEditPages?: unknown;
+    user?: { id?: unknown; name?: unknown };
+    pairing?: { supported?: unknown; active?: unknown };
     elementor?: { active?: unknown; version?: unknown };
     functionalWidgets?: {
       navigation?: unknown;
@@ -266,10 +291,15 @@ export async function probeWordPressDirect(
       effects?: unknown;
       imageTransforms?: unknown;
     };
-  }>(response);
+  }>(response, config.connectorToken);
   return {
     authenticated: true,
-    user: { id: 0, name: config.username },
+    user: {
+      id: typeof status.user?.id === "number" ? status.user.id : 0,
+      name: typeof status.user?.name === "string"
+        ? status.user.name
+        : config.username,
+    },
     connectorInstalled: true,
     connectorVersion: typeof status.connectorVersion === "string" ? status.connectorVersion : undefined,
     wordpressVersion: typeof status.wordpressVersion === "string" ? status.wordpressVersion : undefined,
@@ -298,6 +328,10 @@ export async function probeWordPressDirect(
       imageTransforms: status.visualQa.imageTransforms === true,
     } : undefined,
     canEditPages: status.canEditPages === true,
+    pairing: status.pairing ? {
+      supported: status.pairing.supported === true,
+      active: status.pairing.active === true,
+    } : undefined,
   };
 }
 
@@ -326,6 +360,7 @@ export async function createWordPressDraftDirect(
           template: input.template,
         }),
       }),
+      config.connectorToken,
     );
     if (result.status !== "draft") {
       throw new WordPressDirectError("WordPressが下書き以外の状態を返しました。", "request");
@@ -333,8 +368,21 @@ export async function createWordPressDraftDirect(
     return { ...result, target: "elementor" };
   }
 
-  const result = await responseJson<{ id: number; slug: string; status: string; link?: string }>(
-    await directFetch(config, "/wp/v2/pages", {
+  const result = await responseJson<{
+    id: number;
+    slug: string;
+    status: string;
+    link?: string;
+    editLink?: string;
+    previewLink?: string;
+    rawLink?: string;
+  }>(
+    await directFetch(
+      config,
+      config.connectorToken
+        ? "/figmapress/v1/gutenberg/pages"
+        : "/wp/v2/pages",
+      {
       method: "POST",
       body: JSON.stringify({
         title: input.title,
@@ -342,7 +390,9 @@ export async function createWordPressDraftDirect(
         status: "draft",
         content: input.content,
       }),
-    }),
+      },
+    ),
+    config.connectorToken,
   );
   if (result.status !== "draft") {
     throw new WordPressDirectError("WordPressが下書き以外の状態を返しました。", "request");
@@ -352,11 +402,15 @@ export async function createWordPressDraftDirect(
     id: result.id,
     slug: result.slug,
     status: result.status,
-    editLink: `${baseUrl}/wp-admin/post.php?post=${result.id}&action=edit`,
-    previewLink: result.link
-      ? `${result.link}${result.link.includes("?") ? "&" : "?"}preview=true`
-      : undefined,
-    rawLink: result.link,
+    editLink: result.editLink
+      ?? `${baseUrl}/wp-admin/post.php?post=${result.id}&action=edit`,
+    previewLink: result.previewLink
+      ?? (
+        result.link
+          ? `${result.link}${result.link.includes("?") ? "&" : "?"}preview=true`
+          : undefined
+      ),
+    rawLink: result.rawLink ?? result.link,
     target: "gutenberg",
   };
 }
@@ -371,6 +425,7 @@ export async function fetchWordPressElementorSnapshotDirect(
       method: "POST",
       body: JSON.stringify({ requestId }),
     }),
+    config.connectorToken,
   );
 }
 
@@ -396,5 +451,6 @@ export async function updateWordPressElementorDocumentDirect(
         }),
       },
     ),
+    config.connectorToken,
   );
 }
