@@ -140,6 +140,11 @@ export interface VisualQaMediaCorrectionOutcome
   visualNodes: VisualQaRegionMetrics[];
 }
 
+export interface VisualQaDecorationCorrectionOutcome
+  extends VisualQaCorrectionOutcome {
+  decorationNodes: VisualQaRegionMetrics[];
+}
+
 export function shouldKeepVisualCorrections(
   before: VisualQaCorrectionOutcome[],
   after: VisualQaCorrectionOutcome[],
@@ -288,6 +293,50 @@ export function shouldKeepMediaGeometryCorrections(
     );
     const corrected = correctedPage.visualNodes.find(
       (visualNode) => visualNode.nodeId === target.nodeId,
+    );
+    if (!baseline || !corrected) return false;
+    if (
+      corrected.changedPixelRatio > baseline.changedPixelRatio + 0.3
+      || corrected.impactRatio > baseline.impactRatio + 0.02
+    ) {
+      return false;
+    }
+    if (
+      baseline.changedPixelRatio - corrected.changedPixelRatio >= 0.15
+      || baseline.impactRatio - corrected.impactRatio >= 0.005
+    ) {
+      improvedTargets += 1;
+    }
+  }
+
+  return improvedTargets === targets.length;
+}
+
+export function shouldKeepDecorationGeometryCorrections(
+  before: VisualQaDecorationCorrectionOutcome[],
+  after: VisualQaDecorationCorrectionOutcome[],
+  targets: VisualQaSectionCorrectionTarget[],
+): boolean {
+  if (!targets.length) return false;
+  const beforeByVariant = new Map(before.map((result) => [result.variant, result]));
+  const afterByVariant = new Map(after.map((result) => [result.variant, result]));
+  let improvedTargets = 0;
+
+  for (const target of targets) {
+    const baselinePage = beforeByVariant.get(target.variant);
+    const correctedPage = afterByVariant.get(target.variant);
+    if (!baselinePage || !correctedPage) return false;
+    if (
+      correctedPage.score < baselinePage.score - 0.15
+      || correctedPage.changedPixelRatio > baselinePage.changedPixelRatio + 0.15
+    ) {
+      return false;
+    }
+    const baseline = baselinePage.decorationNodes.find(
+      (decorationNode) => decorationNode.nodeId === target.nodeId,
+    );
+    const corrected = correctedPage.decorationNodes.find(
+      (decorationNode) => decorationNode.nodeId === target.nodeId,
     );
     if (!baseline || !corrected) return false;
     if (

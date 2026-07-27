@@ -50,6 +50,12 @@ export type ElementorMediaGeometryCorrection =
 export type AppliedElementorMediaGeometryCorrection =
   AppliedElementorTextGeometryCorrection;
 
+export type ElementorDecorationGeometryCorrection =
+  ElementorTextGeometryCorrection;
+
+export type AppliedElementorDecorationGeometryCorrection =
+  AppliedElementorTextGeometryCorrection;
+
 const MAX_CAPTURE_OFFSET = 16;
 const MAX_SECTION_CAPTURE_OFFSET = 10;
 const MAX_TEXT_CAPTURE_OFFSET = 6;
@@ -206,6 +212,12 @@ export function normalizeElementorMediaGeometryCorrections(
   return normalizeElementorTextGeometryCorrections(corrections);
 }
 
+export function normalizeElementorDecorationGeometryCorrections(
+  corrections: ElementorDecorationGeometryCorrection[],
+): AppliedElementorDecorationGeometryCorrection[] {
+  return normalizeElementorTextGeometryCorrections(corrections);
+}
+
 function rootVariant(
   element: ElementorElement,
 ): VisualCorrectionVariant | "single" | null {
@@ -347,12 +359,14 @@ function numericScaleSetting(value: unknown): number {
 function applyGeometryCorrectionToTree(
   element: ElementorElement,
   correction: AppliedElementorTextGeometryCorrection,
-  kind: "text" | "visual",
+  kind: "text" | "visual" | "decoration",
 ): ElementorElement {
   const matchesKind =
     kind === "text"
       ? element.widgetType === "text-editor"
-      : element.widgetType === "image";
+      : kind === "visual"
+        ? element.widgetType === "image"
+        : element.elType === "container" && element.elements.length === 0;
   const corrected =
     matchesKind && element.settings.figmapress_node_id === correction.nodeId
       ? scaleElementGeometry(element, correction)
@@ -496,6 +510,40 @@ export function applyElementorMediaGeometryCorrections(
   };
 }
 
+export function applyElementorDecorationGeometryCorrections(
+  template: ElementorTemplate,
+  corrections: ElementorDecorationGeometryCorrection[],
+): ElementorTemplate {
+  const normalized =
+    normalizeElementorDecorationGeometryCorrections(corrections);
+  if (!normalized.length) return template;
+
+  return {
+    ...template,
+    page_settings: {
+      ...template.page_settings,
+      figmapress_decoration_geometry_corrections: normalized,
+    },
+    content: template.content.map((root) => {
+      const variant = rootVariant(root);
+      const targetVariant =
+        variant === "mobile"
+          ? "mobile"
+          : variant === "desktop" || variant === "single"
+            ? "desktop"
+            : null;
+      if (!targetVariant) return root;
+      return normalized
+        .filter((correction) => correction.variant === targetVariant)
+        .reduce(
+          (element, correction) =>
+            applyGeometryCorrectionToTree(element, correction, "decoration"),
+          root,
+        );
+    }),
+  };
+}
+
 function previewSelector(variant: VisualCorrectionVariant): string {
   return variant === "mobile"
     ? '.figmapress-figma-preview[data-figmapress-layout="mobile"]'
@@ -572,4 +620,23 @@ export function applyPreviewMediaGeometryCorrections(
     )
     .join("");
   return `<style data-figmapress-media-geometry-corrections>${rules}</style>${previewHtml}`;
+}
+
+export function applyPreviewDecorationGeometryCorrections(
+  previewHtml: string,
+  corrections: ElementorDecorationGeometryCorrection[],
+  channel: "primary" | "runtime" = "primary",
+): string {
+  const normalized =
+    normalizeElementorDecorationGeometryCorrections(corrections);
+  if (!normalized.length) return previewHtml;
+  const property = channel === "runtime"
+    ? "--figmapress-qa-runtime-geometry-transform"
+    : "--figmapress-qa-geometry-transform";
+  const rules = normalized
+    .map((correction) =>
+      `${previewSelector(correction.variant)} [data-figmapress-kind="container"][data-figmapress-node-id="${correction.nodeId}"]:empty{${property}:translate(${correction.translateX},${correction.translateY}) scale(${correction.scaleX},${correction.scaleY})!important}`,
+    )
+    .join("");
+  return `<style data-figmapress-decoration-geometry-corrections>${rules}</style>${previewHtml}`;
 }

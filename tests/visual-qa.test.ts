@@ -5,20 +5,24 @@ import {
   analyzeVisualPixels,
   estimateVisualGeometry,
   resolveVisualQaDraftGate,
+  shouldKeepDecorationGeometryCorrections,
   shouldKeepMediaGeometryCorrections,
   shouldKeepSectionVisualCorrections,
   shouldKeepTextGeometryCorrections,
   shouldKeepVisualCorrections,
 } from "../apps/web/src/lib/visual-qa.ts";
 import {
+  applyElementorDecorationGeometryCorrections,
   applyElementorMediaGeometryCorrections,
   applyElementorSectionVisualCorrections,
   applyElementorTextGeometryCorrections,
   applyElementorVisualCorrections,
+  applyPreviewDecorationGeometryCorrections,
   applyPreviewMediaGeometryCorrections,
   applyPreviewSectionVisualCorrections,
   applyPreviewTextGeometryCorrections,
   applyPreviewVisualCorrections,
+  normalizeElementorDecorationGeometryCorrections,
   normalizeElementorVisualCorrections,
   normalizeElementorSectionVisualCorrections,
   normalizeElementorMediaGeometryCorrections,
@@ -422,6 +426,29 @@ test("safe visual corrections become viewport-scaled Elementor transforms", () =
             settings: { figmapress_node_id: "10:portrait" },
             elements: [],
           },
+          {
+            id: "contact-panel",
+            elType: "container",
+            isInner: true,
+            settings: { figmapress_node_id: "10:contact-panel" },
+            elements: [],
+          },
+          {
+            id: "functional-card",
+            elType: "container",
+            isInner: true,
+            settings: { figmapress_node_id: "10:functional-card" },
+            elements: [
+              {
+                id: "functional-copy",
+                elType: "widget",
+                widgetType: "text-editor",
+                isInner: false,
+                settings: { figmapress_node_id: "10:functional-copy" },
+                elements: [],
+              },
+            ],
+          },
         ],
       },
       {
@@ -645,6 +672,60 @@ test("safe visual corrections become viewport-scaled Elementor transforms", () =
     mediaGeometryPreview,
     /--figmapress-qa-geometry-transform:translate\(0\.125vw,-0\.25vw\) scale\(1\.03,0\.98\)!important/,
   );
+
+  const decorationGeometryCorrection = [{
+    ...textGeometryCorrection[0],
+    nodeId: "10:contact-panel",
+    nodeName: "Contact panel",
+  }];
+  const decorationGeometryCorrected =
+    applyElementorDecorationGeometryCorrections(
+      template,
+      decorationGeometryCorrection,
+    );
+  assert.deepEqual(
+    decorationGeometryCorrected.content[0]?.elements[2]?.settings
+      ._transform_scaleX_effect,
+    { unit: "px", size: 1.03, sizes: [] },
+  );
+  assert.equal(
+    decorationGeometryCorrected.content[0]?.elements[0]?.settings
+      ._transform_scaleX_effect,
+    undefined,
+  );
+  assert.equal(
+    Array.isArray(
+      decorationGeometryCorrected.page_settings
+        .figmapress_decoration_geometry_corrections,
+    ),
+    true,
+  );
+  const decorationGeometryPreview = applyPreviewDecorationGeometryCorrections(
+    preview,
+    decorationGeometryCorrection,
+  );
+  assert.match(
+    decorationGeometryPreview,
+    /data-figmapress-decoration-geometry-corrections/,
+  );
+  assert.match(decorationGeometryPreview, /data-figmapress-kind="container"/);
+  assert.match(decorationGeometryPreview, /:empty/);
+  assert.match(
+    decorationGeometryPreview,
+    /--figmapress-qa-geometry-transform:translate\(0\.125vw,-0\.25vw\) scale\(1\.03,0\.98\)!important/,
+  );
+
+  const protectedFunctionalContainer =
+    applyElementorDecorationGeometryCorrections(template, [{
+      ...decorationGeometryCorrection[0],
+      nodeId: "10:functional-card",
+      nodeName: "Functional card",
+    }]);
+  assert.equal(
+    protectedFunctionalContainer.content[0]?.elements[3]?.settings
+      ._transform_scaleX_effect,
+    undefined,
+  );
 });
 
 test("unsafe or oversized visual corrections are ignored without mutation", () => {
@@ -705,6 +786,23 @@ test("unsafe or oversized visual corrections are ignored without mutation", () =
         variant: "desktop",
         nodeId: "unsafe media id",
         nodeName: "Unsafe media",
+        offsetX: 1,
+        offsetY: 0,
+        scaleX: 1.02,
+        scaleY: 1,
+        captureWidth: 800,
+        confidence: "high",
+        errorReductionRatio: 30,
+      },
+    ]),
+    [],
+  );
+  assert.deepEqual(
+    normalizeElementorDecorationGeometryCorrections([
+      {
+        variant: "desktop",
+        nodeId: "unsafe decoration id",
+        nodeName: "Unsafe decoration",
         offsetX: 1,
         offsetY: 0,
         scaleX: 1.02,
@@ -923,6 +1021,76 @@ test("media geometry rollback guard checks every targeted visual node", () => {
         { variant: "desktop", nodeId: "portrait" },
         { variant: "desktop", nodeId: "logo" },
       ],
+    ),
+    false,
+  );
+});
+
+test("decoration geometry rollback guard checks every targeted leaf container", () => {
+  const before = [{
+    variant: "desktop" as const,
+    score: 81,
+    changedPixelRatio: 19,
+    decorationNodes: [
+      {
+        nodeId: "contact-panel",
+        name: "Contact panel",
+        x: 80,
+        y: 600,
+        width: 640,
+        height: 420,
+        changedPixelRatio: 36,
+        meanColorError: 22,
+        impactRatio: 5.2,
+      },
+      {
+        nodeId: "submit-background",
+        name: "Submit background",
+        x: 280,
+        y: 900,
+        width: 240,
+        height: 64,
+        changedPixelRatio: 25,
+        meanColorError: 18,
+        impactRatio: 0.5,
+      },
+    ],
+  }];
+  const targets = [
+    { variant: "desktop" as const, nodeId: "contact-panel" },
+    { variant: "desktop" as const, nodeId: "submit-background" },
+  ];
+  assert.equal(
+    shouldKeepDecorationGeometryCorrections(
+      before,
+      [{
+        ...before[0],
+        score: 81.7,
+        changedPixelRatio: 18.2,
+        decorationNodes: before[0].decorationNodes.map((region) => ({
+          ...region,
+          changedPixelRatio: region.changedPixelRatio - 4,
+          impactRatio: region.impactRatio - 0.1,
+        })),
+      }],
+      targets,
+    ),
+    true,
+  );
+  assert.equal(
+    shouldKeepDecorationGeometryCorrections(
+      before,
+      [{
+        ...before[0],
+        decorationNodes: [
+          {
+            ...before[0].decorationNodes[0],
+            changedPixelRatio: 30,
+          },
+          before[0].decorationNodes[1],
+        ],
+      }],
+      targets,
     ),
     false,
   );
