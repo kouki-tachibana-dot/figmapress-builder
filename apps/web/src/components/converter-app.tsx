@@ -2,14 +2,17 @@
 
 import { useState, useSyncExternalStore, type ChangeEvent, type FormEvent, type MouseEvent } from "react";
 import {
+  applyElementorDecorationGeometryCorrections,
   applyElementorMediaGeometryCorrections,
   applyElementorSectionVisualCorrections,
   applyElementorTextGeometryCorrections,
   applyElementorVisualCorrections,
+  applyPreviewDecorationGeometryCorrections,
   applyPreviewMediaGeometryCorrections,
   applyPreviewSectionVisualCorrections,
   applyPreviewTextGeometryCorrections,
   applyPreviewVisualCorrections,
+  type ElementorDecorationGeometryCorrection,
   type ElementorMediaGeometryCorrection,
   type ElementorSectionVisualCorrection,
   type ElementorTemplate,
@@ -33,6 +36,7 @@ import {
 } from "@/lib/visual-qa-browser";
 import {
   resolveVisualQaDraftGate,
+  shouldKeepDecorationGeometryCorrections,
   shouldKeepMediaGeometryCorrections,
   shouldKeepSectionVisualCorrections,
   shouldKeepTextGeometryCorrections,
@@ -244,6 +248,7 @@ interface WordPressVisualCorrectionSummary {
   sections: ElementorSectionVisualCorrection[];
   textGeometry: ElementorTextGeometryCorrection[];
   mediaGeometry: ElementorMediaGeometryCorrection[];
+  decorationGeometry: ElementorDecorationGeometryCorrection[];
   rolledBack: boolean;
 }
 
@@ -339,6 +344,36 @@ function safeMediaGeometryCorrections(
         (visualNode) =>
           visualNode.geometry?.safeToApply
           && visualNode.geometry.confidence !== "low",
+      )
+      .slice(0, 2)
+      .flatMap((region) => {
+        const geometry = region.geometry;
+        if (!geometry || geometry.confidence === "low") return [];
+        return [{
+          variant: result.variant,
+          nodeId: region.nodeId,
+          nodeName: region.name,
+          offsetX: geometry.offsetX,
+          offsetY: geometry.offsetY,
+          scaleX: geometry.scaleX,
+          scaleY: geometry.scaleY,
+          captureWidth: result.width,
+          confidence: geometry.confidence,
+          errorReductionRatio: geometry.errorReductionRatio,
+        }];
+      });
+  });
+}
+
+function safeDecorationGeometryCorrections(
+  results: VisualQaBrowserResult[],
+): ElementorDecorationGeometryCorrection[] {
+  return results.flatMap((result) => {
+    return result.decorationNodes
+      .filter(
+        (decorationNode) =>
+          decorationNode.geometry?.safeToApply
+          && decorationNode.geometry.confidence !== "low",
       )
       .slice(0, 2)
       .flatMap((region) => {
@@ -526,6 +561,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     sections: [],
     textGeometry: [],
     mediaGeometry: [],
+    decorationGeometry: [],
     rolledBack: false,
   });
   const [visualQaBusy, setVisualQaBusy] = useState(false);
@@ -540,6 +576,10 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     useState<ElementorTextGeometryCorrection[]>([]);
   const [visualQaMediaGeometryCorrections, setVisualQaMediaGeometryCorrections] =
     useState<ElementorMediaGeometryCorrection[]>([]);
+  const [
+    visualQaDecorationGeometryCorrections,
+    setVisualQaDecorationGeometryCorrections,
+  ] = useState<ElementorDecorationGeometryCorrection[]>([]);
   const [visualQaBaselineScores, setVisualQaBaselineScores] = useState<
     Partial<Record<"desktop" | "mobile", number>>
   >({});
@@ -618,6 +658,22 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     )
       ? []
       : safeMediaGeometryCorrections(visualQaResults);
+  const visualQaDecorationGeometryCorrectionCandidates =
+    (
+      visualQaCorrectionCandidates.length > 0
+      && visualQaCorrections.length === 0
+    ) || (
+      visualQaSectionCorrectionCandidates.length > 0
+      && visualQaSectionCorrections.length === 0
+    ) || (
+      visualQaTextGeometryCorrectionCandidates.length > 0
+      && visualQaTextGeometryCorrections.length === 0
+    ) || (
+      visualQaMediaGeometryCorrectionCandidates.length > 0
+      && visualQaMediaGeometryCorrections.length === 0
+    )
+      ? []
+      : safeDecorationGeometryCorrections(visualQaResults);
 
   function updateFigmaToken(value: string) {
     writeFigmaToken(value);
@@ -641,6 +697,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       sections: [],
       textGeometry: [],
       mediaGeometry: [],
+      decorationGeometry: [],
       rolledBack: false,
     });
     setVisualQaError("");
@@ -650,6 +707,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     setVisualQaSectionCorrections([]);
     setVisualQaTextGeometryCorrections([]);
     setVisualQaMediaGeometryCorrections([]);
+    setVisualQaDecorationGeometryCorrections([]);
     setVisualQaBaselineScores({});
 
     try {
@@ -768,6 +826,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       sections: [],
       textGeometry: [],
       mediaGeometry: [],
+      decorationGeometry: [],
       rolledBack: false,
     });
     let currentOutput = initialOutput;
@@ -776,6 +835,8 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     const appliedSections: ElementorSectionVisualCorrection[] = [];
     const appliedTextGeometry: ElementorTextGeometryCorrection[] = [];
     const appliedMediaGeometry: ElementorMediaGeometryCorrection[] = [];
+    const appliedDecorationGeometry:
+      ElementorDecorationGeometryCorrection[] = [];
     let rolledBack = false;
 
     const measureStoredDocument = async (
@@ -974,6 +1035,38 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
             appliedMediaGeometry.push(...mediaGeometryCandidates);
           }
         }
+
+        const decorationGeometryCandidates =
+          safeDecorationGeometryCorrections(currentResults);
+        if (decorationGeometryCandidates.length) {
+          const candidateOutput: ConversionResult = {
+            ...currentOutput,
+            elementorTemplate: applyElementorDecorationGeometryCorrections(
+              currentOutput.elementorTemplate,
+              decorationGeometryCandidates,
+            ),
+            previewHtml: applyPreviewDecorationGeometryCorrections(
+              currentOutput.previewHtml,
+              decorationGeometryCandidates,
+              "runtime",
+            ),
+          };
+          const decorationGeometryAccepted = await tryCorrection(
+            candidateOutput,
+            (before, after) =>
+              shouldKeepDecorationGeometryCorrections(
+                before,
+                after,
+                decorationGeometryCandidates.map((correction) => ({
+                  variant: correction.variant,
+                  nodeId: correction.nodeId,
+                })),
+              ),
+          );
+          if (decorationGeometryAccepted) {
+            appliedDecorationGeometry.push(...decorationGeometryCandidates);
+          }
+        }
       }
 
       setOutput(currentOutput);
@@ -983,6 +1076,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         sections: appliedSections,
         textGeometry: appliedTextGeometry,
         mediaGeometry: appliedMediaGeometry,
+        decorationGeometry: appliedDecorationGeometry,
         rolledBack,
       });
     } catch (caught) {
@@ -1022,6 +1116,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       sections: [],
       textGeometry: [],
       mediaGeometry: [],
+      decorationGeometry: [],
       rolledBack: false,
     });
 
@@ -1378,13 +1473,66 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       setVisualQaMediaGeometryCorrections([]);
       if (correctedResults) {
         setVisualQaError(
-          "画像・装飾補正で対象領域が改善しなかったため、生成データを自動的に元へ戻しました。",
+          "画像補正で対象領域が改善しなかったため、生成データを自動的に元へ戻しました。",
         );
       }
       return;
     }
 
     setVisualQaMediaGeometryCorrections(corrections);
+    setVisualQaError("");
+  }
+
+  async function applySafeDecorationGeometryCorrections() {
+    if (
+      !output
+      || visualQaBusy
+      || visualQaDecorationGeometryCorrections.length > 0
+      || !visualQaDecorationGeometryCorrectionCandidates.length
+    ) {
+      return;
+    }
+
+    const baselineOutput = output;
+    const baselineResults = visualQaResults;
+    const corrections = visualQaDecorationGeometryCorrectionCandidates;
+    const correctedOutput: ConversionResult = {
+      ...output,
+      elementorTemplate: applyElementorDecorationGeometryCorrections(
+        output.elementorTemplate,
+        corrections,
+      ),
+      previewHtml: applyPreviewDecorationGeometryCorrections(
+        output.previewHtml,
+        corrections,
+      ),
+    };
+    setOutput(correctedOutput);
+    const correctedResults = await measureVisualQuality(correctedOutput);
+    const keepCorrection = correctedResults
+      ? shouldKeepDecorationGeometryCorrections(
+          baselineResults,
+          correctedResults,
+          corrections.map((correction) => ({
+            variant: correction.variant,
+            nodeId: correction.nodeId,
+          })),
+        )
+      : false;
+
+    if (!keepCorrection) {
+      setOutput(baselineOutput);
+      setVisualQaResults(baselineResults);
+      setVisualQaDecorationGeometryCorrections([]);
+      if (correctedResults) {
+        setVisualQaError(
+          "背景・枠補正で対象領域が改善しなかったため、生成データを自動的に元へ戻しました。",
+        );
+      }
+      return;
+    }
+
+    setVisualQaDecorationGeometryCorrections(corrections);
     setVisualQaError("");
   }
 
@@ -1398,7 +1546,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.22.0 live</span>
+          <span className="status-pill"><i /> v0.23.0 live</span>
         </nav>
       </header>
 
@@ -1664,7 +1812,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                   <span className="eyebrow">Pixel comparison</span>
                   <h3>Figma視覚差分レポート</h3>
                   <p>
-                    赤い箇所ほどFigmaとの差が大きい領域です。位置・色・画像・文字折り返しをPC/SP別、セクション別、文字・画像要素別に実測します。
+                    赤い箇所ほどFigmaとの差が大きい領域です。位置・色・画像・文字折り返しをPC/SP別、セクション別、文字・画像・背景要素別に実測します。
                   </p>
                 </div>
                 {visualQaResults.length > 0 && (
@@ -1702,7 +1850,16 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                         onClick={applySafeMediaGeometryCorrections}
                         type="button"
                       >
-                        画像・装飾補正を適用して再測定
+                        画像補正を適用して再測定
+                      </button>
+                    )}
+                    {visualQaDecorationGeometryCorrectionCandidates.length > 0 && visualQaDecorationGeometryCorrections.length === 0 && (
+                      <button
+                        disabled={visualQaBusy}
+                        onClick={applySafeDecorationGeometryCorrections}
+                        type="button"
+                      >
+                        背景・枠補正を適用して再測定
                       </button>
                     )}
                     <button
@@ -1710,13 +1867,15 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                         "visual-quality-report.json",
                         JSON.stringify(
                           {
-                            version: "1.5",
+                            version: "1.6",
                             correctionsApplied: visualQaCorrections,
                             sectionCorrectionsApplied: visualQaSectionCorrections,
                             textGeometryCorrectionsApplied:
                               visualQaTextGeometryCorrections,
                             mediaGeometryCorrectionsApplied:
                               visualQaMediaGeometryCorrections,
+                            decorationGeometryCorrectionsApplied:
+                              visualQaDecorationGeometryCorrections,
                             baselineScores: visualQaBaselineScores,
                             results: serializableVisualQaResults(visualQaResults),
                           },
@@ -1795,7 +1954,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
               )}
               {visualQaMediaGeometryCorrections.length > 0 && (
                 <div className="visual-qa-correction-summary" role="status">
-                  <strong>✓ 画像・装飾の位置・寸法補正を適用し、改善を実測しました</strong>
+                  <strong>✓ 画像の位置・寸法補正を適用し、改善を実測しました</strong>
                   <div>
                     {visualQaMediaGeometryCorrections.map((correction) => (
                       <span key={`${correction.variant}:${correction.nodeId}`}>
@@ -1809,7 +1968,26 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                       </span>
                     ))}
                   </div>
-                  <small>対象画像・装飾のElementor標準Transformだけを微調整しています。全対象が改善しない場合は自動的に取り消されます。</small>
+                  <small>対象画像のElementor標準Transformだけを微調整しています。全対象が改善しない場合は自動的に取り消されます。</small>
+                </div>
+              )}
+              {visualQaDecorationGeometryCorrections.length > 0 && (
+                <div className="visual-qa-correction-summary" role="status">
+                  <strong>✓ 背景・枠の位置・寸法補正を適用し、改善を実測しました</strong>
+                  <div>
+                    {visualQaDecorationGeometryCorrections.map((correction) => (
+                      <span key={`${correction.variant}:${correction.nodeId}`}>
+                        <b>{correction.variant === "desktop" ? "PC" : "スマホ"} / {correction.nodeName}</b>
+                        X {correction.offsetX >= 0 ? "+" : ""}{correction.offsetX}px /
+                        Y {correction.offsetY >= 0 ? "+" : ""}{correction.offsetY}px
+                        <em>
+                          幅 {Math.round(correction.scaleX * 1000) / 10}% /
+                          高さ {Math.round(correction.scaleY * 1000) / 10}%
+                        </em>
+                      </span>
+                    ))}
+                  </div>
+                  <small>子要素を持たない装飾Containerだけを微調整しています。機能Widgetや内容を含むContainerは対象外で、全対象が改善しない場合は自動的に取り消されます。</small>
                 </div>
               )}
               {visualQaBusy && visualQaResults.length === 0 && (
@@ -1883,7 +2061,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                           ))}
                         </div>
                       )}
-                      {(result.sections.length > 0 || result.textNodes.length > 0 || result.visualNodes.length > 0) && (
+                      {(result.sections.length > 0 || result.textNodes.length > 0 || result.visualNodes.length > 0 || result.decorationNodes.length > 0) && (
                         <div className="visual-qa-regions">
                           {result.sections.some((region) => region.changedPixelRatio > 0) && (
                             <section>
@@ -1935,7 +2113,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                           )}
                           {result.visualNodes.some((region) => region.changedPixelRatio > 0) && (
                             <section>
-                              <strong>画像・装飾要素別の差分影響</strong>
+                              <strong>画像要素別の差分影響</strong>
                               {result.visualNodes
                                 .filter((region) => region.changedPixelRatio > 0)
                                 .slice(0, 5)
@@ -1944,6 +2122,31 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                                     <span>
                                       <b>{region.name}</b>
                                       <small>画像領域差分 {region.changedPixelRatio}%</small>
+                                      {region.geometry?.safeToApply && (
+                                        <small>
+                                          補正候補 X {region.geometry.offsetX >= 0 ? "+" : ""}{region.geometry.offsetX}px /
+                                          Y {region.geometry.offsetY >= 0 ? "+" : ""}{region.geometry.offsetY}px /
+                                          幅 {Math.round(region.geometry.scaleX * 1000) / 10}% /
+                                          高さ {Math.round(region.geometry.scaleY * 1000) / 10}%
+                                        </small>
+                                      )}
+                                    </span>
+                                    <em>全体影響 {region.impactRatio}%</em>
+                                  </p>
+                                ))}
+                            </section>
+                          )}
+                          {result.decorationNodes.some((region) => region.changedPixelRatio > 0) && (
+                            <section>
+                              <strong>背景・枠要素別の差分影響</strong>
+                              {result.decorationNodes
+                                .filter((region) => region.changedPixelRatio > 0)
+                                .slice(0, 5)
+                                .map((region) => (
+                                  <p key={region.nodeId}>
+                                    <span>
+                                      <b>{region.name}</b>
+                                      <small>装飾領域差分 {region.changedPixelRatio}%</small>
                                       {region.geometry?.safeToApply && (
                                         <small>
                                           補正候補 X {region.geometry.offsetX >= 0 ? "+" : ""}{region.geometry.offsetX}px /
@@ -2122,9 +2325,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                       </span>
                     ))}
                   </div>
-                  {(wpVisualCorrections.wholePage.length > 0 || wpVisualCorrections.sections.length > 0 || wpVisualCorrections.textGeometry.length > 0 || wpVisualCorrections.mediaGeometry.length > 0) && (
+                  {(wpVisualCorrections.wholePage.length > 0 || wpVisualCorrections.sections.length > 0 || wpVisualCorrections.textGeometry.length > 0 || wpVisualCorrections.mediaGeometry.length > 0 || wpVisualCorrections.decorationGeometry.length > 0) && (
                     <small>
-                      実測で改善した補正だけを下書きへ再保存しました。全体補正 {wpVisualCorrections.wholePage.length}件／セクション補正 {wpVisualCorrections.sections.length}件／文字寸法補正 {wpVisualCorrections.textGeometry.length}件／画像・装飾補正 {wpVisualCorrections.mediaGeometry.length}件。
+                      実測で改善した補正だけを下書きへ再保存しました。全体補正 {wpVisualCorrections.wholePage.length}件／セクション補正 {wpVisualCorrections.sections.length}件／文字寸法補正 {wpVisualCorrections.textGeometry.length}件／画像補正 {wpVisualCorrections.mediaGeometry.length}件／背景・枠補正 {wpVisualCorrections.decorationGeometry.length}件。
                     </small>
                   )}
                   {wpVisualCorrections.rolledBack && (
@@ -2132,8 +2335,8 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                       改善しなかった候補は自動的に元のElementorデータへ戻しました。更新前のWordPressリビジョンも保持しています。
                     </small>
                   )}
-                  {!wpVisualCorrections.rolledBack && wpVisualCorrections.wholePage.length === 0 && wpVisualCorrections.sections.length === 0 && wpVisualCorrections.textGeometry.length === 0 && wpVisualCorrections.mediaGeometry.length === 0 && (
-                    <small>安全に適用できる追加の位置・文字・画像寸法補正はありませんでした。Elementor下書きは変更していません。</small>
+                  {!wpVisualCorrections.rolledBack && wpVisualCorrections.wholePage.length === 0 && wpVisualCorrections.sections.length === 0 && wpVisualCorrections.textGeometry.length === 0 && wpVisualCorrections.mediaGeometry.length === 0 && wpVisualCorrections.decorationGeometry.length === 0 && (
+                    <small>安全に適用できる追加の位置・文字・画像・背景寸法補正はありませんでした。Elementor下書きは変更していません。</small>
                   )}
                 </div>
               )}
@@ -2195,7 +2398,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.22.0</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.23.0</span></div>
       </footer>
     </main>
   );
