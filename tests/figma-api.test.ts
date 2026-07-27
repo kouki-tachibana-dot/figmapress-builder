@@ -98,6 +98,57 @@ test("Figma OAuth uses Bearer auth without exposing the token as a PAT header", 
   }
 });
 
+test("Figma image, render, and visual reference requests start concurrently", async (context) => {
+  const waitingResponses: Array<(response: Response) => void> = [];
+  const secondaryRequests: string[] = [];
+  context.mock.method(globalThis, "fetch", async (input) => {
+    const url = String(input);
+    if (/\/files\/AbCdEf123456\?depth=12$/.test(url)) {
+      return Response.json({
+        name: "Concurrent Figma File",
+        document: {
+          id: "0:0",
+          name: "Document",
+          type: "DOCUMENT",
+          children: [{
+            id: "1:1",
+            name: "Page",
+            type: "CANVAS",
+            children: [{
+              id: "2:2",
+              name: "Desktop",
+              type: "FRAME",
+              absoluteBoundingBox: { x: 0, y: 0, width: 1440, height: 900 },
+              children: [{
+                id: "3:3",
+                name: "Artwork",
+                type: "VECTOR",
+                absoluteBoundingBox: { x: 0, y: 0, width: 400, height: 300 },
+              }],
+            }],
+          }],
+        },
+      });
+    }
+    secondaryRequests.push(url);
+    return await new Promise<Response>((resolve) => {
+      waitingResponses.push(resolve);
+    });
+  });
+
+  const resultPromise = fetchFigmaFile(
+    "https://www.figma.com/design/AbCdEf123456/Concurrent",
+    "figd_test_token_value",
+  );
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(secondaryRequests.length, 3);
+  for (const resolve of waitingResponses) {
+    resolve(Response.json({ images: {} }));
+  }
+  await resultPromise;
+});
+
 test("selected responsive page frame also fetches its device companion", async (context) => {
   const requested: string[] = [];
   const frame = (id: string, name: string, width: number, height: number) => ({

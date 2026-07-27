@@ -523,41 +523,44 @@ export async function fetchFigmaFile(
       warnings.push("スマホ版フレームを追加取得できなかったため、選択した画面のみ変換しました。");
     }
   }
-  let imageUrls: Record<string, string> = {};
-  try {
-    const imageResponse = await fetch(
-      `https://api.figma.com/v1/files/${encodeURIComponent(key)}/images`,
-      requestInit(),
-    );
-    if (imageResponse.ok) {
-      const imageData = await readLimitedJson(imageResponse);
-      if (isRecord(imageData) && isRecord(imageData.images)) {
-        imageUrls = Object.fromEntries(
-          Object.entries(imageData.images).filter(
-            (entry): entry is [string, string] => typeof entry[1] === "string",
-          ),
-        );
-      }
-    } else {
-      warnings.push("Figma画像のURLを取得できなかったため、画像なしで続行しました。");
-    }
-  } catch {
-    warnings.push("Figma画像の取得がタイムアウトしたため、画像なしで続行しました。");
-  }
-
-  const renderedNodeUrls = await fetchRenderedNodeUrls(
-    key,
-    (data as RawFigmaFile).document,
-    requestInit(),
-    warnings,
-  );
-  const visualReferences = await fetchVisualReferences(
-    key,
-    (data as RawFigmaFile).document,
-    requestInit(),
-    warnings,
-  );
   const normalizedData = data as RawFigmaFile;
+  const imageUrlsPromise = (async (): Promise<Record<string, string>> => {
+    try {
+      const imageResponse = await fetch(
+        `https://api.figma.com/v1/files/${encodeURIComponent(key)}/images`,
+        requestInit(),
+      );
+      if (!imageResponse.ok) {
+        warnings.push("Figma画像のURLを取得できなかったため、画像なしで続行しました。");
+        return {};
+      }
+      const imageData = await readLimitedJson(imageResponse);
+      if (!isRecord(imageData) || !isRecord(imageData.images)) return {};
+      return Object.fromEntries(
+        Object.entries(imageData.images).filter(
+          (entry): entry is [string, string] => typeof entry[1] === "string",
+        ),
+      );
+    } catch {
+      warnings.push("Figma画像の取得がタイムアウトしたため、画像なしで続行しました。");
+      return {};
+    }
+  })();
+  const [imageUrls, renderedNodeUrls, visualReferences] = await Promise.all([
+    imageUrlsPromise,
+    fetchRenderedNodeUrls(
+      key,
+      normalizedData.document,
+      requestInit(),
+      warnings,
+    ),
+    fetchVisualReferences(
+      key,
+      normalizedData.document,
+      requestInit(),
+      warnings,
+    ),
+  ]);
 
   return {
     file: normalizeFigmaFile(normalizedData),

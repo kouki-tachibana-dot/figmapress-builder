@@ -49,6 +49,7 @@ import {
   shouldKeepTextGeometryCorrections,
   shouldKeepVisualCorrections,
 } from "@/lib/visual-qa";
+import { readApi } from "@/lib/api-client";
 
 type SourceMode = "figma" | "json";
 type OutputTarget = "gutenberg" | "elementor";
@@ -451,14 +452,6 @@ function serializableVisualQaResults(results: VisualQaBrowserResult[]) {
       Object.entries(result).filter(([key]) => key !== "diffImageUrl"),
     ),
   );
-}
-
-async function readApi<T>(response: Response): Promise<T> {
-  const data = (await response.json()) as { ok?: boolean; error?: string } & T;
-  if (!response.ok || data.ok === false) {
-    throw new Error(data.error || "処理に失敗しました。");
-  }
-  return data;
 }
 
 function downloadText(filename: string, value: string, type: string) {
