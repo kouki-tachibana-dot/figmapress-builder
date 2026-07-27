@@ -460,10 +460,17 @@ async function fetchVisualReferences(
 export async function fetchFigmaFile(
   fileKeyOrUrl: string,
   token: string,
+  authentication: "pat" | "oauth" = "pat",
 ): Promise<FigmaFetchResult> {
   const reference = extractFigmaReference(fileKeyOrUrl);
   const key = reference.fileKey;
-  const headers = { "X-Figma-Token": token.trim(), Accept: "application/json" };
+  const headers = new Headers({ Accept: "application/json" });
+  headers.set(
+    authentication === "oauth" ? "Authorization" : "X-Figma-Token",
+    authentication === "oauth"
+      ? `Bearer ${token.trim()}`
+      : token.trim(),
+  );
   const requestInit = (): RequestInit => ({
     headers,
     cache: "no-store",

@@ -79,6 +79,7 @@ export async function POST(request: Request): Promise<Response> {
       const fetched = await fetchFigmaFile(
         parsed.data.fileKeyOrUrl,
         token,
+        parsed.data.token ? "pat" : "oauth",
       );
       output = await convertFile(
         fetched.file,

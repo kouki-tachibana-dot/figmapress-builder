@@ -66,6 +66,38 @@ test("real Figma file shape is normalized into parser tokens", async (context) =
   assert.match(requested[0] ?? "", /ids=2%3A2/);
 });
 
+test("Figma OAuth uses Bearer auth without exposing the token as a PAT header", async (context) => {
+  const requestedHeaders: Headers[] = [];
+  context.mock.method(globalThis, "fetch", async (_input, init) => {
+    requestedHeaders.push(new Headers(init?.headers));
+    return Response.json({
+      name: "OAuth Figma File",
+      document: {
+        id: "0:0",
+        name: "Document",
+        type: "DOCUMENT",
+        children: [],
+      },
+      images: {},
+    });
+  });
+
+  await fetchFigmaFile(
+    "https://www.figma.com/design/AbCdEf123456/OAuth",
+    "oauth_access_token_value",
+    "oauth",
+  );
+
+  assert.ok(requestedHeaders.length >= 2);
+  for (const headers of requestedHeaders) {
+    assert.equal(
+      headers.get("Authorization"),
+      "Bearer oauth_access_token_value",
+    );
+    assert.equal(headers.get("X-Figma-Token"), null);
+  }
+});
+
 test("selected responsive page frame also fetches its device companion", async (context) => {
   const requested: string[] = [];
   const frame = (id: string, name: string, width: number, height: number) => ({
