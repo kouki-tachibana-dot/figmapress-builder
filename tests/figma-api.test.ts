@@ -102,7 +102,12 @@ test("Figma authentication errors distinguish OAuth draft state from PAT permiss
   context.mock.method(globalThis, "fetch", async (_input, init) => {
     const headers = new Headers(init?.headers);
     if (headers.has("Authorization")) {
-      return Response.json({ status: 401, err: "Unauthorized" }, { status: 401 });
+      const token = headers.get("Authorization") ?? "";
+      const status = token.includes("forbidden") ? 403 : 401;
+      return Response.json(
+        { status, err: status === 403 ? "Forbidden" : "Unauthorized" },
+        { status },
+      );
     }
     return Response.json({ status: 403, err: "Forbidden" }, { status: 403 });
   });
@@ -123,13 +128,27 @@ test("Figma authentication errors distinguish OAuth draft state from PAT permiss
 
   await assert.rejects(
     fetchFigmaFile(
+      "https://www.figma.com/design/AbCdEf123456/OAuthForbidden",
+      "oauth_forbidden_access_token",
+      "oauth",
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /審査未承認/);
+      assert.equal((error as { status?: number }).status, 403);
+      return true;
+    },
+  );
+
+  await assert.rejects(
+    fetchFigmaFile(
       "https://www.figma.com/design/AbCdEf123456/Pat",
       "figd_personal_access_token",
       "pat",
     ),
     (error: unknown) => {
       assert.ok(error instanceof Error);
-      assert.match(error.message, /対象ファイルの閲覧権限/);
+      assert.match(error.message, /Personal Access Token/);
       assert.equal((error as { status?: number }).status, 403);
       return true;
     },

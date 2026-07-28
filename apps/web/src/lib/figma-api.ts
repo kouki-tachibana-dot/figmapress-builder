@@ -111,9 +111,15 @@ function figmaError(
       401,
     );
   }
+  if (status === 403 && authentication === "oauth") {
+    return new RequestError(
+      "Figma OAuthアプリが未公開（ドラフト）または審査未承認か、接続中のアカウントに対象ファイルの閲覧権限がありません。アプリ所有者はFigmaで2FAを有効化し、「レビュー用に送信」後、承認されてから再試行してください。",
+      403,
+    );
+  }
   if (status === 403) {
     return new RequestError(
-      "Figmaアカウントに対象ファイルの閲覧権限がないか、file_content:read権限が許可されていません。対象ファイルを共有し、Figma接続をやり直してください。",
+      "Figmaアカウントに対象ファイルの閲覧権限がないか、Personal Access Tokenにfile_content:read権限がありません。対象ファイルを共有するか、権限付きのトークンを入力してください。",
       403,
     );
   }
