@@ -98,6 +98,44 @@ test("Figma OAuth uses Bearer auth without exposing the token as a PAT header", 
   }
 });
 
+test("Figma authentication errors distinguish OAuth draft state from PAT permissions", async (context) => {
+  context.mock.method(globalThis, "fetch", async (_input, init) => {
+    const headers = new Headers(init?.headers);
+    if (headers.has("Authorization")) {
+      return Response.json({ status: 401, err: "Unauthorized" }, { status: 401 });
+    }
+    return Response.json({ status: 403, err: "Forbidden" }, { status: 403 });
+  });
+
+  await assert.rejects(
+    fetchFigmaFile(
+      "https://www.figma.com/design/AbCdEf123456/OAuth",
+      "oauth_access_token_value",
+      "oauth",
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /未公開（ドラフト）/);
+      assert.equal((error as { status?: number }).status, 401);
+      return true;
+    },
+  );
+
+  await assert.rejects(
+    fetchFigmaFile(
+      "https://www.figma.com/design/AbCdEf123456/Pat",
+      "figd_personal_access_token",
+      "pat",
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /対象ファイルの閲覧権限/);
+      assert.equal((error as { status?: number }).status, 403);
+      return true;
+    },
+  );
+});
+
 test("Figma image, render, and visual reference requests start concurrently", async (context) => {
   const waitingResponses: Array<(response: Response) => void> = [];
   const secondaryRequests: string[] = [];

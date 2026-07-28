@@ -95,11 +95,26 @@ async function readLimitedJson(response: Response): Promise<unknown> {
   }
 }
 
-function figmaError(status: number): RequestError {
-  if (status === 401 || status === 403) {
+function figmaError(
+  status: number,
+  authentication: "pat" | "oauth",
+): RequestError {
+  if (status === 401 && authentication === "oauth") {
     return new RequestError(
-      "Figmaトークンが無効か、file_content:read 権限がありません。",
+      "Figma OAuthアプリが未公開（ドラフト）か、接続が失効しています。アプリ所有者はFigmaで2FAを有効化し、「レビュー用に送信」後、承認されてから再試行してください。",
       401,
+    );
+  }
+  if (status === 401) {
+    return new RequestError(
+      "Figma Personal Access Tokenが無効または期限切れです。file_content:read付きの新しいトークンを入力してください。",
+      401,
+    );
+  }
+  if (status === 403) {
+    return new RequestError(
+      "Figmaアカウントに対象ファイルの閲覧権限がないか、file_content:read権限が許可されていません。対象ファイルを共有し、Figma接続をやり直してください。",
+      403,
     );
   }
   if (status === 404) return new RequestError("Figmaファイルが見つかりません。", 404);
@@ -489,7 +504,13 @@ export async function fetchFigmaFile(
   } catch {
     throw new RequestError("Figma APIへの接続がタイムアウトしました。", 504);
   }
-  if (!fileResponse.ok) throw figmaError(fileResponse.status);
+  if (!fileResponse.ok) {
+    console.warn("[figmapress:figma-api] file request rejected", {
+      authentication,
+      status: fileResponse.status,
+    });
+    throw figmaError(fileResponse.status, authentication);
+  }
 
   let data = await readLimitedJson(fileResponse);
   if (!isRecord(data) || !isRecord(data.document)) {
