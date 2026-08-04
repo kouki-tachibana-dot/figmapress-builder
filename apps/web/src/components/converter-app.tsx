@@ -1119,6 +1119,11 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         result.id,
         requestId,
       );
+      if ((snapshot.omittedAssetsCount ?? 0) > 0) {
+        throw new Error(
+          `比較用画像を${snapshot.omittedAssetsCount}件準備できませんでした。Connectorを更新して再試行してください。`,
+        );
+      }
       return compareVisualQuality(
         targetOutput,
         snapshotDocument(snapshot, credentials.baseUrl),
