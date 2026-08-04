@@ -1,11 +1,11 @@
 {
   "name": "FigmaPress Connector",
   "slug": "figmapress-connector",
-  "version": "0.15.4",
+  "version": "0.16.0",
   "requires": "6.4",
   "requires_php": "7.4",
   "tested": "7.0",
   "homepage": "https://figmapress-builder.vercel.app",
   "download_url": "https://figmapress-builder.vercel.app/downloads/figmapress-connector.zip",
-  "changelog": "<h4>0.15.4</h4><ul><li>PC・タブレットのお問い合わせフォームをFigmaの1920px基準から比例縮小し、フッター上部への重なりを解消。</li></ul><h4>0.15.3</h4><ul><li>Figmaの実測行数から日本語テキストの折返しを補完し、カード・スマホフッターの横はみ出しを修正。</li><li>320〜440px幅でお問い合わせフォームを比例縮小し、フッターとの重なりを抑制。</li></ul><h4>0.15.2</h4><ul><li>ElementorナビゲーションWidgetの高さをヘッダー内容に合わせ、ページ全体を覆うクリック領域を解消。</li><li>メニューの下にあるフォームやアコーディオンを正常に操作できるよう修正。</li></ul><h4>0.15.1</h4><ul><li>REST診断時にもElementor Widgetクラスを安全に読み込み、利用可能な5種類を正しく報告。</li><li>更新直後に機能Widgetが0/5と誤判定され、下書き作成が停止する問題を修正。</li></ul><h4>0.15.0</h4><ul><li>WordPress管理画面の「ツール → FigmaPress接続」からワンクリック接続を追加。</li><li>Application Passwordを繰り返し入力せず、90日・即時失効可能なConnector専用トークンで接続。</li><li>接続トークンをfigmapress/v1 REST経路だけに限定し、通常ログインや他のREST APIでは拒否。</li><li>Gutenberg下書きもConnector専用経路から作成可能。</li></ul><h4>0.14.0</h4><ul><li>Figma画像の切り抜き、拡大縮小、せん断、回転を編集可能な構造化データとして保持。</li><li>TILE画像の繰り返しと倍率、露出・コントラスト・彩度のフォールバック描画に対応。</li><li>正確なFigmaレンダーを優先し、取得上限時だけ元画像と変形行列へ安全に切り替え。</li><li>品質診断で正確レンダー、構造化変形、標準フィットを分けて確認可能。</li></ul><h4>0.13.0</h4><ul><li>FigmaのCarousel／Sliderレイヤーを編集可能なElementorカルーセルへ変換。</li><li>前後ボタン、ドット、キーボード、スワイプ、動きの軽減設定に対応。</li><li>FigmaプロトタイプのURL・セクション遷移と、CTA・電話・メールのリンクを実動化。</li><li>PC版とスマホ版の表示枚数を独立して保持。</li></ul>"
+  "changelog": "<h4>0.16.0</h4><ul><li>画像を段階保存し、通信中断後も同じ下書きから再開可能にしました。</li><li>Visual QA補正時の画像URL巻き戻りを防止しました。</li><li>同じFigmaファイル・ノードは既存下書きを更新し、画像の進捗を表示します。</li></ul><h4>0.15.4</h4><ul><li>PC・タブレットのお問い合わせフォームをFigmaの1920px基準から比例縮小し、フッター上部への重なりを解消。</li></ul>"
 }

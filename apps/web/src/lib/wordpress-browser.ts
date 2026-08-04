@@ -27,6 +27,7 @@ export interface BrowserWordPressStatus {
     gradients?: boolean;
     effects?: boolean;
     imageTransforms?: boolean;
+    mediaPersistence?: boolean;
   };
   canEditPages: boolean;
   pairing?: {
@@ -44,6 +45,26 @@ export interface BrowserWordPressResult {
   rawLink?: string;
   target?: "gutenberg" | "elementor";
   importedMedia?: number;
+  savedMedia?: number;
+  totalMedia?: number;
+  remainingMedia?: number;
+  failedMedia?: number;
+  mediaComplete?: boolean;
+  idempotent?: boolean;
+  updated?: boolean;
+  warnings?: string[];
+}
+
+export interface BrowserElementorMediaProgress {
+  postId: number;
+  status: "draft";
+  importedMedia: number;
+  savedMedia: number;
+  totalMedia: number;
+  remainingMedia: number;
+  failedMedia: number;
+  mediaComplete: boolean;
+  storedElements: number;
   warnings?: string[];
 }
 
@@ -86,6 +107,7 @@ export type BrowserDraftInput =
       template: BrowserElementorTemplate;
       pageTemplate: "elementor_canvas" | "elementor_header_footer" | "default";
       requestId: string;
+      sourceKey?: string;
     };
 
 export class WordPressDirectError extends Error {
@@ -290,6 +312,7 @@ export async function probeWordPressDirect(
       gradients?: unknown;
       effects?: unknown;
       imageTransforms?: unknown;
+      mediaPersistence?: unknown;
     };
   }>(response, config.connectorToken);
   return {
@@ -326,6 +349,9 @@ export async function probeWordPressDirect(
       gradients: status.visualQa.gradients === true,
       effects: status.visualQa.effects === true,
       imageTransforms: status.visualQa.imageTransforms === true,
+      ...(status.visualQa.mediaPersistence !== undefined
+        ? { mediaPersistence: status.visualQa.mediaPersistence === true }
+        : {}),
     } : undefined,
     canEditPages: status.canEditPages === true,
     pairing: status.pairing ? {
@@ -356,6 +382,7 @@ export async function createWordPressDraftDirect(
           slug,
           status: "draft",
           requestId: input.requestId,
+          sourceKey: input.sourceKey,
           pageTemplate: input.pageTemplate,
           template: input.template,
         }),
@@ -413,6 +440,21 @@ export async function createWordPressDraftDirect(
     rawLink: result.rawLink ?? result.link,
     target: "gutenberg",
   };
+}
+
+export async function localizeWordPressElementorMediaDirect(
+  config: BrowserWordPressConfig,
+  postId: number,
+  requestId: string,
+  retryFailed = false,
+): Promise<BrowserElementorMediaProgress> {
+  return responseJson<BrowserElementorMediaProgress>(
+    await directFetch(config, `/figmapress/v1/elementor/pages/${postId}/media`, {
+      method: "POST",
+      body: JSON.stringify({ requestId, retryFailed }),
+    }),
+    config.connectorToken,
+  );
 }
 
 export async function fetchWordPressElementorSnapshotDirect(

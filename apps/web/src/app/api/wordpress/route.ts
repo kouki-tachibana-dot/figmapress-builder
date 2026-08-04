@@ -46,6 +46,9 @@ const RequestSchema = z.discriminatedUnion("target", [
   CommonSchema.extend({
     target: z.literal("elementor"),
     requestId: z.string().trim().regex(/^[a-f0-9-]{16,64}$/i),
+    sourceKey: z.string().trim()
+      .regex(/^figma:[A-Za-z0-9_-]{6,160}:(?:root|[0-9]+:[0-9]+)$/)
+      .optional(),
     template: ElementorTemplateSchema,
     pageTemplate: z.enum(["elementor_canvas", "elementor_header_footer", "default"]).default("elementor_canvas"),
   }).strict(),
@@ -89,6 +92,7 @@ export async function POST(request: Request): Promise<Response> {
             title: parsed.data.title,
             slug: parsed.data.slug,
             requestId: parsed.data.requestId,
+            sourceKey: parsed.data.sourceKey,
             template: parsed.data.template,
             pageTemplate: parsed.data.pageTemplate,
           })

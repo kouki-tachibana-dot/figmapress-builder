@@ -446,7 +446,13 @@ function navigationElement(
     figmapress_node_name: node.name,
     _element_id: anchorId("site-navigation", context),
     layout_variant: context.variant,
-    logo: logoUrl ? { url: logoUrl, id: "", alt: "サイトロゴ", source: "library" } : undefined,
+    logo: logoUrl ? {
+      url: logoUrl,
+      id: "",
+      alt: "サイトロゴ",
+      source: "library",
+      figmapress_key: mediaKey(`${node.id}:logo`, logoUrl),
+    } : undefined,
     items: menuTexts.map((item, index) => ({
       _id: hashId(`${item.id}:menu:${index}`),
       label: item.characters?.trim() ?? "",
@@ -553,15 +559,33 @@ function carouselElement(
     figmapress_node_name: node.name,
     items: plan.items.map((item, index) => ({
       _id: hashId(`${item.id}:carousel:${index}`),
-      image: { url: item.imageUrl, id: "", alt: item.title, source: "library" },
+      image: {
+        url: item.imageUrl,
+        id: "",
+        alt: item.title,
+        source: "library",
+        figmapress_key: mediaKey(`${item.id}:carousel:${index}`, item.imageUrl),
+      },
       title: item.title,
       url: item.link ? elementorUrl(item.link) : { url: "", is_external: "", nofollow: "" },
     })),
     previous_icon: plan.previousIconUrl
-      ? { url: plan.previousIconUrl, id: "", alt: "前へ", source: "library" }
+      ? {
+          url: plan.previousIconUrl,
+          id: "",
+          alt: "前へ",
+          source: "library",
+          figmapress_key: mediaKey(`${node.id}:previous`, plan.previousIconUrl),
+        }
       : undefined,
     next_icon: plan.nextIconUrl
-      ? { url: plan.nextIconUrl, id: "", alt: "次へ", source: "library" }
+      ? {
+          url: plan.nextIconUrl,
+          id: "",
+          alt: "次へ",
+          source: "library",
+          figmapress_key: mediaKey(`${node.id}:next`, plan.nextIconUrl),
+        }
       : undefined,
     items_per_view: itemsPerView,
     items_per_view_mobile: 1,
@@ -1078,7 +1102,13 @@ function imageElement(
     ...widgetPosition(node, bounds, parentBounds, parentNode),
     figmapress_node_id: node.id,
     figmapress_node_name: node.name,
-    image: { url: asset.url, id: "", alt: node.name, source: "library" },
+    image: {
+      url: asset.url,
+      id: "",
+      alt: node.name,
+      source: "library",
+      figmapress_key: mediaKey(`${node.id}:image`, asset.url),
+    },
     image_size: "full",
     space: size(100, "%"),
     height: canvasSize(bounds.height, context),
@@ -1128,7 +1158,12 @@ function baseContainerSettings(node: FigmaNode, context: RenderContext): Element
     : null;
   if (backgroundUrl) {
     settings.background_background = "classic";
-    settings.background_image = { url: backgroundUrl, id: "", source: "library" };
+    settings.background_image = {
+      url: backgroundUrl,
+      id: "",
+      source: "library",
+      figmapress_key: mediaKey(`${node.id}:background`, backgroundUrl),
+    };
     settings.background_position = "center center";
     settings.background_repeat = backgroundPaint?.scaleMode === "TILE" ? "repeat" : "no-repeat";
     settings.background_size = imageBackgroundSize(backgroundPaint);
@@ -2086,6 +2121,17 @@ function hashId(value: string): string {
     hash = Math.imul(hash, 16777619);
   }
   return (hash >>> 0).toString(16).padStart(8, "0").slice(0, 8);
+}
+
+function mediaKey(seed: string, value: string): string {
+  let assetIdentity = value.split("?", 1)[0] ?? value;
+  try {
+    const url = new URL(value);
+    assetIdentity = `${url.hostname.toLowerCase()}${url.pathname}`;
+  } catch {
+    // The URL is validated before WordPress import; hashing remains bounded.
+  }
+  return `${seed}:${hashId(assetIdentity)}`;
 }
 
 function escapeHtml(value: string): string {

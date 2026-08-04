@@ -99,6 +99,15 @@ function figmapress_connector_register_rest_routes() {
             'permission_callback' => 'figmapress_connector_rest_can_edit_requested_page',
         )
     );
+    register_rest_route(
+        'figmapress/v1',
+        '/elementor/pages/(?P<id>\d+)/media',
+        array(
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => 'figmapress_connector_rest_localize_elementor_media',
+            'permission_callback' => 'figmapress_connector_rest_can_edit_requested_page',
+        )
+    );
 }
 add_action( 'rest_api_init', 'figmapress_connector_register_rest_routes' );
 
@@ -212,6 +221,7 @@ function figmapress_connector_rest_status() {
                 'gradients'      => true,
                 'effects'        => true,
                 'imageTransforms' => true,
+                'mediaPersistence' => true,
             ),
         )
     );
@@ -262,6 +272,29 @@ function figmapress_connector_rest_create_gutenberg_page( WP_REST_Request $reque
     );
 }
 
+function figmapress_connector_find_page_by_meta( $meta_key, $meta_value ) {
+    if ( '' === $meta_value ) {
+        return 0;
+    }
+    $pages = get_posts(
+        array(
+            'post_type'              => 'page',
+            'post_status'            => array( 'draft', 'pending', 'private', 'publish', 'future' ),
+            'posts_per_page'         => 1,
+            'fields'                 => 'ids',
+            'meta_key'               => $meta_key,
+            'meta_value'             => $meta_value,
+            'no_found_rows'          => true,
+            'orderby'                => 'ID',
+            'order'                  => 'DESC',
+            'suppress_filters'       => false,
+            'update_post_meta_cache' => false,
+            'update_post_term_cache' => false,
+        )
+    );
+    return isset( $pages[0] ) ? absint( $pages[0] ) : 0;
+}
+
 function figmapress_connector_rest_create_elementor_page( WP_REST_Request $request ) {
     if ( ! did_action( 'elementor/loaded' ) && ! defined( 'ELEMENTOR_VERSION' ) ) {
         return new WP_Error( 'figmapress_elementor_missing', 'Elementor is not active on this site.', array( 'status' => 409 ) );
@@ -281,6 +314,7 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
     $title      = isset( $params['title'] ) ? sanitize_text_field( $params['title'] ) : '';
     $slug       = isset( $params['slug'] ) ? sanitize_title( $params['slug'] ) : '';
     $request_id = isset( $params['requestId'] ) ? sanitize_text_field( $params['requestId'] ) : '';
+    $source_key = isset( $params['sourceKey'] ) ? sanitize_text_field( $params['sourceKey'] ) : '';
     $template   = isset( $params['template'] ) && is_array( $params['template'] ) ? $params['template'] : null;
     if ( '' === $title || ! $template || '0.4' !== ( isset( $template['version'] ) ? (string) $template['version'] : '' ) ) {
         return new WP_Error( 'figmapress_invalid_template', 'The Elementor template payload is invalid.', array( 'status' => 422 ) );
@@ -288,28 +322,22 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
     if ( '' !== $request_id && ! preg_match( '/^[a-f0-9-]{16,64}$/i', $request_id ) ) {
         return new WP_Error( 'figmapress_invalid_request_id', '作成リクエストの識別情報が無効です。', array( 'status' => 422 ) );
     }
+    if ( '' !== $source_key && ! preg_match( '/^figma:[A-Za-z0-9_-]{6,160}:(?:root|[0-9]+:[0-9]+)$/', $source_key ) ) {
+        return new WP_Error( 'figmapress_invalid_source_key', 'Figma変換元の識別情報が無効です。', array( 'status' => 422 ) );
+    }
 
-    $request_lock_key = '' !== $request_id
-        ? 'figmapress_request_' . substr( hash_hmac( 'sha256', $request_id, wp_salt( 'nonce' ) ), 0, 32 )
+    $identity         = '' !== $source_key ? $source_key : $request_id;
+    $request_lock_key = '' !== $identity
+        ? 'figmapress_request_' . substr( hash_hmac( 'sha256', $identity, wp_salt( 'nonce' ) ), 0, 32 )
         : '';
-    if ( '' !== $request_id ) {
-        $existing_pages = get_posts(
-            array(
-                'post_type'              => 'page',
-                'post_status'            => array( 'draft', 'pending', 'private', 'publish', 'future' ),
-                'posts_per_page'         => 1,
-                'fields'                 => 'ids',
-                'meta_key'               => '_figmapress_request_id',
-                'meta_value'             => $request_id,
-                'no_found_rows'          => true,
-                'orderby'                => 'ID',
-                'order'                  => 'DESC',
-                'suppress_filters'       => false,
-                'update_post_meta_cache' => false,
-                'update_post_term_cache' => false,
-            )
-        );
-        $existing_id = isset( $existing_pages[0] ) ? absint( $existing_pages[0] ) : 0;
+    $existing_id      = '' !== $source_key
+        ? figmapress_connector_find_page_by_meta( '_figmapress_source_key', $source_key )
+        : 0;
+    if ( ! $existing_id && '' !== $request_id ) {
+        $existing_id = figmapress_connector_find_page_by_meta( '_figmapress_request_id', $request_id );
+    }
+    $reuse_existing = false;
+    if ( $existing_id ) {
         if ( $existing_id && current_user_can( 'edit_post', $existing_id ) ) {
             $stored_elements = figmapress_connector_count_elementor_elements( figmapress_connector_read_elementor_data( $existing_id ) );
             $existing_lock   = get_option( $request_lock_key );
@@ -334,7 +362,8 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
             if ( 0 === $stored_elements ) {
                 wp_delete_post( $existing_id, true );
                 delete_option( $request_lock_key );
-            } else {
+                $existing_id = 0;
+            } elseif ( '' === $source_key ) {
                 return rest_ensure_response(
                     array(
                         'id'             => $existing_id,
@@ -346,9 +375,12 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
                         'rawLink'        => get_permalink( $existing_id ),
                         'storedElements' => $stored_elements,
                         'idempotent'     => true,
+                        'updated'        => false,
                         'warnings'       => array( '前回の処理で作成済みの下書きを再利用しました。重複ページは作成していません。' ),
                     )
                 );
+            } else {
+                $reuse_existing = true;
             }
         }
     }
@@ -365,7 +397,7 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
         return new WP_Error( 'figmapress_empty_template', 'The Elementor template contains no supported elements.', array( 'status' => 422 ) );
     }
 
-    if ( '' !== $request_id ) {
+    if ( '' !== $request_lock_key ) {
         $lock_value       = array(
             'started' => time(),
             'user'    => get_current_user_id(),
@@ -395,34 +427,50 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
         $page_template = 'elementor_canvas';
     }
 
-    $post_id = wp_insert_post(
-        array(
-            'post_type'    => 'page',
-            'post_status'  => 'draft',
-            'post_title'   => $title,
-            'post_name'    => $slug,
-            'post_content' => '',
-        ),
-        true
-    );
+    $created = ! $reuse_existing;
+    if ( $reuse_existing ) {
+        wp_save_post_revision( $existing_id );
+        $post_id = wp_update_post(
+            array(
+                'ID'         => $existing_id,
+                'post_title' => $title,
+            ),
+            true
+        );
+        $warnings[] = '同じFigmaファイル・ノードの既存下書きを更新しました。重複ページは作成していません。';
+    } else {
+        $post_id = wp_insert_post(
+            array(
+                'post_type'    => 'page',
+                'post_status'  => 'draft',
+                'post_title'   => $title,
+                'post_name'    => $slug,
+                'post_content' => '',
+            ),
+            true
+        );
+    }
     if ( is_wp_error( $post_id ) ) {
         if ( $request_lock_key ) {
             delete_option( $request_lock_key );
         }
         return $post_id;
     }
-    if ( '' !== $request_id && ! add_post_meta( $post_id, '_figmapress_request_id', $request_id, true ) ) {
-        delete_option( $request_lock_key );
-        wp_delete_post( $post_id, true );
-        return new WP_Error(
-            'figmapress_request_id_store_failed',
-            '下書きの重複防止情報を安全に保存できませんでした。',
-            array( 'status' => 500 )
-        );
+    if ( '' !== $request_id ) {
+        update_post_meta( $post_id, '_figmapress_request_id', $request_id );
+    }
+    if ( '' !== $source_key ) {
+        update_post_meta( $post_id, '_figmapress_source_key', $source_key );
     }
     $page_settings = isset( $template['page_settings'] ) && is_array( $template['page_settings'] )
         ? figmapress_connector_sanitize_elementor_value( $template['page_settings'] )
         : array();
+
+    $media_total = figmapress_connector_count_unique_elementor_images( $content );
+    update_post_meta( $post_id, '_figmapress_media_total', $media_total );
+    delete_post_meta( $post_id, '_figmapress_media_failures' );
+    $localized_images = figmapress_connector_load_media_map( $post_id );
+    figmapress_connector_apply_elementor_image_map( $content, $localized_images );
 
     // Persist the complete editable document before any remote image work.
     // Hosts can terminate slow downloads; the page must never be left empty.
@@ -431,7 +479,9 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
         if ( $request_lock_key ) {
             delete_option( $request_lock_key );
         }
-        wp_delete_post( $post_id, true );
+        if ( $created ) {
+            wp_delete_post( $post_id, true );
+        }
         return $stored_elements;
     }
     if ( $request_lock_key ) {
@@ -440,8 +490,10 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
 
     $imported_media = 0;
     $media_deadline = microtime( true ) + 12;
-    $localized_images = array();
-    figmapress_connector_localize_elementor_images( $content, $post_id, $warnings, $imported_media, $media_deadline, $localized_images );
+    $media_failures = array();
+    figmapress_connector_localize_elementor_images( $content, $post_id, $warnings, $imported_media, $media_deadline, $localized_images, $media_failures );
+    figmapress_connector_save_media_map( $post_id, $localized_images );
+    figmapress_connector_save_media_failures( $post_id, $media_failures );
     $localized_store = figmapress_connector_store_elementor_document( $post_id, $content, $page_settings, $page_template );
     if ( is_wp_error( $localized_store ) ) {
         $warnings[] = '画像の保存後にElementorデータを更新できなかったため、画像処理前の編集可能データを保持しました。';
@@ -449,9 +501,11 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
         $stored_elements = $localized_store;
     }
     figmapress_connector_clear_elementor_cache( $post_id );
+    $media_progress = figmapress_connector_elementor_media_progress( $content, $post_id );
 
     return rest_ensure_response(
-        array(
+        array_merge(
+            array(
             'id'            => $post_id,
             'slug'          => get_post_field( 'post_name', $post_id ),
             'status'        => 'draft',
@@ -461,8 +515,11 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
             'rawLink'       => get_permalink( $post_id ),
             'importedMedia' => $imported_media,
             'storedElements' => $stored_elements,
-            'idempotent'     => false,
+            'idempotent'     => $reuse_existing,
+            'updated'        => $reuse_existing,
             'warnings'      => $warnings,
+            ),
+            $media_progress
         )
     );
 }
@@ -487,6 +544,75 @@ function figmapress_connector_validate_owned_elementor_draft( WP_REST_Request $r
         return new WP_Error( 'figmapress_draft_mismatch', 'この下書きは現在の変換処理では更新できません。', array( 'status' => 403 ) );
     }
     return $post_id;
+}
+
+/**
+ * Import the next bounded media batch for an existing draft. Every completed
+ * batch is persisted, so a browser timeout or reload can safely resume it.
+ */
+function figmapress_connector_rest_localize_elementor_media( WP_REST_Request $request ) {
+    $post_id = figmapress_connector_validate_owned_elementor_draft( $request );
+    if ( is_wp_error( $post_id ) ) {
+        return $post_id;
+    }
+
+    $content = figmapress_connector_read_elementor_data( $post_id );
+    if ( ! is_array( $content ) ) {
+        return new WP_Error( 'figmapress_empty_template', 'The Elementor draft contains no editable document.', array( 'status' => 422 ) );
+    }
+
+    $warnings         = array();
+    $imported_media   = 0;
+    $media_deadline   = microtime( true ) + 12;
+    $localized_images = figmapress_connector_load_media_map( $post_id );
+    $media_failures   = figmapress_connector_load_media_failures( $post_id );
+    $params           = $request->get_json_params();
+    if ( ! empty( $params['retryFailed'] ) ) {
+        $media_failures = array();
+    }
+    figmapress_connector_apply_elementor_image_map( $content, $localized_images );
+    figmapress_connector_localize_elementor_images(
+        $content,
+        $post_id,
+        $warnings,
+        $imported_media,
+        $media_deadline,
+        $localized_images,
+        $media_failures
+    );
+    figmapress_connector_save_media_map( $post_id, $localized_images );
+    figmapress_connector_save_media_failures( $post_id, $media_failures );
+
+    $page_settings = get_post_meta( $post_id, '_elementor_page_settings', true );
+    if ( ! is_array( $page_settings ) ) {
+        $page_settings = array();
+    }
+    $page_template = get_post_meta( $post_id, '_wp_page_template', true );
+    if ( ! in_array( $page_template, array( 'elementor_canvas', 'elementor_header_footer', 'default' ), true ) ) {
+        $page_template = 'elementor_canvas';
+    }
+    $stored = figmapress_connector_store_elementor_document( $post_id, $content, $page_settings, $page_template );
+    if ( is_wp_error( $stored ) ) {
+        return $stored;
+    }
+    figmapress_connector_clear_elementor_cache( $post_id );
+
+    $progress = figmapress_connector_elementor_media_progress( $content, $post_id );
+    if ( $progress['failedMedia'] > 0 ) {
+        $warnings[] = '3回試行しても保存できない画像があります。元URLを保持して下書きは編集可能な状態にしています。';
+    }
+    return rest_ensure_response(
+        array_merge(
+            array(
+                'postId'         => $post_id,
+                'status'         => 'draft',
+                'importedMedia'  => $imported_media,
+                'storedElements' => $stored,
+                'warnings'       => array_values( array_unique( $warnings ) ),
+            ),
+            $progress
+        )
+    );
 }
 
 /**
@@ -519,6 +645,31 @@ function figmapress_connector_snapshot_image_data_url( $url, &$total_bytes ) {
         return null;
     }
     $path = get_attached_file( $attachment_id );
+    $upload_dir = wp_upload_dir();
+    $upload_url = isset( $upload_dir['baseurl'] ) ? trailingslashit( $upload_dir['baseurl'] ) : '';
+    $upload_path = isset( $upload_dir['basedir'] ) ? trailingslashit( $upload_dir['basedir'] ) : '';
+    $url_without_query = strtok( $clean_url, '?#' );
+    if (
+        $upload_url
+        && $upload_path
+        && is_string( $url_without_query )
+        && 0 === strpos( $url_without_query, $upload_url )
+    ) {
+        $relative_path = rawurldecode( substr( $url_without_query, strlen( $upload_url ) ) );
+        $candidate     = $upload_path . ltrim( $relative_path, '/' );
+        $real_upload   = realpath( $upload_path );
+        $real_candidate = realpath( $candidate );
+        if (
+            $real_upload
+            && $real_candidate
+            && 0 === strpos( $real_candidate, trailingslashit( $real_upload ) )
+            && is_readable( $real_candidate )
+        ) {
+            // Embed the exact intermediate size rendered by Elementor instead
+            // of the larger original attachment whenever possible.
+            $path = $real_candidate;
+        }
+    }
     if ( ! is_string( $path ) || ! is_readable( $path ) ) {
         return null;
     }
@@ -528,7 +679,7 @@ function figmapress_connector_snapshot_image_data_url( $url, &$total_bytes ) {
     }
     $mime = wp_check_filetype( $path );
     $type = isset( $mime['type'] ) ? $mime['type'] : '';
-    if ( ! in_array( $type, array( 'image/jpeg', 'image/png', 'image/webp', 'image/gif' ), true ) ) {
+    if ( ! in_array( $type, array( 'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif' ), true ) ) {
         return null;
     }
     $contents = file_get_contents( $path );
@@ -686,6 +837,14 @@ function figmapress_connector_rest_update_elementor_document( WP_REST_Request $r
     if ( ! in_array( $page_template, array( 'elementor_canvas', 'elementor_header_footer', 'default' ), true ) ) {
         $page_template = 'elementor_canvas';
     }
+
+    // Visual QA sends the corrected source template again. Reapply every
+    // previously imported image before saving so a correction can never roll
+    // Media Library URLs back to expiring Figma URLs.
+    $media_total = figmapress_connector_count_unique_elementor_images( $content );
+    update_post_meta( $post_id, '_figmapress_media_total', $media_total );
+    $localized_images = figmapress_connector_load_media_map( $post_id );
+    figmapress_connector_apply_elementor_image_map( $content, $localized_images );
 
     $revision_id = wp_save_post_revision( $post_id );
     $stored      = figmapress_connector_store_elementor_document( $post_id, $content, $page_settings, $page_template );
@@ -992,38 +1151,262 @@ function figmapress_connector_allow_layout_css( $properties ) {
     );
 }
 
-function figmapress_connector_localize_elementor_images( &$elements, $post_id, &$warnings, &$imported_media, $deadline, &$localized_images ) {
+function figmapress_connector_image_setting_url( $image ) {
+    return is_array( $image ) && isset( $image['url'] ) && is_string( $image['url'] )
+        ? trim( $image['url'] )
+        : '';
+}
+
+function figmapress_connector_image_setting_key( $image ) {
+    if ( ! is_array( $image ) || empty( $image['figmapress_key'] ) || ! is_string( $image['figmapress_key'] ) ) {
+        return '';
+    }
+    $key = preg_replace( '/[^A-Za-z0-9:_-]/', '', $image['figmapress_key'] );
+    return is_string( $key ) ? substr( $key, 0, 190 ) : '';
+}
+
+function figmapress_connector_collect_elementor_image_urls( $elements, &$urls, $remote_only = false ) {
+    foreach ( $elements as $element ) {
+        if ( ! is_array( $element ) ) {
+            continue;
+        }
+        $settings    = isset( $element['settings'] ) && is_array( $element['settings'] ) ? $element['settings'] : array();
+        $image_slots = array();
+        if ( 'widget' === ( isset( $element['elType'] ) ? $element['elType'] : '' ) ) {
+            $widget_type = isset( $element['widgetType'] ) ? $element['widgetType'] : '';
+            if ( 'image' === $widget_type && isset( $settings['image'] ) ) {
+                $image_slots[] = $settings['image'];
+            }
+            if ( 'figmapress-nav' === $widget_type && isset( $settings['logo'] ) ) {
+                $image_slots[] = $settings['logo'];
+            }
+            if ( 'figmapress-carousel' === $widget_type ) {
+                if ( isset( $settings['items'] ) && is_array( $settings['items'] ) ) {
+                    foreach ( $settings['items'] as $item ) {
+                        if ( is_array( $item ) && isset( $item['image'] ) ) {
+                            $image_slots[] = $item['image'];
+                        }
+                    }
+                }
+                foreach ( array( 'previous_icon', 'next_icon' ) as $icon_key ) {
+                    if ( isset( $settings[ $icon_key ] ) ) {
+                        $image_slots[] = $settings[ $icon_key ];
+                    }
+                }
+            }
+        }
+        if ( 'container' === ( isset( $element['elType'] ) ? $element['elType'] : '' ) && isset( $settings['background_image'] ) ) {
+            $image_slots[] = $settings['background_image'];
+        }
+        foreach ( $image_slots as $image ) {
+            $url = figmapress_connector_image_setting_url( $image );
+            if ( '' === $url ) {
+                continue;
+            }
+            if (
+                $remote_only
+                && is_array( $image )
+                && 'library' === ( isset( $image['source'] ) ? $image['source'] : '' )
+                && ! empty( $image['id'] )
+            ) {
+                continue;
+            }
+            $urls[ hash( 'sha256', $url ) ] = $url;
+        }
+        if ( isset( $element['elements'] ) && is_array( $element['elements'] ) ) {
+            figmapress_connector_collect_elementor_image_urls( $element['elements'], $urls, $remote_only );
+        }
+    }
+}
+
+function figmapress_connector_count_unique_elementor_images( $elements ) {
+    $urls = array();
+    figmapress_connector_collect_elementor_image_urls( $elements, $urls, false );
+    return count( $urls );
+}
+
+function figmapress_connector_load_media_map( $post_id ) {
+    $stored = get_post_meta( $post_id, '_figmapress_media_map', true );
+    $map    = array();
+    if ( ! is_array( $stored ) ) {
+        return $map;
+    }
+    foreach ( array_slice( $stored, 0, 300, true ) as $entry ) {
+        if ( ! is_array( $entry ) ) {
+            continue;
+        }
+        $source_url    = isset( $entry['sourceUrl'] ) ? esc_url_raw( $entry['sourceUrl'], array( 'https' ) ) : '';
+        $attachment_id = isset( $entry['id'] ) ? absint( $entry['id'] ) : 0;
+        $local_url     = $attachment_id ? wp_get_attachment_url( $attachment_id ) : false;
+        if ( '' === $source_url || ! $local_url ) {
+            continue;
+        }
+        $map[ $source_url ] = array(
+            'id'     => $attachment_id,
+            'url'    => $local_url,
+            'source' => 'library',
+            'sourceUrl' => $source_url,
+            'stableKey' => isset( $entry['stableKey'] ) ? figmapress_connector_image_setting_key( array( 'figmapress_key' => $entry['stableKey'] ) ) : '',
+        );
+        if ( '' !== $map[ $source_url ]['stableKey'] ) {
+            $map[ 'key:' . $map[ $source_url ]['stableKey'] ] = $map[ $source_url ];
+        }
+    }
+    return $map;
+}
+
+function figmapress_connector_save_media_map( $post_id, $map ) {
+    $stored = array();
+    foreach ( $map as $entry ) {
+        if ( count( $stored ) >= 300 || ! is_array( $entry ) ) {
+            continue;
+        }
+        $source_url = isset( $entry['sourceUrl'] ) ? $entry['sourceUrl'] : '';
+        $stable_key = isset( $entry['stableKey'] ) ? $entry['stableKey'] : '';
+        $attachment_id = isset( $entry['id'] ) ? absint( $entry['id'] ) : 0;
+        if ( 0 !== strpos( $source_url, 'https://' ) || ! $attachment_id || ! wp_get_attachment_url( $attachment_id ) ) {
+            continue;
+        }
+        $record_key = '' !== $stable_key ? 'key:' . $stable_key : 'url:' . hash( 'sha256', $source_url );
+        $stored[ hash( 'sha256', $record_key ) ] = array(
+            'sourceUrl' => $source_url,
+            'stableKey' => $stable_key,
+            'id'        => $attachment_id,
+        );
+    }
+    update_post_meta( $post_id, '_figmapress_media_map', $stored );
+}
+
+function figmapress_connector_load_media_failures( $post_id ) {
+    $stored = get_post_meta( $post_id, '_figmapress_media_failures', true );
+    return is_array( $stored ) ? array_slice( $stored, 0, 300, true ) : array();
+}
+
+function figmapress_connector_save_media_failures( $post_id, $failures ) {
+    $clean = array();
+    foreach ( array_slice( $failures, 0, 300, true ) as $url_hash => $attempts ) {
+        if ( preg_match( '/^[a-f0-9]{64}$/', (string) $url_hash ) ) {
+            $clean[ $url_hash ] = min( 3, absint( $attempts ) );
+        }
+    }
+    if ( $clean ) {
+        update_post_meta( $post_id, '_figmapress_media_failures', $clean );
+    } else {
+        delete_post_meta( $post_id, '_figmapress_media_failures' );
+    }
+}
+
+function figmapress_connector_apply_image_map_setting( &$image, $localized_images ) {
+    $url = figmapress_connector_image_setting_url( $image );
+    $stable_key = figmapress_connector_image_setting_key( $image );
+    $match = '' !== $stable_key && isset( $localized_images[ 'key:' . $stable_key ] )
+        ? $localized_images[ 'key:' . $stable_key ]
+        : ( '' !== $url && isset( $localized_images[ $url ] ) ? $localized_images[ $url ] : null );
+    if ( is_array( $match ) ) {
+        $image = array_merge(
+            $image,
+            array(
+                'id'     => isset( $match['id'] ) ? $match['id'] : '',
+                'url'    => isset( $match['url'] ) ? $match['url'] : $url,
+                'source' => 'library',
+            )
+        );
+    }
+}
+
+function figmapress_connector_apply_elementor_image_map( &$elements, $localized_images ) {
     foreach ( $elements as &$element ) {
-        if ( microtime( true ) >= $deadline ) {
-            figmapress_connector_add_media_budget_warning( $warnings );
-            return;
+        if ( ! is_array( $element ) ) {
+            continue;
         }
-        if ( 'widget' === $element['elType'] && 'image' === ( isset( $element['widgetType'] ) ? $element['widgetType'] : '' ) && isset( $element['settings']['image'] ) ) {
-            figmapress_connector_localize_image_setting( $element['settings']['image'], $post_id, $warnings, $imported_media, $deadline, $localized_images );
+        if ( 'widget' === ( isset( $element['elType'] ) ? $element['elType'] : '' ) && 'image' === ( isset( $element['widgetType'] ) ? $element['widgetType'] : '' ) && isset( $element['settings']['image'] ) ) {
+            figmapress_connector_apply_image_map_setting( $element['settings']['image'], $localized_images );
         }
-        if ( 'widget' === $element['elType'] && 'figmapress-nav' === ( isset( $element['widgetType'] ) ? $element['widgetType'] : '' ) && isset( $element['settings']['logo'] ) ) {
-            figmapress_connector_localize_image_setting( $element['settings']['logo'], $post_id, $warnings, $imported_media, $deadline, $localized_images );
+        if ( 'widget' === ( isset( $element['elType'] ) ? $element['elType'] : '' ) && 'figmapress-nav' === ( isset( $element['widgetType'] ) ? $element['widgetType'] : '' ) && isset( $element['settings']['logo'] ) ) {
+            figmapress_connector_apply_image_map_setting( $element['settings']['logo'], $localized_images );
         }
-        if ( 'widget' === $element['elType'] && 'figmapress-carousel' === ( isset( $element['widgetType'] ) ? $element['widgetType'] : '' ) ) {
+        if ( 'widget' === ( isset( $element['elType'] ) ? $element['elType'] : '' ) && 'figmapress-carousel' === ( isset( $element['widgetType'] ) ? $element['widgetType'] : '' ) ) {
             if ( isset( $element['settings']['items'] ) && is_array( $element['settings']['items'] ) ) {
                 foreach ( $element['settings']['items'] as &$carousel_item ) {
                     if ( isset( $carousel_item['image'] ) ) {
-                        figmapress_connector_localize_image_setting( $carousel_item['image'], $post_id, $warnings, $imported_media, $deadline, $localized_images );
+                        figmapress_connector_apply_image_map_setting( $carousel_item['image'], $localized_images );
                     }
                 }
                 unset( $carousel_item );
             }
             foreach ( array( 'previous_icon', 'next_icon' ) as $icon_key ) {
                 if ( isset( $element['settings'][ $icon_key ] ) ) {
-                    figmapress_connector_localize_image_setting( $element['settings'][ $icon_key ], $post_id, $warnings, $imported_media, $deadline, $localized_images );
+                    figmapress_connector_apply_image_map_setting( $element['settings'][ $icon_key ], $localized_images );
+                }
+            }
+        }
+        if ( 'container' === ( isset( $element['elType'] ) ? $element['elType'] : '' ) && isset( $element['settings']['background_image'] ) ) {
+            figmapress_connector_apply_image_map_setting( $element['settings']['background_image'], $localized_images );
+        }
+        if ( ! empty( $element['elements'] ) ) {
+            figmapress_connector_apply_elementor_image_map( $element['elements'], $localized_images );
+        }
+    }
+    unset( $element );
+}
+
+function figmapress_connector_elementor_media_progress( $elements, $post_id ) {
+    $pending_urls = array();
+    figmapress_connector_collect_elementor_image_urls( $elements, $pending_urls, true );
+    $failures = figmapress_connector_load_media_failures( $post_id );
+    $failed   = 0;
+    foreach ( $pending_urls as $url_hash => $url ) {
+        if ( isset( $failures[ $url_hash ] ) && absint( $failures[ $url_hash ] ) >= 3 ) {
+            ++$failed;
+        }
+    }
+    $pending_total = count( $pending_urls );
+    $remaining     = max( 0, $pending_total - $failed );
+    $total         = absint( get_post_meta( $post_id, '_figmapress_media_total', true ) );
+    if ( $total < $pending_total ) {
+        $total = $pending_total;
+    }
+    return array(
+        'savedMedia'     => max( 0, $total - $pending_total ),
+        'totalMedia'     => $total,
+        'remainingMedia' => $remaining,
+        'failedMedia'    => $failed,
+        'mediaComplete'  => 0 === $remaining && 0 === $failed,
+    );
+}
+
+function figmapress_connector_localize_elementor_images( &$elements, $post_id, &$warnings, &$imported_media, $deadline, &$localized_images, &$media_failures ) {
+    foreach ( $elements as &$element ) {
+        if ( microtime( true ) >= $deadline ) {
+            figmapress_connector_add_media_budget_warning( $warnings );
+            return;
+        }
+        if ( 'widget' === $element['elType'] && 'image' === ( isset( $element['widgetType'] ) ? $element['widgetType'] : '' ) && isset( $element['settings']['image'] ) ) {
+            figmapress_connector_localize_image_setting( $element['settings']['image'], $post_id, $warnings, $imported_media, $deadline, $localized_images, $media_failures );
+        }
+        if ( 'widget' === $element['elType'] && 'figmapress-nav' === ( isset( $element['widgetType'] ) ? $element['widgetType'] : '' ) && isset( $element['settings']['logo'] ) ) {
+            figmapress_connector_localize_image_setting( $element['settings']['logo'], $post_id, $warnings, $imported_media, $deadline, $localized_images, $media_failures );
+        }
+        if ( 'widget' === $element['elType'] && 'figmapress-carousel' === ( isset( $element['widgetType'] ) ? $element['widgetType'] : '' ) ) {
+            if ( isset( $element['settings']['items'] ) && is_array( $element['settings']['items'] ) ) {
+                foreach ( $element['settings']['items'] as &$carousel_item ) {
+                    if ( isset( $carousel_item['image'] ) ) {
+                        figmapress_connector_localize_image_setting( $carousel_item['image'], $post_id, $warnings, $imported_media, $deadline, $localized_images, $media_failures );
+                    }
+                }
+                unset( $carousel_item );
+            }
+            foreach ( array( 'previous_icon', 'next_icon' ) as $icon_key ) {
+                if ( isset( $element['settings'][ $icon_key ] ) ) {
+                    figmapress_connector_localize_image_setting( $element['settings'][ $icon_key ], $post_id, $warnings, $imported_media, $deadline, $localized_images, $media_failures );
                 }
             }
         }
         if ( 'container' === $element['elType'] && isset( $element['settings']['background_image'] ) ) {
-            figmapress_connector_localize_image_setting( $element['settings']['background_image'], $post_id, $warnings, $imported_media, $deadline, $localized_images );
+            figmapress_connector_localize_image_setting( $element['settings']['background_image'], $post_id, $warnings, $imported_media, $deadline, $localized_images, $media_failures );
         }
         if ( ! empty( $element['elements'] ) ) {
-            figmapress_connector_localize_elementor_images( $element['elements'], $post_id, $warnings, $imported_media, $deadline, $localized_images );
+            figmapress_connector_localize_elementor_images( $element['elements'], $post_id, $warnings, $imported_media, $deadline, $localized_images, $media_failures );
         }
     }
 }
@@ -1035,19 +1418,36 @@ function figmapress_connector_add_media_budget_warning( &$warnings ) {
     }
 }
 
-function figmapress_connector_localize_image_setting( &$image, $post_id, &$warnings, &$imported_media, $deadline, &$localized_images ) {
+function figmapress_connector_localize_image_setting( &$image, $post_id, &$warnings, &$imported_media, $deadline, &$localized_images, &$media_failures ) {
     if ( ! is_array( $image ) ) {
+        return;
+    }
+    if ( 'library' === ( isset( $image['source'] ) ? $image['source'] : '' ) && ! empty( $image['id'] ) ) {
         return;
     }
     $url = isset( $image['url'] ) ? $image['url'] : '';
     if ( ! $url ) {
         return;
     }
+    $stable_key = figmapress_connector_image_setting_key( $image );
     if ( isset( $localized_images[ $url ] ) ) {
-        $image = array_merge( $image, $localized_images[ $url ] );
+        if ( '' !== $stable_key ) {
+            $stable_entry              = $localized_images[ $url ];
+            $stable_entry['stableKey'] = $stable_key;
+            $localized_images[ 'key:' . $stable_key ] = $stable_entry;
+        }
+        figmapress_connector_apply_image_map_setting( $image, $localized_images );
         return;
     }
-    if ( $imported_media >= 60 ) {
+    if ( '' !== $stable_key && isset( $localized_images[ 'key:' . $stable_key ] ) ) {
+        figmapress_connector_apply_image_map_setting( $image, $localized_images );
+        return;
+    }
+    $url_hash = hash( 'sha256', $url );
+    if ( isset( $media_failures[ $url_hash ] ) && absint( $media_failures[ $url_hash ] ) >= 3 ) {
+        return;
+    }
+    if ( $imported_media >= 10 ) {
         return;
     }
     $remaining = (int) floor( $deadline - microtime( true ) );
@@ -1062,17 +1462,25 @@ function figmapress_connector_localize_image_setting( &$image, $post_id, &$warni
         min( 6, $remaining )
     );
     if ( is_wp_error( $attachment ) ) {
+        $media_failures[ $url_hash ] = min( 3, ( isset( $media_failures[ $url_hash ] ) ? absint( $media_failures[ $url_hash ] ) : 0 ) + 1 );
         $warnings[] = '画像をメディアライブラリへ保存できませんでした: ' . $attachment->get_error_message();
         return;
     }
     $image['id']     = $attachment['id'];
     $image['url']    = $attachment['url'];
     $image['source'] = 'library';
-    $localized_images[ $url ] = array(
+    $localized_entry = array(
         'id'     => $image['id'],
         'url'    => $image['url'],
         'source' => $image['source'],
+        'sourceUrl' => $url,
+        'stableKey' => $stable_key,
     );
+    $localized_images[ $url ] = $localized_entry;
+    if ( '' !== $stable_key ) {
+        $localized_images[ 'key:' . $stable_key ] = $localized_entry;
+    }
+    unset( $media_failures[ $url_hash ] );
     ++$imported_media;
 }
 

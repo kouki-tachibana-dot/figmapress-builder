@@ -308,7 +308,13 @@ function image(
   alt: string,
 ): ElementorElement {
   return widget(ids, seed, "image", {
-    image: { url, id: "", alt, source: "library" },
+    image: {
+      url,
+      id: "",
+      alt,
+      source: "library",
+      figmapress_key: mediaKey(`${seed}:image`, url),
+    },
     image_size: "large",
     border_radius: dimensions(22, 22, 22, 22),
   });
@@ -341,6 +347,17 @@ function hashId(value: string): string {
     hash = Math.imul(hash, 16777619);
   }
   return (hash >>> 0).toString(16).padStart(8, "0").slice(0, 8);
+}
+
+function mediaKey(seed: string, value: string): string {
+  let assetIdentity = value.split("?", 1)[0] ?? value;
+  try {
+    const url = new URL(value);
+    assetIdentity = `${url.hostname.toLowerCase()}${url.pathname}`;
+  } catch {
+    // The URL is validated before WordPress import; hashing remains bounded.
+  }
+  return `${seed}:${hashId(assetIdentity)}`;
 }
 
 function escapeHtml(value: string): string {
