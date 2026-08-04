@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   analyzeVisualRegions,
@@ -29,6 +30,18 @@ import {
   normalizeElementorTextGeometryCorrections,
   type ElementorTemplate,
 } from "@figmapress/elementor-renderer";
+
+const browserVisualQaPath = new URL(
+  "../apps/web/src/lib/visual-qa-browser.ts",
+  import.meta.url,
+);
+
+test("browser Visual QA waits for the srcdoc DOM separately from slow media", async () => {
+  const source = await readFile(browserVisualQaPath, "utf8");
+  assert.match(source, /document\?\.URL === "about:srcdoc"/);
+  assert.match(source, /document\.readyState !== "loading"/);
+  assert.match(source, /waitForImage\(image, 8_000\)/);
+});
 
 function solidPixels(
   width: number,

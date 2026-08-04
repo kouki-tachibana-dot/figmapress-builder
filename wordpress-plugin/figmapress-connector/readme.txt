@@ -3,7 +3,7 @@ Contributors: figmapress
 Tags: blocks, figma, gutenberg, elementor
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 0.16.0
+Stable tag: 0.16.1
 License: GPLv2 or later
 
 Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
@@ -15,6 +15,11 @@ Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
    create a draft page containing figmapress/* blocks.
 
 == Changelog ==
+= 0.16.1 =
+* 共有サーバーで取得に時間がかかるFigma画像向けに、段階保存の通信枠を安全な範囲で拡張しました。
+* 大きい画像や配信の遅い画像が短いタイムアウトで失敗扱いになる問題を改善しました。
+* スマホメニューの展開パネルを不透明化し、背後のヒーロー文字との重なりを防止しました。
+
 = 0.16.0 =
 * 画像を時間制限付きバッチで段階保存し、通信中断後も同じ下書きから再開可能にしました。
 * Visual QAの補正保存時に、メディアライブラリへ保存済みの画像がFigma URLへ戻る問題を修正しました。

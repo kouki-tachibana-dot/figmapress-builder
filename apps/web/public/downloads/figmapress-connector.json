@@ -1,11 +1,11 @@
 {
   "name": "FigmaPress Connector",
   "slug": "figmapress-connector",
-  "version": "0.16.0",
+  "version": "0.16.1",
   "requires": "6.4",
   "requires_php": "7.4",
   "tested": "7.0",
   "homepage": "https://figmapress-builder.vercel.app",
   "download_url": "https://figmapress-builder.vercel.app/downloads/figmapress-connector.zip",
-  "changelog": "<h4>0.16.0</h4><ul><li>画像を段階保存し、通信中断後も同じ下書きから再開可能にしました。</li><li>Visual QA補正時の画像URL巻き戻りを防止しました。</li><li>同じFigmaファイル・ノードは既存下書きを更新し、画像の進捗を表示します。</li></ul><h4>0.15.4</h4><ul><li>PC・タブレットのお問い合わせフォームをFigmaの1920px基準から比例縮小し、フッター上部への重なりを解消。</li></ul>"
+  "changelog": "<h4>0.16.1</h4><ul><li>共有サーバーで取得に時間がかかるFigma画像向けに、段階保存の通信枠を拡張しました。</li><li>大きい画像や配信の遅い画像が短いタイムアウトで失敗扱いになる問題を改善しました。</li><li>スマホメニューの展開パネルを不透明化し、背後の文字との重なりを防止しました。</li></ul><h4>0.16.0</h4><ul><li>画像を段階保存し、通信中断後も同じ下書きから再開可能にしました。</li><li>Visual QA補正時の画像URL巻き戻りを防止しました。</li><li>同じFigmaファイル・ノードは既存下書きを更新し、画像の進捗を表示します。</li></ul>"
 }

@@ -489,7 +489,10 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
     }
 
     $imported_media = 0;
-    $media_deadline = microtime( true ) + 12;
+    // Figma render URLs can take several seconds to start transferring on
+    // shared hosting. Keep the request bounded, but leave enough headroom for
+    // one slow image instead of recording a false failure at 3-6 seconds.
+    $media_deadline = microtime( true ) + 24;
     $media_failures = array();
     figmapress_connector_localize_elementor_images( $content, $post_id, $warnings, $imported_media, $media_deadline, $localized_images, $media_failures );
     figmapress_connector_save_media_map( $post_id, $localized_images );
@@ -563,7 +566,7 @@ function figmapress_connector_rest_localize_elementor_media( WP_REST_Request $re
 
     $warnings         = array();
     $imported_media   = 0;
-    $media_deadline   = microtime( true ) + 12;
+    $media_deadline   = microtime( true ) + 24;
     $localized_images = figmapress_connector_load_media_map( $post_id );
     $media_failures   = figmapress_connector_load_media_failures( $post_id );
     $params           = $request->get_json_params();
@@ -1459,7 +1462,7 @@ function figmapress_connector_localize_image_setting( &$image, $post_id, &$warni
         $url,
         $post_id,
         isset( $image['alt'] ) ? $image['alt'] : '',
-        min( 6, $remaining )
+        min( 15, $remaining )
     );
     if ( is_wp_error( $attachment ) ) {
         $media_failures[ $url_hash ] = min( 3, ( isset( $media_failures[ $url_hash ] ) ? absint( $media_failures[ $url_hash ] ) : 0 ) + 1 );

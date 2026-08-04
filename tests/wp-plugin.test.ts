@@ -52,8 +52,12 @@ test("Connector stores Elementor content before attempting remote image imports"
 
 test("Connector bounds synchronous media localization", async () => {
   const source = await readFile(restApiPath, "utf8");
-  assert.match(source, /\$media_deadline\s*=\s*microtime\( true \) \+ 12;/);
-  assert.match(source, /min\( 6, \$remaining \)/);
+  assert.equal(
+    source.match(/\$media_deadline\s*=\s*microtime\( true \) \+ 24;/g)?.length,
+    2,
+    "both the initial import and resumable batch must use the bounded slow-host budget",
+  );
+  assert.match(source, /min\( 15, \$remaining \)/);
   assert.match(source, /download_url\( \$url, max\( 1, \(int\) \$download_timeout \) \)/);
   assert.match(source, /isset\( \$localized_images\[ \$url \] \)/);
   assert.match(source, /\$localized_images\[ \$url \]\s*=\s*\$localized_entry/);
@@ -231,6 +235,7 @@ test("mobile navigation keeps its CTA and device-specific anchor targets", async
   assert.match(widget, /figmapress-nav--mobile/);
   assert.match(widget, /figmapress-nav__mobile-cta/);
   assert.match(style, /\.figmapress-nav--mobile/);
+  assert.match(style, /linear-gradient\(rgba\(255, 255, 255, \.97\)/);
   assert.match(style, /\.elementor-widget-figmapress-nav[^}]*height:\s*auto/s);
   assert.match(style, /\.figmapress-nav[^}]*height:\s*auto/s);
   assert.match(style, /min-height:\s*min\(680px,\s*178\.409vw\)/);
