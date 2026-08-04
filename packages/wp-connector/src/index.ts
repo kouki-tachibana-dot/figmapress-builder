@@ -31,6 +31,13 @@ export interface CreateDraftResult {
   rawLink?: string;
   target?: "gutenberg" | "elementor";
   importedMedia?: number;
+  savedMedia?: number;
+  totalMedia?: number;
+  remainingMedia?: number;
+  failedMedia?: number;
+  mediaComplete?: boolean;
+  idempotent?: boolean;
+  updated?: boolean;
   warnings?: string[];
 }
 
@@ -48,6 +55,20 @@ export interface CreateElementorDraftInput {
   template: ElementorTemplateInput;
   pageTemplate?: "elementor_canvas" | "elementor_header_footer" | "default";
   requestId: string;
+  sourceKey?: string;
+}
+
+export interface ElementorMediaProgress {
+  postId: number;
+  status: "draft";
+  importedMedia: number;
+  savedMedia: number;
+  totalMedia: number;
+  remainingMedia: number;
+  failedMedia: number;
+  mediaComplete: boolean;
+  storedElements: number;
+  warnings?: string[];
 }
 
 export interface ElementorSnapshot {
@@ -96,6 +117,7 @@ export interface WordPressConnectionStatus {
     gradients?: boolean;
     effects?: boolean;
     imageTransforms?: boolean;
+    mediaPersistence?: boolean;
   };
   canEditPages: boolean;
   pairing?: {
@@ -240,6 +262,7 @@ export async function probeWordPressConnection(
       gradients?: unknown;
       effects?: unknown;
       imageTransforms?: unknown;
+      mediaPersistence?: unknown;
     };
   };
   return {
@@ -276,6 +299,9 @@ export async function probeWordPressConnection(
       gradients: status.visualQa.gradients === true,
       effects: status.visualQa.effects === true,
       imageTransforms: status.visualQa.imageTransforms === true,
+      ...(status.visualQa.mediaPersistence !== undefined
+        ? { mediaPersistence: status.visualQa.mediaPersistence === true }
+        : {}),
     } : undefined,
     canEditPages: status.canEditPages === true,
     pairing: status.pairing ? {
@@ -357,6 +383,7 @@ export async function createElementorDraftPage(
       slug,
       status: "draft",
       requestId: input.requestId,
+      sourceKey: input.sourceKey,
       pageTemplate: input.pageTemplate ?? "elementor_canvas",
       template: input.template,
     }),
@@ -378,6 +405,31 @@ export async function createElementorDraftPage(
     );
   }
   return { ...data, target: "elementor" };
+}
+
+export async function localizeElementorDraftMedia(
+  cfg: WpConfig,
+  postId: number,
+  requestId: string,
+  retryFailed = false,
+): Promise<ElementorMediaProgress> {
+  const res = await wpFetch(
+    cfg,
+    `/figmapress/v1/elementor/pages/${postId}/media`,
+    {
+      method: "POST",
+      body: JSON.stringify({ requestId, retryFailed }),
+    },
+  );
+  const text = await res.text();
+  if (!res.ok) {
+    throw new WpRequestError(
+      `Failed to localize Elementor media (HTTP ${res.status})`,
+      res.status,
+      text,
+    );
+  }
+  return JSON.parse(text) as ElementorMediaProgress;
 }
 
 export async function fetchElementorSnapshot(

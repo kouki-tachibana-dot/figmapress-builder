@@ -4,6 +4,7 @@ import {
   WordPressDirectError,
   createWordPressDraftDirect,
   fetchWordPressElementorSnapshotDirect,
+  localizeWordPressElementorMediaDirect,
   probeWordPressDirect,
   updateWordPressElementorDocumentDirect,
 } from "../apps/web/src/lib/wordpress-browser.ts";
@@ -260,6 +261,7 @@ test("browser Elementor creation sends one draft request without a status prefli
   const result = await createWordPressDraftDirect(config, {
     target: "elementor",
     requestId: "22222222-2222-4222-8222-222222222222",
+    sourceKey: "figma:Abcdef123:46:12",
     title: "ホーム",
     slug: "/",
     pageTemplate: "elementor_canvas",
@@ -278,6 +280,39 @@ test("browser Elementor creation sends one draft request without a status prefli
   assert.match(requests[0]?.url ?? "", /figmapress\/v1\/elementor\/pages$/);
   assert.match(requests[0]?.body ?? "", /"status":"draft"/);
   assert.match(requests[0]?.body ?? "", /"requestId":"22222222-2222-4222-8222-222222222222"/);
+  assert.match(requests[0]?.body ?? "", /"sourceKey":"figma:Abcdef123:46:12"/);
+});
+
+test("browser resumes Elementor media without recreating the draft", async (context) => {
+  const requests: Array<{ url: string; method?: string; body?: string }> = [];
+  context.mock.method(globalThis, "fetch", async (input, init) => {
+    requests.push({
+      url: String(input),
+      method: init?.method,
+      body: typeof init?.body === "string" ? init.body : undefined,
+    });
+    return Response.json({
+      postId: 42,
+      status: "draft",
+      importedMedia: 6,
+      savedMedia: 14,
+      totalMedia: 20,
+      remainingMedia: 6,
+      failedMedia: 0,
+      mediaComplete: false,
+      storedElements: 30,
+    });
+  });
+  const requestId = "88888888-8888-4888-8888-888888888888";
+  const progress = await localizeWordPressElementorMediaDirect(
+    config,
+    42,
+    requestId,
+  );
+  assert.equal(progress.savedMedia, 14);
+  assert.equal(requests.length, 1);
+  assert.match(requests[0]?.url ?? "", /pages\/42\/media$/);
+  assert.equal(requests[0]?.method, "POST");
 });
 
 test("browser retrieves and updates only the matching Elementor draft", async (context) => {

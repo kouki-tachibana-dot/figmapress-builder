@@ -56,7 +56,7 @@ test("Connector bounds synchronous media localization", async () => {
   assert.match(source, /min\( 6, \$remaining \)/);
   assert.match(source, /download_url\( \$url, max\( 1, \(int\) \$download_timeout \) \)/);
   assert.match(source, /isset\( \$localized_images\[ \$url \] \)/);
-  assert.match(source, /\$localized_images\[ \$url \]\s*=\s*array\(/);
+  assert.match(source, /\$localized_images\[ \$url \]\s*=\s*\$localized_entry/);
   assert.match(source, /'figmapress-carousel'/);
   assert.match(source, /'previous_icon', 'next_icon'/);
 });
@@ -151,12 +151,12 @@ test("Connector reuses an existing Elementor draft for the same request identifi
     "function figmapress_connector_rest_create_elementor_page",
   );
   const lookup = source.indexOf(
-    "'meta_key'               => '_figmapress_request_id'",
+    "figmapress_connector_find_page_by_meta( '_figmapress_request_id'",
     elementorHandler,
   );
   const insert = source.indexOf("$post_id = wp_insert_post(", elementorHandler);
   const record = source.indexOf(
-    "add_post_meta( $post_id, '_figmapress_request_id'",
+    "update_post_meta( $post_id, '_figmapress_request_id'",
     elementorHandler,
   );
 
@@ -168,6 +168,39 @@ test("Connector reuses an existing Elementor draft for the same request identifi
   assert.match(source, /10 \* MINUTE_IN_SECONDS/);
   assert.match(source, /'idempotent'\s*=>\s*true/);
   assert.match(source, /重複ページは作成していません/);
+});
+
+test("Connector resumes media localization and preserves it across visual updates", async () => {
+  const source = await readFile(restApiPath, "utf8");
+  assert.match(source, /elementor\/pages\/\(\?P<id>\\d\+\)\/media/);
+  assert.match(source, /figmapress_connector_rest_localize_elementor_media/);
+  assert.match(source, /'_figmapress_media_map'/);
+  assert.match(source, /'_figmapress_media_failures'/);
+  assert.match(source, /'remainingMedia'/);
+  assert.match(source, /'mediaComplete'/);
+  assert.match(source, /\$imported_media >= 10/);
+  assert.match(source, /figmapress_connector_apply_elementor_image_map\( \$content, \$localized_images \)/);
+  const updateHandler = source.indexOf(
+    "function figmapress_connector_rest_update_elementor_document",
+  );
+  const applyMap = source.indexOf(
+    "figmapress_connector_apply_elementor_image_map( $content, $localized_images )",
+    updateHandler,
+  );
+  const updateStore = source.indexOf(
+    "figmapress_connector_store_elementor_document( $post_id, $content",
+    updateHandler,
+  );
+  assert.ok(applyMap > updateHandler && applyMap < updateStore);
+});
+
+test("Connector updates one draft for a stable Figma source", async () => {
+  const source = await readFile(restApiPath, "utf8");
+  assert.match(source, /\^figma:/);
+  assert.match(source, /'_figmapress_source_key'/);
+  assert.match(source, /figmapress_connector_find_page_by_meta\( '_figmapress_source_key'/);
+  assert.match(source, /wp_update_post\(/);
+  assert.match(source, /'updated'\s*=>\s*\$reuse_existing/);
 });
 
 test("functional widgets include keyboard, reduced-motion, and timeout safeguards", async () => {

@@ -23,9 +23,11 @@ import {
   WordPressDirectError,
   createWordPressDraftDirect,
   fetchWordPressElementorSnapshotDirect,
+  localizeWordPressElementorMediaDirect,
   probeWordPressDirect,
   updateWordPressElementorDocumentDirect,
   type BrowserElementorSnapshot,
+  type BrowserElementorMediaProgress,
   type BrowserWordPressConfig,
 } from "@/lib/wordpress-browser";
 import { readWordPressCredentials } from "@/lib/wordpress-form";
@@ -59,7 +61,7 @@ const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
-const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.14.0";
+const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
 
 function versionAtLeast(version: string | undefined, minimum: string): boolean {
@@ -152,6 +154,34 @@ function createRequestId(): string {
   return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
 }
 
+function figmaSourceKey(input: string): string | undefined {
+  const value = input.trim();
+  let fileKey = "";
+  let nodeId = "root";
+  if (/^[A-Za-z0-9_-]{6,160}$/.test(value)) {
+    fileKey = value;
+  } else {
+    try {
+      const url = new URL(value);
+      if (!/(^|\.)figma\.com$/i.test(url.hostname)) return undefined;
+      const parts = url.pathname.split("/").filter(Boolean);
+      const typeIndex = parts.findIndex((part) =>
+        ["design", "file", "proto", "board"].includes(part),
+      );
+      const candidate = typeIndex >= 0 ? parts[typeIndex + 1] ?? "" : "";
+      if (!/^[A-Za-z0-9_-]{6,160}$/.test(candidate)) return undefined;
+      fileKey = candidate;
+      const rawNodeId = url.searchParams.get("node-id")?.trim() ?? "";
+      if (/^[0-9]+(?::|-)[0-9]+$/.test(rawNodeId)) {
+        nodeId = rawNodeId.replace("-", ":");
+      }
+    } catch {
+      return undefined;
+    }
+  }
+  return `figma:${fileKey}:${nodeId}`;
+}
+
 interface ConversionResult {
   blueprint: {
     pages: Array<{ title: string; slug: string }>;
@@ -237,6 +267,13 @@ interface WordPressResult {
   previewLink?: string;
   target?: OutputTarget;
   importedMedia?: number;
+  savedMedia?: number;
+  totalMedia?: number;
+  remainingMedia?: number;
+  failedMedia?: number;
+  mediaComplete?: boolean;
+  idempotent?: boolean;
+  updated?: boolean;
   warnings?: string[];
 }
 
@@ -262,6 +299,7 @@ interface WordPressStatus {
     gradients?: boolean;
     effects?: boolean;
     imageTransforms?: boolean;
+    mediaPersistence?: boolean;
   };
   canEditPages: boolean;
   pairing?: {
@@ -588,6 +626,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const [wpTransport, setWpTransport] = useState<"direct" | "proxy" | null>(null);
   const [wpTarget, setWpTarget] = useState<OutputTarget>("elementor");
   const [wpVisualQaBusy, setWpVisualQaBusy] = useState(false);
+  const [wpMediaBusy, setWpMediaBusy] = useState(false);
   const [wpVisualQaError, setWpVisualQaError] = useState("");
   const [wpVisualQaResults, setWpVisualQaResults] = useState<
     VisualQaBrowserResult[]
@@ -622,6 +661,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     Partial<Record<"desktop" | "mobile", number>>
   >({});
   const [draftRequestId, setDraftRequestId] = useState("");
+  const [conversionSourceKey, setConversionSourceKey] = useState<string | undefined>();
   const [baseUrl, setBaseUrl] = useState("");
   const [username, setUsername] = useState("");
   const [applicationPassword, setApplicationPassword] = useState("");
@@ -716,6 +756,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       && wpStatus.visualQa.gradients === true
       && wpStatus.visualQa.effects === true
       && wpStatus.visualQa.imageTransforms === true
+      && wpStatus.visualQa.mediaPersistence === true
     : versionAtLeast(
         wpStatus?.connectorVersion,
         ACTUAL_VISUAL_QA_CONNECTOR_VERSION,
@@ -820,8 +861,10 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     setConverting(true);
     setError("");
     setOutput(null);
+    setConversionSourceKey(undefined);
     setWpResult(null);
     setWpVisualQaBusy(false);
+    setWpMediaBusy(false);
     setWpVisualQaError("");
     setWpVisualQaResults([]);
     setWpVisualCorrections({
@@ -844,6 +887,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
 
     try {
       let body: Record<string, unknown>;
+      let nextSourceKey: string | undefined;
       if (mode === "figma") {
         const authentication = resolveFigmaRequestAuthentication(
           figmaToken,
@@ -854,6 +898,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
           fileKeyOrUrl,
           ...authentication.credentials,
         };
+        nextSourceKey = figmaSourceKey(fileKeyOrUrl);
       } else {
         let data: unknown;
         try {
@@ -871,6 +916,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       });
       const data = await readApi<{ ok: true } & ConversionResult>(response);
       setOutput(data);
+      setConversionSourceKey(nextSourceKey);
       setDraftRequestId(createRequestId());
       requestAnimationFrame(() => {
         document.getElementById("result")?.scrollIntoView({ behavior: "smooth" });
@@ -920,6 +966,92 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     return (
       await readApi<{ ok: true; result: BrowserElementorSnapshot }>(response)
     ).result;
+  }
+
+  async function fetchWordPressMediaBatch(
+    credentials: BrowserWordPressConfig,
+    postId: number,
+    requestId: string,
+    retryFailed = false,
+  ): Promise<BrowserElementorMediaProgress> {
+    if (wpTransport === "direct") {
+      return localizeWordPressElementorMediaDirect(
+        credentials,
+        postId,
+        requestId,
+        retryFailed,
+      );
+    }
+    const response = await fetch("/api/wordpress/elementor", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "localize-media",
+        ...credentials,
+        postId,
+        requestId,
+        retryFailed,
+      }),
+    });
+    return (
+      await readApi<{ ok: true; result: BrowserElementorMediaProgress }>(response)
+    ).result;
+  }
+
+  async function persistWordPressMedia(
+    credentials: BrowserWordPressConfig,
+    initialResult: WordPressResult,
+    requestId: string,
+    retryFailed = false,
+  ): Promise<WordPressResult> {
+    if (typeof initialResult.remainingMedia !== "number") return initialResult;
+    let current = initialResult;
+    setWpMediaBusy(true);
+    try {
+      for (
+        let round = 0;
+        ((current.remainingMedia ?? 0) > 0 || (round === 0 && retryFailed && (current.failedMedia ?? 0) > 0))
+          && round < 40;
+        round += 1
+      ) {
+        const progress = await fetchWordPressMediaBatch(
+          credentials,
+          current.id,
+          requestId,
+          retryFailed && round === 0,
+        );
+        const warnings = Array.from(new Set([
+          ...(current.warnings ?? []),
+          ...(progress.warnings ?? []),
+        ])).filter((warning) =>
+          !progress.mediaComplete
+          || (
+            !warning.includes("画像の保存は時間上限に達した")
+            && !warning.includes("画像をメディアライブラリへ保存できませんでした")
+            && !warning.includes("3回試行しても保存できない画像")
+          ),
+        );
+        current = {
+          ...current,
+          importedMedia: progress.savedMedia,
+          savedMedia: progress.savedMedia,
+          totalMedia: progress.totalMedia,
+          remainingMedia: progress.remainingMedia,
+          failedMedia: progress.failedMedia,
+          mediaComplete: progress.mediaComplete,
+          warnings,
+        };
+        setWpResult(current);
+      }
+      if ((current.remainingMedia ?? 0) > 0) {
+        throw new Error(
+          "画像保存は途中まで完了しました。通信状態を確認して「画像保存を再開」を押してください。",
+        );
+      }
+      return current;
+    } finally {
+      setWpMediaBusy(false);
+    }
   }
 
   async function updateWordPressDocument(
@@ -1274,6 +1406,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
             template: output.elementorTemplate,
             pageTemplate: "elementor_canvas",
             requestId,
+            sourceKey: conversionSourceKey,
           }
         : {
             target: wpTarget,
@@ -1294,6 +1427,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                 template: output.elementorTemplate,
                 pageTemplate: "elementor_canvas",
                 requestId,
+                sourceKey: conversionSourceKey,
               }
             : {
                 target: "gutenberg",
@@ -1314,23 +1448,76 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         setWpResult(data.result);
         createdResult = data.result;
       }
+      if (wpTarget === "elementor") {
+        createdResult = await persistWordPressMedia(
+          credentials,
+          createdResult,
+          requestId,
+        );
+        setWpResult(createdResult);
+      }
       if (
         wpTarget === "elementor"
         && connectorSupportsActualVisualQa
         && visualReferencesFor(output).length > 0
       ) {
-        await verifyWordPressElementorDraft(
-          credentials,
-          createdResult,
-          requestId,
-          output,
-        );
+        if ((createdResult.failedMedia ?? 0) > 0) {
+          setWpVisualQaError(
+            "保存できない画像が残っているため、誤判定を避けて実ページ比較を保留しました。「失敗画像を再試行」後に自動で再開します。",
+          );
+        } else {
+          await verifyWordPressElementorDraft(
+            credentials,
+            createdResult,
+            requestId,
+            output,
+          );
+        }
       }
       setApplicationPassword("");
     } catch (caught) {
       setWpError(caught instanceof Error ? caught.message : "下書きを作成できませんでした。");
     } finally {
       setWpBusy(false);
+    }
+  }
+
+  async function resumeWordPressMedia(event: MouseEvent<HTMLButtonElement>) {
+    if (!output || !wpResult || !draftRequestId) return;
+    const credentials = readWordPressCredentials(
+      event.currentTarget.form ? new FormData(event.currentTarget.form) : null,
+      { baseUrl, username, applicationPassword, connectorToken },
+    );
+    setWpError("");
+    setWpVisualQaError("");
+    try {
+      const completed = await persistWordPressMedia(
+        credentials,
+        wpResult,
+        draftRequestId,
+        true,
+      );
+      setWpResult(completed);
+      if (
+        connectorSupportsActualVisualQa
+        && visualReferencesFor(output).length > 0
+        && (completed.failedMedia ?? 0) === 0
+      ) {
+        await verifyWordPressElementorDraft(
+          credentials,
+          completed,
+          draftRequestId,
+          output,
+        );
+      } else if ((completed.failedMedia ?? 0) > 0) {
+        setWpVisualQaError(
+          "保存できない画像が残っているため、誤判定を避けて実ページ比較を保留しました。時間を置いて再試行してください。",
+        );
+      }
+    } catch (caught) {
+      setWpError(
+        caught instanceof Error ? caught.message : "画像保存を再開できませんでした。",
+      );
     }
   }
 
@@ -2587,9 +2774,22 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
               {wpError && <div className="alert alert--error" role="alert">{wpError}</div>}
               {wpResult && (
                 <div className="alert alert--success" role="status">
-                  下書き #{wpResult.id} を作成しました。
+                  下書き #{wpResult.id} を{wpResult.updated ? "更新" : "作成"}しました。
                   {wpResult.editLink && <a href={wpResult.editLink} rel="noreferrer" target="_blank"> WordPressで編集 ↗</a>}
-                  {typeof wpResult.importedMedia === "number" && <span>（画像 {wpResult.importedMedia}件を保存）</span>}
+                  {typeof wpResult.totalMedia === "number" ? (
+                    <span>
+                      （画像 {wpResult.savedMedia ?? 0}/{wpResult.totalMedia}件を保存
+                      {(wpResult.failedMedia ?? 0) > 0 ? `・${wpResult.failedMedia}件失敗` : ""}）
+                    </span>
+                  ) : typeof wpResult.importedMedia === "number" ? (
+                    <span>（画像 {wpResult.importedMedia}件を保存）</span>
+                  ) : null}
+                  {wpMediaBusy && <span> 画像をメディアライブラリへ段階保存中…</span>}
+                  {!wpMediaBusy && ((wpResult.remainingMedia ?? 0) > 0 || (wpResult.failedMedia ?? 0) > 0) && (
+                    <button onClick={resumeWordPressMedia} type="button">
+                      {(wpResult.failedMedia ?? 0) > 0 ? "失敗画像を再試行" : "画像保存を再開"}
+                    </button>
+                  )}
                   {wpResult.warnings?.map((warning) => <span key={warning}> {warning}</span>)}
                 </div>
               )}
@@ -2640,7 +2840,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                   type="submit"
                 >
                   {wpBusy
-                    ? wpVisualQaBusy
+                    ? wpMediaBusy
+                      ? "画像保存中…"
+                      : wpVisualQaBusy
                       ? "実ページ検証中…"
                       : "作成中…"
                     : `${wpTarget === "elementor" ? "Elementor" : "Gutenberg"}下書きを作成 →`}

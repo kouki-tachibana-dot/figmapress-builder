@@ -3,6 +3,7 @@ import {
   WpAuthError,
   WpRequestError,
   fetchElementorSnapshot,
+  localizeElementorDraftMedia,
   updateElementorDraftPage,
 } from "@figmapress/wp-connector";
 import {
@@ -43,6 +44,10 @@ const RequestSchema = z.discriminatedUnion("action", [
     action: z.literal("snapshot"),
   }).strict(),
   CredentialsSchema.extend({
+    action: z.literal("localize-media"),
+    retryFailed: z.boolean().optional(),
+  }).strict(),
+  CredentialsSchema.extend({
     action: z.literal("update"),
     template: ElementorTemplateSchema,
     pageTemplate: z.enum([
@@ -66,7 +71,7 @@ function wordpressMessage(body: string): string {
 export async function POST(request: Request): Promise<Response> {
   try {
     enforceSameOrigin(request);
-    enforceRateLimit("wordpress-elementor", clientIp(request), 12, 10 * 60 * 1_000);
+    enforceRateLimit("wordpress-elementor", clientIp(request), 60, 10 * 60 * 1_000);
     const parsed = RequestSchema.safeParse(await readJsonBody(request, 4_000_000));
     if (!parsed.success) {
       throw new RequestError("Elementor実ページ検証の入力を確認してください。", 422);
@@ -92,12 +97,19 @@ export async function POST(request: Request): Promise<Response> {
             parsed.data.postId,
             parsed.data.requestId,
           )
-        : await updateElementorDraftPage(config, {
+        : parsed.data.action === "localize-media"
+          ? await localizeElementorDraftMedia(
+              config,
+              parsed.data.postId,
+              parsed.data.requestId,
+              parsed.data.retryFailed,
+            )
+          : await updateElementorDraftPage(config, {
             postId: parsed.data.postId,
             requestId: parsed.data.requestId,
             template: parsed.data.template,
             pageTemplate: parsed.data.pageTemplate,
-          });
+            });
       return jsonResponse({ ok: true, result });
     } catch (error) {
       if (error instanceof WpAuthError) {

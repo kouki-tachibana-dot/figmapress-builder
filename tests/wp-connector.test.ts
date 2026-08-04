@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   createElementorDraftPage,
   fetchElementorSnapshot,
+  localizeElementorDraftMedia,
   probeWordPressConnection,
   updateElementorDraftPage,
   WpRequestError,
@@ -166,6 +167,7 @@ test("Elementor draft creation uses one Connector request and remains draft", as
 
   const result = await createElementorDraftPage(config, {
     requestId: "33333333-3333-4333-8333-333333333333",
+    sourceKey: "figma:Abcdef123:46:12",
     title: "Elementor Page",
     slug: "/",
     template: {
@@ -183,6 +185,36 @@ test("Elementor draft creation uses one Connector request and remains draft", as
   assert.equal(requests.length, 1);
   assert.match(requests[0]?.url ?? "", /figmapress\/v1\/elementor\/pages/);
   assert.match(requests[0]?.body ?? "", /"status":"draft"/);
+  assert.match(requests[0]?.body ?? "", /"sourceKey":"figma:Abcdef123:46:12"/);
+});
+
+test("server transport resumes Elementor media in a bounded request", async (context) => {
+  const requests: Array<{ url: string; method?: string; body?: string }> = [];
+  context.mock.method(globalThis, "fetch", async (input, init) => {
+    requests.push({
+      url: String(input),
+      method: init?.method,
+      body: String(init?.body ?? ""),
+    });
+    return Response.json({
+      postId: 91,
+      status: "draft",
+      importedMedia: 10,
+      savedMedia: 18,
+      totalMedia: 24,
+      remainingMedia: 6,
+      failedMedia: 0,
+      mediaComplete: false,
+      storedElements: 42,
+    });
+  });
+  const requestId = "77777777-7777-4777-8777-777777777777";
+  const progress = await localizeElementorDraftMedia(config, 91, requestId);
+  assert.equal(progress.savedMedia, 18);
+  assert.equal(progress.remainingMedia, 6);
+  assert.match(requests[0]?.url ?? "", /pages\/91\/media$/);
+  assert.equal(requests[0]?.method, "POST");
+  assert.match(requests[0]?.body ?? "", new RegExp(requestId));
 });
 
 test("permission errors are not mislabeled as invalid credentials", async (context) => {
