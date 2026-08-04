@@ -1,6 +1,6 @@
 .elementor-widget-figmapress-nav,
 .elementor-widget-figmapress-nav > .elementor-widget-container {
-    height: 100%;
+    height: auto;
     min-height: 0;
     width: 100%;
 }
@@ -85,7 +85,7 @@
     background: var(--figmapress-nav-bg, rgba(255, 255, 255, .94));
     border-top: 18px solid var(--figmapress-accent, #d10b2c);
     display: flex;
-    height: 100%;
+    height: auto;
     justify-content: space-between;
     min-height: 97px;
     position: relative;
