@@ -295,6 +295,73 @@
     color: #9d1429;
 }
 
+/*
+ * Functional form widgets replace a full Figma form frame. Keep their
+ * vertical rhythm tied to the 1920px desktop canvas so a scaled form does
+ * not grow past its allotted frame and cover the footer.
+ */
+@media (min-width: 768px) {
+    .figmapress-contact {
+        padding: min(70px, 3.646vw) min(150px, 7.813vw);
+    }
+
+    .figmapress-contact h2 {
+        font-size: min(42px, 2.188vw);
+        margin-bottom: min(28px, 1.458vw);
+    }
+
+    .figmapress-contact__form {
+        padding: min(40px, 2.083vw);
+    }
+
+    .figmapress-contact__form > label:not(.figmapress-contact__honeypot) {
+        gap: min(24px, 1.25vw);
+        grid-template-columns: minmax(min(190px, 9.896vw), min(270px, 14.063vw)) minmax(0, 1fr);
+        margin-bottom: min(24px, 1.25vw);
+    }
+
+    .figmapress-contact__form label > span,
+    .figmapress-contact__form legend {
+        font-size: min(18px, .938vw);
+    }
+
+    .figmapress-contact input[type="text"],
+    .figmapress-contact input[type="email"] {
+        min-height: min(51px, 2.656vw);
+        padding: min(10px, .521vw) min(14px, .729vw);
+    }
+
+    .figmapress-contact textarea {
+        min-height: min(144px, 7.5vw);
+        padding: min(10px, .521vw) min(14px, .729vw);
+    }
+
+    .figmapress-contact fieldset {
+        gap: min(32px, 1.667vw);
+        margin-bottom: min(28px, 1.458vw);
+    }
+
+    .figmapress-contact fieldset legend {
+        margin-right: min(190px, 9.896vw);
+    }
+
+    .figmapress-contact input[type="radio"] {
+        height: min(22px, 1.146vw);
+        width: min(22px, 1.146vw);
+    }
+
+    .figmapress-contact button[type="submit"] {
+        font-size: min(22px, 1.146vw);
+        min-height: min(58px, 3.021vw);
+        padding: min(12px, .625vw) min(42px, 2.188vw);
+    }
+
+    .figmapress-contact__status {
+        font-size: min(15px, .781vw);
+        margin-top: min(14px, .729vw);
+    }
+}
+
 .figmapress-carousel {
     min-height: 100%;
     padding: 0 clamp(36px, 3.2vw, 62px) 34px;

@@ -202,6 +202,9 @@ test("mobile navigation keeps its CTA and device-specific anchor targets", async
   assert.match(style, /\.figmapress-nav[^}]*height:\s*auto/s);
   assert.match(style, /min-height:\s*min\(680px,\s*178\.409vw\)/);
   assert.match(style, /textarea[^}]*min-height:\s*min\(144px,\s*32\.727vw\)/s);
+  assert.match(style, /@media \(min-width: 768px\)/);
+  assert.match(style, /padding:\s*min\(70px,\s*3\.646vw\) min\(150px,\s*7\.813vw\)/);
+  assert.match(style, /textarea[^}]*min-height:\s*min\(144px,\s*7\.5vw\)/s);
   assert.match(style, /#contact-mobile/);
   assert.match(style, /#contact-desktop/);
 });
