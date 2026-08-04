@@ -2,7 +2,7 @@ import type {
   FigmaNode,
   MockFigmaFile,
 } from "@figmapress/figma-parser";
-import { findFigmaResponsiveRoots } from "./figma-exporter";
+import { figmaTextShouldWrap, findFigmaResponsiveRoots } from "./figma-exporter";
 import type { FigmaRenderAssets } from "./figma-exporter";
 import type {
   ElementorElement,
@@ -98,11 +98,7 @@ export function createFigmaQualityReport(
   );
   const typography = {
     horizontalTextNodes: editableTextNodes.length,
-    wrappingTextNodes: editableTextNodes.filter((node) =>
-      node.textAutoResize === "HEIGHT"
-      || node.textAutoResize === "NONE"
-      || node.textAutoResize === "TRUNCATE",
-    ).length,
+    wrappingTextNodes: editableTextNodes.filter(figmaTextShouldWrap).length,
     explicitLineBreakTextNodes: editableTextNodes.filter((node) =>
       node.characters?.includes("\n"),
     ).length,

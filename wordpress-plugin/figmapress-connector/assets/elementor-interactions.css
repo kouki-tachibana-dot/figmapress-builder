@@ -640,28 +640,37 @@ html {
     }
 
     .figmapress-contact {
-        min-height: 680px;
-        padding: 42px 14px;
+        min-height: min(680px, 178.409vw);
+        padding: min(42px, 9.545vw) min(14px, 3.182vw);
     }
 
     .figmapress-contact h2 {
-        font-size: 28px;
-        margin-bottom: 20px;
+        font-size: min(28px, 6.364vw);
+        margin-bottom: min(20px, 4.545vw);
     }
 
     .figmapress-contact__form {
-        padding: 20px 16px;
+        padding: min(20px, 4.545vw) min(16px, 3.636vw);
     }
 
     .figmapress-contact__form > label:not(.figmapress-contact__honeypot) {
         display: block;
-        margin-bottom: 16px;
+        margin-bottom: min(16px, 3.636vw);
     }
 
     .figmapress-contact__form label > span {
         display: block;
-        font-size: 15px;
-        margin-bottom: 6px;
+        font-size: min(15px, 3.409vw);
+        margin-bottom: min(6px, 1.364vw);
+    }
+
+    .figmapress-contact input[type="text"],
+    .figmapress-contact input[type="email"] {
+        min-height: min(51px, 11.591vw);
+    }
+
+    .figmapress-contact textarea {
+        min-height: min(144px, 32.727vw);
     }
 
     .figmapress-contact fieldset {
@@ -677,7 +686,8 @@ html {
     }
 
     .figmapress-contact button[type="submit"] {
-        font-size: 18px;
+        font-size: min(18px, 4.091vw);
+        min-height: min(58px, 13.182vw);
     }
 
     .figmapress-accordion {

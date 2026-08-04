@@ -217,6 +217,15 @@ test("real Figma bounds produce a high-fidelity editable Elementor document", as
                   style: { fontFamily: "Noto Sans JP", fontSize: 20, lineHeightPx: 30 },
                 },
                 {
+                  id: "3:6",
+                  name: "Measured wrapped paragraph",
+                  characters: "Figmaの実測高が複数行なら、幅と高さの自動調整指定でも折り返します。",
+                  type: "TEXT",
+                  textAutoResize: "WIDTH_AND_HEIGHT",
+                  absoluteBoundingBox: { x: 620, y: 470, width: 420, height: 120 },
+                  style: { fontFamily: "Noto Sans JP", fontSize: 20, lineHeightPx: 40 },
+                },
+                {
                   id: "3:1",
                   name: "Portrait",
                   type: "RECTANGLE",
@@ -278,6 +287,7 @@ test("real Figma bounds produce a high-fidelity editable Elementor document", as
   );
   const fixedParagraph = elements.find((element) => String(element.settings.editor).includes("固定幅の文章"));
   const truncatedNotice = elements.find((element) => String(element.settings.editor).includes("固定高で安全"));
+  const measuredWrappedParagraph = elements.find((element) => String(element.settings.editor).includes("実測高が複数行"));
   const portrait = elements.find((element) => element.widgetType === "image");
   assert.match(String(heading?.settings.editor), /white-space:pre/);
   assert.match(String(heading?.settings.editor), /writing-mode:horizontal-tb/);
@@ -296,6 +306,9 @@ test("real Figma bounds produce a high-fidelity editable Elementor document", as
   assert.match(String(truncatedNotice?.settings.editor), /white-space:pre-wrap/);
   assert.match(String(truncatedNotice?.settings.editor), /height:3\.125vw/);
   assert.match(String(truncatedNotice?.settings.editor), /overflow:hidden/);
+  assert.match(String(measuredWrappedParagraph?.settings.editor), /white-space:pre-wrap/);
+  assert.match(String(measuredWrappedParagraph?.settings.editor), /overflow-wrap:anywhere/);
+  assert.match(String(measuredWrappedParagraph?.settings.editor), /word-break:break-word/);
   assert.equal((portrait?.settings.image as { url?: string })?.url, "https://images.example/portrait-rendered.png");
   assert.deepEqual(portrait?.settings.height, { unit: "vw", size: 36.458, sizes: [] });
   assert.equal(portrait?.settings._position, "absolute");
@@ -309,8 +322,8 @@ test("real Figma bounds produce a high-fidelity editable Elementor document", as
   );
   assert.match(result.previewHtml, /portrait-rendered\.png/);
   assert.deepEqual(result.qualityReport?.metrics.typography, {
-    horizontalTextNodes: 5,
-    wrappingTextNodes: 2,
+    horizontalTextNodes: 6,
+    wrappingTextNodes: 3,
     explicitLineBreakTextNodes: 0,
     mixedStyleTextNodes: 1,
     truncatedTextNodes: 1,
