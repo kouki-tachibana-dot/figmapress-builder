@@ -43,6 +43,15 @@ test("browser Visual QA waits for the srcdoc DOM separately from slow media", as
   assert.match(source, /waitForImage\(image, 8_000\)/);
 });
 
+test("actual-page Visual QA refuses a misleading score when snapshot images are omitted", async () => {
+  const source = await readFile(
+    new URL("../apps/web/src/components/converter-app.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /snapshot\.omittedAssetsCount/);
+  assert.match(source, /比較用画像を\$\{snapshot\.omittedAssetsCount\}件準備できませんでした/);
+});
+
 function solidPixels(
   width: number,
   height: number,

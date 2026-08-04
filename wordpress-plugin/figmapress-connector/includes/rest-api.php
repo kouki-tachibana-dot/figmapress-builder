@@ -618,17 +618,44 @@ function figmapress_connector_rest_localize_elementor_media( WP_REST_Request $re
     );
 }
 
+function figmapress_connector_snapshot_upload_path( $url ) {
+    $upload_dir  = wp_upload_dir();
+    $upload_url  = isset( $upload_dir['baseurl'] ) ? trailingslashit( $upload_dir['baseurl'] ) : '';
+    $upload_path = isset( $upload_dir['basedir'] ) ? trailingslashit( $upload_dir['basedir'] ) : '';
+    $clean_url   = is_string( $url ) ? strtok( $url, '?#' ) : false;
+    if ( ! $upload_url || ! $upload_path || ! is_string( $clean_url ) || 0 !== strpos( $clean_url, $upload_url ) ) {
+        return null;
+    }
+    $relative_path = rawurldecode( substr( $clean_url, strlen( $upload_url ) ) );
+    $candidate     = $upload_path . ltrim( $relative_path, '/' );
+    $real_upload   = realpath( $upload_path );
+    $real_candidate = realpath( $candidate );
+    if (
+        ! $real_upload
+        || ! $real_candidate
+        || 0 !== strpos( $real_candidate, trailingslashit( $real_upload ) )
+        || ! is_readable( $real_candidate )
+    ) {
+        return null;
+    }
+    return $real_candidate;
+}
+
 /**
  * Convert a local Media Library image to a bounded data URL for html2canvas.
  * The data is returned only by the authenticated snapshot response and is not
  * written back to Elementor or exposed by the public draft URL.
  */
-function figmapress_connector_snapshot_image_data_url( $url, &$total_bytes ) {
-    if ( $total_bytes >= 8 * MB_IN_BYTES ) {
-        return null;
-    }
+function figmapress_connector_snapshot_image_data_url( $url, &$total_bytes, &$asset_cache ) {
     $clean_url = esc_url_raw( html_entity_decode( $url, ENT_QUOTES, 'UTF-8' ), array( 'http', 'https' ) );
     if ( '' === $clean_url ) {
+        return null;
+    }
+    if ( array_key_exists( $clean_url, $asset_cache ) ) {
+        return is_string( $asset_cache[ $clean_url ] ) ? $asset_cache[ $clean_url ] : null;
+    }
+    if ( $total_bytes >= 24 * MB_IN_BYTES ) {
+        $asset_cache[ $clean_url ] = null;
         return null;
     }
     $attachment_id = attachment_url_to_postid( $clean_url );
@@ -645,70 +672,67 @@ function figmapress_connector_snapshot_image_data_url( $url, &$total_bytes ) {
         }
     }
     if ( ! $attachment_id ) {
+        $asset_cache[ $clean_url ] = null;
         return null;
     }
-    $path = get_attached_file( $attachment_id );
-    $upload_dir = wp_upload_dir();
-    $upload_url = isset( $upload_dir['baseurl'] ) ? trailingslashit( $upload_dir['baseurl'] ) : '';
-    $upload_path = isset( $upload_dir['basedir'] ) ? trailingslashit( $upload_dir['basedir'] ) : '';
-    $url_without_query = strtok( $clean_url, '?#' );
-    if (
-        $upload_url
-        && $upload_path
-        && is_string( $url_without_query )
-        && 0 === strpos( $url_without_query, $upload_url )
-    ) {
-        $relative_path = rawurldecode( substr( $url_without_query, strlen( $upload_url ) ) );
-        $candidate     = $upload_path . ltrim( $relative_path, '/' );
-        $real_upload   = realpath( $upload_path );
-        $real_candidate = realpath( $candidate );
-        if (
-            $real_upload
-            && $real_candidate
-            && 0 === strpos( $real_candidate, trailingslashit( $real_upload ) )
-            && is_readable( $real_candidate )
-        ) {
-            // Embed the exact intermediate size rendered by Elementor instead
-            // of the larger original attachment whenever possible.
-            $path = $real_candidate;
+    $path = figmapress_connector_snapshot_upload_path( $clean_url );
+    if ( ! $path ) {
+        $path = get_attached_file( $attachment_id );
+    }
+
+    // The comparison captures at most 800px wide. Prefer WordPress's
+    // generated 768px asset when it is smaller than the source so all images
+    // fit in one authenticated snapshot without materially reducing accuracy.
+    $preview = wp_get_attachment_image_src( $attachment_id, 'medium_large' );
+    if ( is_array( $preview ) && ! empty( $preview[0] ) ) {
+        $preview_path = figmapress_connector_snapshot_upload_path( $preview[0] );
+        $source_size  = is_string( $path ) && is_readable( $path ) ? filesize( $path ) : false;
+        $preview_size = $preview_path ? filesize( $preview_path ) : false;
+        if ( false !== $preview_size && $preview_size > 0 && ( false === $source_size || $preview_size < $source_size ) ) {
+            $path = $preview_path;
         }
     }
     if ( ! is_string( $path ) || ! is_readable( $path ) ) {
+        $asset_cache[ $clean_url ] = null;
         return null;
     }
     $size = filesize( $path );
-    if ( false === $size || $size <= 0 || $size > 4 * MB_IN_BYTES || $total_bytes + $size > 8 * MB_IN_BYTES ) {
+    if ( false === $size || $size <= 0 || $size > 4 * MB_IN_BYTES || $total_bytes + $size > 24 * MB_IN_BYTES ) {
+        $asset_cache[ $clean_url ] = null;
         return null;
     }
     $mime = wp_check_filetype( $path );
     $type = isset( $mime['type'] ) ? $mime['type'] : '';
     if ( ! in_array( $type, array( 'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif' ), true ) ) {
+        $asset_cache[ $clean_url ] = null;
         return null;
     }
     $contents = file_get_contents( $path );
     if ( false === $contents ) {
+        $asset_cache[ $clean_url ] = null;
         return null;
     }
     $total_bytes += $size;
-    return 'data:' . $type . ';base64,' . base64_encode( $contents );
+    $asset_cache[ $clean_url ] = 'data:' . $type . ';base64,' . base64_encode( $contents );
+    return $asset_cache[ $clean_url ];
 }
 
-function figmapress_connector_embed_snapshot_html_images( $html, &$total_bytes ) {
+function figmapress_connector_embed_snapshot_html_images( $html, &$total_bytes, &$asset_cache ) {
     return preg_replace_callback(
         '#(<img\b[^>]*\bsrc=["\'])(https?://[^"\']+)(["\'])#i',
-        function ( $matches ) use ( &$total_bytes ) {
-            $data_url = figmapress_connector_snapshot_image_data_url( $matches[2], $total_bytes );
+        function ( $matches ) use ( &$total_bytes, &$asset_cache ) {
+            $data_url = figmapress_connector_snapshot_image_data_url( $matches[2], $total_bytes, $asset_cache );
             return $data_url ? $matches[1] . $data_url . $matches[3] : $matches[0];
         },
         $html
     );
 }
 
-function figmapress_connector_embed_snapshot_css_images( $css, &$total_bytes ) {
+function figmapress_connector_embed_snapshot_css_images( $css, &$total_bytes, &$asset_cache ) {
     return preg_replace_callback(
         '#url\((["\']?)(https?://[^"\')]+)\1\)#i',
-        function ( $matches ) use ( &$total_bytes ) {
-            $data_url = figmapress_connector_snapshot_image_data_url( $matches[2], $total_bytes );
+        function ( $matches ) use ( &$total_bytes, &$asset_cache ) {
+            $data_url = figmapress_connector_snapshot_image_data_url( $matches[2], $total_bytes, $asset_cache );
             return $data_url ? 'url("' . $data_url . '")' : $matches[0];
         },
         $css
@@ -759,7 +783,8 @@ function figmapress_connector_rest_elementor_snapshot( WP_REST_Request $request 
         // though the browser snapshot sandbox also blocks script execution.
         $html = preg_replace( '#<script\b[^>]*>.*?</script>#is', '', $html );
         $embedded_asset_bytes = 0;
-        $html                 = figmapress_connector_embed_snapshot_html_images( $html, $embedded_asset_bytes );
+        $embedded_asset_cache = array();
+        $html                 = figmapress_connector_embed_snapshot_html_images( $html, $embedded_asset_bytes, $embedded_asset_cache );
         ob_start();
         wp_print_styles();
         $styles = ob_get_clean();
@@ -779,7 +804,7 @@ function figmapress_connector_rest_elementor_snapshot( WP_REST_Request $request 
             $post_css = file_get_contents( $post_css_path );
             if ( is_string( $post_css ) ) {
                 $styles .= '<style data-figmapress-elementor-post-css>'
-                    . figmapress_connector_embed_snapshot_css_images( $post_css, $embedded_asset_bytes )
+                    . figmapress_connector_embed_snapshot_css_images( $post_css, $embedded_asset_bytes, $embedded_asset_cache )
                     . '</style>';
             }
         }
@@ -791,6 +816,8 @@ function figmapress_connector_rest_elementor_snapshot( WP_REST_Request $request 
                 'styles'         => $styles,
                 'storedElements' => figmapress_connector_count_elementor_elements( figmapress_connector_read_elementor_data( $post_id ) ),
                 'embeddedAssetsBytes' => $embedded_asset_bytes,
+                'embeddedAssetsCount' => count( array_filter( $embedded_asset_cache, 'is_string' ) ),
+                'omittedAssetsCount' => count( array_filter( $embedded_asset_cache, 'is_null' ) ),
                 'webfonts'       => array_keys( figmapress_connector_page_webfonts( $post_id ) ),
                 'generatedAt'    => gmdate( 'c' ),
             )

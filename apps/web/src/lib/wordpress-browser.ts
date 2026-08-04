@@ -82,6 +82,8 @@ export interface BrowserElementorSnapshot {
   styles: string;
   storedElements: number;
   embeddedAssetsBytes?: number;
+  embeddedAssetsCount?: number;
+  omittedAssetsCount?: number;
   webfonts?: string[];
   generatedAt: string;
 }

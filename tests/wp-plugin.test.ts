@@ -285,7 +285,10 @@ test("Connector exposes authenticated Elementor snapshots with stable Figma node
   assert.match(rest, /get_builder_content_for_display\( \$post_id, true \)/);
   assert.match(rest, /wp_print_styles\(\)/);
   assert.match(rest, /attachment_url_to_postid/);
-  assert.match(rest, /8 \* MB_IN_BYTES/);
+  assert.match(rest, /24 \* MB_IN_BYTES/);
+  assert.match(rest, /wp_get_attachment_image_src\( \$attachment_id, 'medium_large' \)/);
+  assert.match(rest, /array_key_exists\( \$clean_url, \$asset_cache \)/);
+  assert.match(rest, /'omittedAssetsCount'/);
   assert.match(rest, /data:' \. \$type \. ';base64,/);
   assert.match(rest, /post-' \. \$post_id \. '\.css/);
   assert.match(rest, /figmapress_connector_validate_owned_elementor_draft/);
