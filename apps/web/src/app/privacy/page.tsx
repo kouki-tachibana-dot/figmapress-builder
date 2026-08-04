@@ -16,13 +16,13 @@ export default function PrivacyPage() {
       </section>
       <section>
         <h2>保存と利用</h2>
-        <p>入力内容と認証情報は、依頼された変換または下書き作成のためだけに利用し、サーバー側のデータベースやファイルへ保存しません。Figma OAuthトークンは暗号化したHttpOnly Cookie、PATは標準で同じタブのセッションストレージに保持します。「このブラウザに保存する」を選んだPATと、WordPressのConnector専用接続（サイトURL、ユーザー名、90日限定トークン）は利用中のブラウザのローカルストレージへ保存します。Application Passwordは保存しません。共有端末ではブラウザ保存を使用せず、接続解除または「この接続を削除」を実行してください。</p>
+        <p>入力内容と認証情報は、依頼された変換または下書き作成のためだけに利用し、サーバー側のデータベースやファイルへ保存しません。ローカル直接モードのPATはOAuthより優先され、標準で同じタブのセッションストレージに保持します。「このブラウザに保存する」を選んだPATと、WordPressのConnector専用接続（サイトURL、ユーザー名、90日限定トークン）は利用中のブラウザのローカルストレージへ保存します。Figma OAuthトークンは暗号化したHttpOnly Cookieに保持します。Application Passwordは保存しません。共有端末ではブラウザ保存を使用せず、接続解除または「この接続を削除」を実行してください。</p>
       </section>
       <section>
         <h2>ホスティングと外部サービス</h2>
         <p>ホスティング基盤は、IPアドレス、時刻、User Agent、応答状態などの標準的なリクエスト情報を運用・セキュリティ目的で処理する場合があります。Figma APIと利用者自身のWordPressサイトには、処理に必要なデータが送信され、それぞれのプライバシーポリシーが適用されます。</p>
       </section>
-      <p className="legal-page__date">最終更新：2026年7月27日</p>
+      <p className="legal-page__date">最終更新：2026年8月4日</p>
     </LegalLayout>
   );
 }
