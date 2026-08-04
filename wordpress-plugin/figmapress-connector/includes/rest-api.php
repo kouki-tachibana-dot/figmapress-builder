@@ -177,6 +177,7 @@ function figmapress_connector_rest_is_authenticated() {
 function figmapress_connector_rest_status() {
     global $wp_version;
     $current_user = wp_get_current_user();
+    figmapress_connector_load_elementor_widget_classes();
     return rest_ensure_response(
         array(
             'connectorVersion' => FIGMAPRESS_CONNECTOR_VERSION,

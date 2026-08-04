@@ -120,6 +120,8 @@ test("Connector accepts and registers functional Elementor widgets", async () =>
   assert.match(plugin, new RegExp(`Version:\\s+${escapedVersion}`));
   assert.match(plugin, new RegExp(`FIGMAPRESS_CONNECTOR_VERSION', '${escapedVersion}'`));
   assert.match(plugin, /elementor\/widgets\/register/);
+  assert.match(plugin, /function figmapress_connector_load_elementor_widget_classes/);
+  assert.match(rest, /figmapress_connector_load_elementor_widget_classes\(\);/);
   for (const widget of [
     "figmapress-nav",
     "figmapress-link",
