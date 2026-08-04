@@ -3,7 +3,7 @@ Contributors: figmapress
 Tags: blocks, figma, gutenberg, elementor
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 0.15.3
+Stable tag: 0.15.4
 License: GPLv2 or later
 
 Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
@@ -15,6 +15,9 @@ Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
    create a draft page containing figmapress/* blocks.
 
 == Changelog ==
+= 0.15.4 =
+* PC・タブレットのお問い合わせフォームをFigmaの1920px基準から比例縮小し、フッター上部への重なりを解消。
+
 = 0.15.3 =
 * Figmaの実測行数から日本語テキストの折返しを補完し、カード・スマホフッターの横はみ出しを修正。
 * 320〜440px幅でお問い合わせフォームを比例縮小し、フッターとの重なりを抑制。
