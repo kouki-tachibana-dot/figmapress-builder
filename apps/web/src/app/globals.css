@@ -234,6 +234,7 @@ a { color: inherit; }
 .oauth-connect-card.is-connected button { background: transparent; border: 1px solid #a9c77a; color: #58742d; }
 .pat-fallback { border-top: 1px solid #dde3e1; margin-top: 12px; padding-top: 9px; }
 .pat-fallback summary { color: #536970; cursor: pointer; font-size: 9px; font-weight: 800; }
+.pat-fallback .oauth-connect-card { margin-top: 10px; }
 .pat-fallback > label { display: block; font-size: 9px; margin-top: 10px; }
 .pat-fallback > small { color: var(--muted); display: block; font-size: 8px; margin-top: 5px; }
 .field input:focus, .json-field textarea:focus { background: #fff; border-color: #7da63d; box-shadow: 0 0 0 4px rgba(185,231,89,.18); }

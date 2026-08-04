@@ -12,7 +12,7 @@ export default function SecurityPage() {
     >
       <section>
         <h2>認証情報</h2>
-        <p>Figma OAuthはPKCEを使い、<code>file_content:read</code> だけを要求します。アクセストークンと更新トークンはAES-256-GCMで暗号化したHttpOnly・SameSite Cookieに保持し、画面やURLへ返しません。PATは標準で同じタブのセッションストレージだけに保持し、明示的に選んだ場合だけローカルストレージへ移します。WordPress Application Passwordは保存しません。Connector専用接続を選んだ場合だけ、サイトURL、ユーザー名、90日限定トークンをブラウザに保存します。</p>
+        <p>ローカル直接モードでは、利用者自身の<code>file_content:read</code>権限付きPATを使用し、OAuth審査なしで変換できます。PATはOAuthより優先され、標準で同じタブのセッションストレージだけに保持し、明示的に選んだ場合だけローカルストレージへ移します。共通PATやPATのサーバー保存は行いません。任意のFigma OAuthはPKCEを使い、トークンをAES-256-GCMで暗号化したHttpOnly・SameSite Cookieに保持します。WordPress Application Passwordは保存しません。Connector専用接続を選んだ場合だけ、サイトURL、ユーザー名、90日限定トークンをブラウザに保存します。</p>
       </section>
       <section>
         <h2>WordPress接続</h2>

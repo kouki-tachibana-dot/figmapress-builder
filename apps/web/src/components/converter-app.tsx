@@ -50,6 +50,7 @@ import {
   shouldKeepVisualCorrections,
 } from "@/lib/visual-qa";
 import { readApi } from "@/lib/api-client";
+import { resolveFigmaRequestAuthentication } from "@/lib/figma-client-auth";
 
 type SourceMode = "figma" | "json";
 type OutputTarget = "gutenberg" | "elementor";
@@ -844,14 +845,14 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     try {
       let body: Record<string, unknown>;
       if (mode === "figma") {
+        const authentication = resolveFigmaRequestAuthentication(
+          figmaToken,
+          figmaOAuthStatus?.connected === true,
+        );
         body = {
           mode,
           fileKeyOrUrl,
-          ...(
-            figmaToken && !figmaOAuthStatus?.connected
-              ? { token: figmaToken }
-              : {}
-          ),
+          ...authentication.credentials,
         };
       } else {
         let data: unknown;
@@ -1741,7 +1742,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.24.2 live</span>
+          <span className="status-pill"><i /> v0.25.0 live</span>
         </nav>
       </header>
 
@@ -1841,68 +1842,71 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                   />
                 </label>
                 <div className="field field--wide">
-                  <span>Figma接続</span>
-                  <div className={`oauth-connect-card ${figmaOAuthStatus?.connected ? "is-connected" : ""}`}>
-                    {figmaOAuthStatus === null ? (
-                      <small>接続状態を確認しています…</small>
-                    ) : figmaOAuthStatus.configured ? (
-                      figmaOAuthStatus.connected ? (
-                        <>
-                          <div>
-                            <strong>✓ Figmaアカウント接続済み</strong>
-                            <small>トークンは暗号化されたHttpOnly Cookieで保持され、画面やURLには表示されません。</small>
-                          </div>
-                          <button onClick={disconnectFigmaAccount} type="button">接続解除</button>
-                        </>
-                      ) : (
-                        <>
-                          <div>
-                            <strong>毎回のトークン入力は不要です</strong>
-                            <small>Figma公式OAuthでfile_content:readだけを許可します。</small>
-                          </div>
-                          <button onClick={connectFigmaAccount} type="button">Figmaアカウントを接続</button>
-                        </>
-                      )
-                    ) : (
-                      <div>
-                        <strong>OAuthは準備中です</strong>
-                        <small>現在は下のPersonal Access Tokenを利用してください。</small>
-                      </div>
+                  <span>Figmaローカル直接モード</span>
+                  <div className={`oauth-connect-card ${figmaToken ? "is-connected" : ""}`}>
+                    <div>
+                      <strong>{figmaToken ? "✓ ローカル直接モード準備済み" : "OAuth審査なしで今すぐ使えます"}</strong>
+                      <small>あなたのPersonal Access Tokenをブラウザから送信します。共通トークンやサーバー保存はありません。</small>
+                    </div>
+                    {figmaToken && (
+                      <button onClick={() => updateFigmaToken("")} type="button">トークンを消去</button>
                     )}
                   </div>
-                  <details
-                    className="pat-fallback"
-                    open={!figmaOAuthStatus?.connected}
-                  >
-                    <summary>Personal Access Tokenを使う</summary>
-                    <label htmlFor="figma-personal-access-token">
-                      Figma Personal Access Token
-                    </label>
-                    <div className="token-input-row">
-                      <input
-                        autoComplete="off"
-                        id="figma-personal-access-token"
-                        onChange={(event) => updateFigmaToken(event.target.value)}
-                        placeholder="figd_…"
-                        required={!figmaOAuthStatus?.connected}
-                        type="password"
-                        value={figmaToken}
-                      />
-                      {figmaToken && (
-                        <button onClick={() => updateFigmaToken("")} type="button">消去</button>
+                  <label htmlFor="figma-personal-access-token">
+                    Figma Personal Access Token
+                  </label>
+                  <div className="token-input-row">
+                    <input
+                      autoComplete="off"
+                      id="figma-personal-access-token"
+                      onChange={(event) => updateFigmaToken(event.target.value)}
+                      placeholder="figd_…"
+                      required
+                      type="password"
+                      value={figmaToken}
+                    />
+                  </div>
+                  <small>
+                    Figmaの「設定 → セキュリティ」でfile_content:read権限付きのトークンを作成してください。
+                  </small>
+                  <label className="token-persistence">
+                    <input
+                      checked={persistFigmaToken}
+                      onChange={(event) => updateFigmaTokenPersistence(event.target.checked)}
+                      type="checkbox"
+                    />
+                    <span>このブラウザに保存して、次回から入力しない（共有端末ではオフ）</span>
+                  </label>
+                  <details className="pat-fallback">
+                    <summary>任意：Figma公式OAuthを使う</summary>
+                    <div className={`oauth-connect-card ${figmaOAuthStatus?.connected ? "is-connected" : ""}`}>
+                      {figmaOAuthStatus === null ? (
+                        <small>接続状態を確認しています…</small>
+                      ) : figmaOAuthStatus.configured ? (
+                        figmaOAuthStatus.connected ? (
+                          <>
+                            <div>
+                              <strong>✓ Figmaアカウント接続済み</strong>
+                              <small>PATが入力されている場合はローカル直接モードを優先します。</small>
+                            </div>
+                            <button onClick={disconnectFigmaAccount} type="button">接続解除</button>
+                          </>
+                        ) : (
+                          <>
+                            <div>
+                              <strong>OAuthは任意です</strong>
+                              <small>Figmaの公開審査承認後に利用できます。</small>
+                            </div>
+                            <button onClick={connectFigmaAccount} type="button">Figmaアカウントを接続</button>
+                          </>
+                        )
+                      ) : (
+                        <div>
+                          <strong>OAuthは未設定です</strong>
+                          <small>ローカル直接モードはそのまま利用できます。</small>
+                        </div>
                       )}
                     </div>
-                    <small>
-                      OAuth未接続時のフォールバックです。file_content:read権限が必要です。
-                    </small>
-                    <label className="token-persistence">
-                      <input
-                        checked={persistFigmaToken}
-                        onChange={(event) => updateFigmaTokenPersistence(event.target.checked)}
-                        type="checkbox"
-                      />
-                      <span>このブラウザに保存する（共有端末ではオフ）</span>
-                    </label>
                   </details>
                 </div>
               </div>
@@ -1937,7 +1941,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
 
             {error && <div className="alert alert--error" role="alert">{error}</div>}
             <div className="form-footer">
-              <p><span className="lock">⌁</span> OAuth認証情報は暗号化HttpOnly Cookie、PATは標準でこのタブ内だけに保持します。</p>
+              <p><span className="lock">⌁</span> PATはOAuthより優先され、標準はこのタブ内、選択時だけこのブラウザに保持します。</p>
               <button className="button button--primary button--submit" disabled={converting} type="submit">
                 {converting ? <><span className="spinner" /> 変換中…</> : <>WordPress用に変換 <span>→</span></>}
               </button>
@@ -2686,7 +2690,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.24.2</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.25.0</span></div>
       </footer>
     </main>
   );
