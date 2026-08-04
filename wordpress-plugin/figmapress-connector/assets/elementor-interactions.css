@@ -630,7 +630,9 @@ html {
     }
 
     .figmapress-nav__panel {
-        background: var(--figmapress-nav-bg, #fff);
+        background:
+            linear-gradient(rgba(255, 255, 255, .97), rgba(255, 255, 255, .97)),
+            var(--figmapress-nav-bg, #fff);
         box-shadow: 0 16px 28px rgba(0, 0, 0, .14);
         display: none;
         left: 0;

@@ -51,14 +51,38 @@ function rewriteCssUrls(value: string): string {
 
 function waitForFrame(frame: HTMLIFrameElement, timeoutMs: number): Promise<void> {
   return new Promise((resolve, reject) => {
+    let settled = false;
+    let poll = 0;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      window.clearInterval(poll);
+      resolve();
+    };
     const timeout = window.setTimeout(
-      () => reject(new Error("生成ページの準備がタイムアウトしました。")),
+      () => {
+        if (settled) return;
+        settled = true;
+        window.clearInterval(poll);
+        reject(new Error("生成ページの準備がタイムアウトしました。"));
+      },
       timeoutMs,
     );
-    frame.addEventListener("load", () => {
-      window.clearTimeout(timeout);
-      resolve();
-    }, { once: true });
+    frame.addEventListener("load", finish, { once: true });
+    poll = window.setInterval(() => {
+      const document = frame.contentDocument;
+      // iframe load waits for every image and font. The next stages already
+      // wait for those resources independently, so continue as soon as the
+      // srcdoc DOM itself is ready instead of reporting a false timeout.
+      if (
+        document?.URL === "about:srcdoc"
+        && document.body
+        && document.readyState !== "loading"
+      ) {
+        finish();
+      }
+    }, 50);
   });
 }
 

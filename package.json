@@ -34,7 +34,7 @@
   },
   "dependencies": {
     "dotenv": "^16.4.5",
-    "postcss": "8.5.19",
+    "postcss": "8.5.23",
     "sharp": "0.35.3",
     "zod": "^3.22.4"
   },
