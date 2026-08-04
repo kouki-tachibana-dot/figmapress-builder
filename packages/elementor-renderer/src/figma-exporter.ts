@@ -1059,8 +1059,10 @@ function textElement(
     ? `<a data-figmapress-functional-link href="${escapeAttribute(action.url)}"${action.external ? ' target="_blank" rel="noopener noreferrer"' : ""} style="color:inherit;text-decoration:inherit">${content}</a>`
     : content;
   const whiteSpace = textWhiteSpace(node);
+  const overflowWrap = textOverflowWrap(node);
+  const wordBreak = textWordBreak(node);
   const verticalAlign = textVerticalAlign(style.textAlignVertical);
-  settings.editor = `<div data-figmapress-text-box="${escapeAttribute(node.id)}" style="box-sizing:border-box;display:flex;flex-direction:column;font-family:${escapeAttribute(cssFont(style.fontFamily))};hyphens:none;justify-content:${verticalAlign};line-break:strict;margin:0;max-width:100%;${textBoxHeight(node, bounds, context)}overflow:${textOverflow(node)};overflow-wrap:normal;text-orientation:mixed;white-space:${whiteSpace};width:100%;word-break:${whiteSpace === "pre" ? "keep-all" : "normal"};writing-mode:horizontal-tb"><span style="display:block;max-width:100%">${linkedContent}</span></div>`;
+  settings.editor = `<div data-figmapress-text-box="${escapeAttribute(node.id)}" style="box-sizing:border-box;display:flex;flex-direction:column;font-family:${escapeAttribute(cssFont(style.fontFamily))};hyphens:none;justify-content:${verticalAlign};line-break:strict;margin:0;max-width:100%;${textBoxHeight(node, bounds, context)}overflow:${textOverflow(node)};overflow-wrap:${overflowWrap};text-orientation:mixed;white-space:${whiteSpace};width:100%;word-break:${wordBreak};writing-mode:horizontal-tb"><span style="display:block;max-width:100%">${linkedContent}</span></div>`;
   return widget(context.ids, node.id, "text-editor", settings);
 }
 
@@ -1277,7 +1279,7 @@ function previewNode(
     const content = runs.length > 1
       ? runs.map((run) => runHtml(run, context)).join("").replace(/\n/g, "<br>")
       : escapeHtml(node.characters ?? "").replace(/\n/g, "<br>");
-    return `<div ${attributes} data-figmapress-kind="text" style="${position};box-sizing:border-box;color:${escapeAttribute(solidColor(style.fills ?? node.fills) ?? "#111111")};display:flex;flex-direction:column;font-family:${escapeAttribute(cssFont(style.fontFamily))};font-size:calc(var(--figma-unit) * ${round(fontSize)});font-style:${style.italic ? "italic" : "normal"};font-weight:${round(style.fontWeight ?? 400)};hyphens:none;justify-content:${textVerticalAlign(style.textAlignVertical)};letter-spacing:calc(var(--figma-unit) * ${round(style.letterSpacing ?? 0)});line-break:strict;line-height:${round(textLineHeight(style, runs, fontSize) / fontSize)};max-width:100%;overflow:${textOverflow(node)};overflow-wrap:normal;text-align:${textAlign(style.textAlignHorizontal)};text-decoration:${textDecoration(style.textDecoration)};text-orientation:mixed;text-transform:${textTransform(style.textCase)};white-space:${textWhiteSpace(node)};word-break:${textWhiteSpace(node) === "pre" ? "keep-all" : "normal"};writing-mode:horizontal-tb;${previewTransform(node)}${previewEffects(node)}"><span style="display:block;max-width:100%">${content}</span></div>`;
+    return `<div ${attributes} data-figmapress-kind="text" style="${position};box-sizing:border-box;color:${escapeAttribute(solidColor(style.fills ?? node.fills) ?? "#111111")};display:flex;flex-direction:column;font-family:${escapeAttribute(cssFont(style.fontFamily))};font-size:calc(var(--figma-unit) * ${round(fontSize)});font-style:${style.italic ? "italic" : "normal"};font-weight:${round(style.fontWeight ?? 400)};hyphens:none;justify-content:${textVerticalAlign(style.textAlignVertical)};letter-spacing:calc(var(--figma-unit) * ${round(style.letterSpacing ?? 0)});line-break:strict;line-height:${round(textLineHeight(style, runs, fontSize) / fontSize)};max-width:100%;overflow:${textOverflow(node)};overflow-wrap:${textOverflowWrap(node)};text-align:${textAlign(style.textAlignHorizontal)};text-decoration:${textDecoration(style.textDecoration)};text-orientation:mixed;text-transform:${textTransform(style.textCase)};white-space:${textWhiteSpace(node)};word-break:${textWordBreak(node)};writing-mode:horizontal-tb;${previewTransform(node)}${previewEffects(node)}"><span style="display:block;max-width:100%">${content}</span></div>`;
   }
 
   const children = (node.children ?? []).map((child) => previewNode(child, bounds, node, context)).join("");
@@ -1885,14 +1887,34 @@ function textVerticalAlign(value: FigmaTypeStyle["textAlignVertical"]): string {
 }
 
 function textWhiteSpace(node: FigmaNode): "pre" | "pre-wrap" {
+  return figmaTextShouldWrap(node) ? "pre-wrap" : "pre";
+}
+
+function textOverflowWrap(node: FigmaNode): "anywhere" | "normal" {
+  return figmaTextShouldWrap(node) ? "anywhere" : "normal";
+}
+
+function textWordBreak(node: FigmaNode): "break-word" | "keep-all" {
+  return figmaTextShouldWrap(node) ? "break-word" : "keep-all";
+}
+
+export function figmaTextShouldWrap(node: FigmaNode): boolean {
   if (
     node.textAutoResize === "HEIGHT"
     || node.textAutoResize === "NONE"
     || node.textAutoResize === "TRUNCATE"
   ) {
-    return "pre-wrap";
+    return true;
   }
-  return "pre";
+
+  const bounds = node.absoluteBoundingBox;
+  if (!bounds || node.type !== "TEXT" || !node.characters) return false;
+  const style = node.style ?? {};
+  const runs = textRuns(node);
+  const fontSize = textFontSize(style, runs, bounds);
+  const lineHeight = textLineHeight(style, runs, fontSize);
+  const explicitLines = node.characters.split("\n").length;
+  return bounds.height > lineHeight * (explicitLines + 0.4);
 }
 
 function textOverflow(node: FigmaNode): "hidden" | "visible" {
