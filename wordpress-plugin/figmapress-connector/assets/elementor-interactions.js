@@ -1,41 +1,51 @@
 (function () {
     "use strict";
 
+    function setNavigationOpen(nav, open, restoreFocus) {
+        var toggle = nav.querySelector(".figmapress-nav__toggle");
+        if (!toggle) return;
+        var toggleLabel = toggle.querySelector(".screen-reader-text");
+        nav.classList.toggle("is-open", open);
+        toggle.setAttribute("aria-expanded", open ? "true" : "false");
+        if (toggleLabel) toggleLabel.textContent = open ? "メニューを閉じる" : "メニューを開く";
+        if (restoreFocus) toggle.focus();
+    }
+
     function initNavigation(scope) {
-        scope.querySelectorAll(".figmapress-nav:not([data-figmapress-ready])").forEach(function (nav) {
-            var toggle = nav.querySelector(".figmapress-nav__toggle");
-            if (!toggle) return;
+        scope.querySelectorAll(".figmapress-nav").forEach(function (nav) {
+            if (!nav.querySelector(".figmapress-nav__toggle")) return;
             nav.dataset.figmapressReady = "true";
-            var toggleLabel = toggle.querySelector(".screen-reader-text");
-            function setOpen(open, restoreFocus) {
-                nav.classList.toggle("is-open", open);
-                toggle.setAttribute("aria-expanded", open ? "true" : "false");
-                if (toggleLabel) toggleLabel.textContent = open ? "メニューを閉じる" : "メニューを開く";
-                if (restoreFocus) toggle.focus();
-            }
-            toggle.addEventListener("click", function () {
-                setOpen(!nav.classList.contains("is-open"), false);
-            });
-            nav.querySelectorAll("a").forEach(function (link) {
-                link.addEventListener("click", function () {
-                    setOpen(false, false);
-                });
-            });
-            document.addEventListener("click", function (event) {
-                if (nav.classList.contains("is-open") && !nav.contains(event.target)) {
-                    setOpen(false, false);
-                }
-            });
-            document.addEventListener("keydown", function (event) {
-                if (event.key === "Escape" && nav.classList.contains("is-open")) {
-                    setOpen(false, true);
-                }
-            });
-            window.addEventListener("resize", function () {
-                if (window.matchMedia("(min-width: 768px)").matches) setOpen(false, false);
-            });
         });
     }
+
+    document.addEventListener("click", function (event) {
+        var target = event.target instanceof Element ? event.target : null;
+        if (!target) return;
+        var toggle = target.closest(".figmapress-nav__toggle");
+        if (toggle) {
+            var owner = toggle.closest(".figmapress-nav");
+            if (owner) setNavigationOpen(owner, !owner.classList.contains("is-open"), false);
+            return;
+        }
+        document.querySelectorAll(".figmapress-nav.is-open").forEach(function (nav) {
+            if (!nav.contains(target) || target.closest("a")) setNavigationOpen(nav, false, false);
+        });
+    });
+
+    document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape") {
+            document.querySelectorAll(".figmapress-nav.is-open").forEach(function (nav) {
+                setNavigationOpen(nav, false, true);
+            });
+        }
+    });
+
+    window.addEventListener("resize", function () {
+        if (!window.matchMedia("(min-width: 768px)").matches) return;
+        document.querySelectorAll(".figmapress-nav.is-open").forEach(function (nav) {
+            setNavigationOpen(nav, false, false);
+        });
+    });
 
     function initAccordions(scope) {
         scope.querySelectorAll(".figmapress-accordion:not([data-figmapress-ready])").forEach(function (accordion) {
