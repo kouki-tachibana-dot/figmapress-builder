@@ -164,6 +164,8 @@ async function wpFetch(
   path: string,
   init: RequestInit = {},
 ): Promise<Response> {
+  const method = (init.method ?? "GET").toUpperCase();
+  const timeoutMs = method === "GET" || method === "HEAD" ? 20_000 : 120_000;
   const url = `${cfg.baseUrl}/wp-json${path}`;
   const headers = new Headers(init.headers);
   const connectorToken = cfg.connectorToken?.trim();
@@ -181,7 +183,7 @@ async function wpFetch(
     ...init,
     headers,
     redirect: "error",
-    signal: init.signal ?? AbortSignal.timeout(15_000),
+    signal: init.signal ?? AbortSignal.timeout(timeoutMs),
   };
   let res = await fetch(url, requestInit);
   if (res.status === 401 && !connectorToken) {
