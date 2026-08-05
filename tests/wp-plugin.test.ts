@@ -277,9 +277,10 @@ test("Connector pairing is revocable, hashed, expiring, and namespace scoped", a
 });
 
 test("Connector exposes authenticated Elementor snapshots with stable Figma node identities", async () => {
-  const [plugin, rest] = await Promise.all([
+  const [plugin, rest, interactionStyle] = await Promise.all([
     readFile(pluginPath, "utf8"),
     readFile(restApiPath, "utf8"),
+    readFile(interactionStylePath, "utf8"),
   ]);
   assert.match(rest, /elementor\/pages\/\(\?P<id>\\d\+\)\/snapshot/);
   assert.match(rest, /get_builder_content_for_display\( \$post_id, true \)/);
@@ -294,8 +295,10 @@ test("Connector exposes authenticated Elementor snapshots with stable Figma node
   assert.match(rest, /figmapress_connector_snapshot_elementor_frontend_css/);
   assert.match(rest, /data-figmapress-elementor-frontend-css/);
   assert.match(rest, /figmapress_connector_snapshot_interactions_css/);
+  assert.match(rest, /figmapress_connector_snapshot_css_compatibility/);
   assert.match(rest, /data-figmapress-interactions-css/);
   assert.match(rest, /figmapress_connector_register_elementor_assets\(\)/);
+  assert.match(interactionStyle, /rgba\(209, 11, 44, \.38\)/);
   assert.match(rest, /ELEMENTOR_PATH/);
   assert.match(rest, /figmapress_connector_validate_owned_elementor_draft/);
   assert.match(rest, /hash_equals\( \$stored_request_id, \$request_id \)/);

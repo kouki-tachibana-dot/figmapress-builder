@@ -143,6 +143,7 @@
 .figmapress-nav__toggle:focus-visible,
 .figmapress-nav__mobile-cta:focus-visible,
 .figmapress-accordion summary:focus-visible {
+    outline: 3px solid rgba(209, 11, 44, .38);
     outline: 3px solid color-mix(in srgb, var(--figmapress-accent, #d10b2c) 38%, transparent);
     outline-offset: 3px;
 }
@@ -224,6 +225,7 @@
 .figmapress-contact input:focus-visible,
 .figmapress-contact textarea:focus-visible,
 .figmapress-contact button:focus-visible {
+    outline: 3px solid rgba(185, 10, 35, .32);
     outline: 3px solid color-mix(in srgb, var(--figmapress-accent, #b90a23) 32%, transparent);
     outline-offset: 2px;
 }
@@ -416,6 +418,7 @@
 .figmapress-carousel__item-link:focus-visible,
 .figmapress-carousel__button:focus-visible,
 .figmapress-carousel__dot:focus-visible {
+    outline: 3px solid rgba(209, 11, 44, .36);
     outline: 3px solid color-mix(in srgb, var(--figmapress-accent, #d10b2c) 36%, transparent);
     outline-offset: 3px;
 }
@@ -466,6 +469,7 @@
 }
 
 .figmapress-carousel__dot {
+    background: rgba(209, 11, 44, .25);
     background: color-mix(in srgb, var(--figmapress-accent, #d10b2c) 25%, transparent);
     border: 0;
     border-radius: 999px;
@@ -491,6 +495,7 @@
 }
 
 .figmapress-accordion details {
+    border-bottom: 1px solid rgba(32, 32, 32, .24);
     border-bottom: 1px solid color-mix(in srgb, var(--figmapress-text, #202020) 24%, transparent);
 }
 

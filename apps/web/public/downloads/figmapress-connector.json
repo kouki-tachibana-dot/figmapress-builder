@@ -1,11 +1,11 @@
 {
   "name": "FigmaPress Connector",
   "slug": "figmapress-connector",
-  "version": "0.16.4",
+  "version": "0.16.5",
   "requires": "6.4",
   "requires_php": "7.4",
   "tested": "7.0",
   "homepage": "https://figmapress-builder.vercel.app",
   "download_url": "https://figmapress-builder.vercel.app/downloads/figmapress-connector.zip",
-  "changelog": "<h4>0.16.4</h4><ul><li>REST経由の実ページVisual QAでも機能Widgetの本番CSSを確実に適用します。</li><li>フォームとアコーディオンが未装飾状態で比較される誤判定を修正しました。</li></ul><h4>0.16.3</h4><ul><li>REST経由の実ページVisual QAでもElementor本体のコンテナCSSを確実に適用します。</li><li>PC・スマホの高さと絶対配置が実サイトと異なる誤判定を修正しました。</li></ul>"
+  "changelog": "<h4>0.16.5</h4><ul><li>機能Widget CSSに古い比較エンジン向けの色フォールバックを追加しました。</li><li>実ページVisual QAがcolor-mix()で停止する互換性問題を修正しました。</li></ul><h4>0.16.4</h4><ul><li>REST経由の実ページVisual QAでも機能Widgetの本番CSSを確実に適用します。</li><li>フォームとアコーディオンが未装飾状態で比較される誤判定を修正しました。</li></ul>"
 }
