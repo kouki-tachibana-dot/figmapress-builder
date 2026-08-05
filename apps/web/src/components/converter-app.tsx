@@ -564,7 +564,7 @@ ${snapshot.styles}
 <style>
 html,body{margin:0!important;min-height:100%;padding:0!important;background:#fff}
 *,*::before,*::after{box-sizing:border-box}
-.figmapress-figma-preview{container-type:inline-size;overflow:hidden;position:relative;width:100%}
+.figmapress-figma-preview,.figmapress-layout{container-type:inline-size;overflow:hidden;position:relative;width:100%}
 </style></head><body>${snapshot.html}</body></html>`;
 }
 

@@ -239,6 +239,10 @@ export async function runVisualQa(
 
     frameDocument.querySelectorAll<HTMLImageElement>("img").forEach((image) => {
       image.removeAttribute("srcset");
+      // Elementor marks below-the-fold media as lazy. The comparison iframe is
+      // intentionally positioned off screen, so those images would otherwise
+      // never become viewport candidates and html2canvas would capture blanks.
+      image.setAttribute("loading", "eager");
       const source = image.getAttribute("src");
       if (source) image.src = proxiedImageUrl(source);
     });
@@ -264,7 +268,9 @@ export async function runVisualQa(
     );
     await waitForFonts(frameDocument, 12_000);
     const visiblePreviews = Array.from(
-      frameDocument.querySelectorAll<HTMLElement>(".figmapress-figma-preview"),
+      frameDocument.querySelectorAll<HTMLElement>(
+        ".figmapress-figma-preview, .figmapress-layout",
+      ),
     ).filter(
       (element) =>
         frameDocument.defaultView?.getComputedStyle(element).display !== "none"
