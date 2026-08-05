@@ -3,9 +3,11 @@
 
     function setNavigationOpen(nav, open, restoreFocus) {
         var toggle = nav.querySelector(".figmapress-nav__toggle");
+        var state = nav.querySelector(".figmapress-nav__state");
         if (!toggle) return;
         var toggleLabel = toggle.querySelector(".screen-reader-text");
         nav.classList.toggle("is-open", open);
+        if (state) state.checked = open;
         toggle.setAttribute("aria-expanded", open ? "true" : "false");
         if (toggleLabel) toggleLabel.textContent = open ? "メニューを閉じる" : "メニューを開く";
         if (restoreFocus) toggle.focus();
@@ -23,6 +25,8 @@
         if (!target) return;
         var toggle = target.closest(".figmapress-nav__toggle");
         if (toggle) {
+            var nativeState = toggle.previousElementSibling;
+            if (nativeState && nativeState.classList.contains("figmapress-nav__state")) return;
             event.preventDefault();
             event.stopPropagation();
             var owner = toggle.closest(".figmapress-nav");
