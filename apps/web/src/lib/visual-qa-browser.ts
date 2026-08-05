@@ -143,9 +143,9 @@ async function waitForFonts(
   try {
     await Promise.race([
       document.fonts.ready.then(() => undefined),
-      new Promise<never>((_resolve, reject) => {
+      new Promise<void>((resolve) => {
         timeout = window.setTimeout(
-          () => reject(new Error("Webフォントの読み込みがタイムアウトしました。")),
+          resolve,
           timeoutMs,
         );
       }),

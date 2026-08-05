@@ -15,6 +15,8 @@ export const maxDuration = 20;
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 
 export async function GET(request: Request): Promise<Response> {
+  const startedAt = Date.now();
+  let sourceHost = "unknown";
   try {
     enforceRateLimit("figma-image", clientIp(request), 180, 10 * 60_000);
 
@@ -22,6 +24,7 @@ export async function GET(request: Request): Promise<Response> {
     if (!source) {
       throw new RequestError("Figma画像URLが無効です。");
     }
+    sourceHost = source.hostname;
 
     const response = await fetch(source, {
       cache: "no-store",
@@ -63,6 +66,14 @@ export async function GET(request: Request): Promise<Response> {
       },
     });
   } catch (error) {
+    console.error(JSON.stringify({
+      level: "error",
+      message: "Figma image proxy failed",
+      route: "/api/figma-image",
+      sourceHost,
+      durationMs: Date.now() - startedAt,
+      error: error instanceof Error ? error.message : String(error),
+    }));
     return errorResponse(error);
   }
 }
