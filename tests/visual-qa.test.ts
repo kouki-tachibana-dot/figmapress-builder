@@ -47,6 +47,7 @@ test("browser Visual QA waits for the srcdoc DOM separately from slow media", as
   assert.match(source, /enforceElementorResponsiveVariant\(frameDocument, variant\)/);
   assert.match(source, /matchesVariant \? "var\(--display, flex\)" : "none"/);
   assert.match(source, /visibleElementorLayouts\.length !== 1/);
+  assert.match(source, /visiblePreview\.scrollHeight/);
   assert.match(source, /waitForImage\(image, 8_000\)/);
 });
 
