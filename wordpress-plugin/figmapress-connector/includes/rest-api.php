@@ -787,7 +787,21 @@ function figmapress_connector_snapshot_interactions_css() {
         return '';
     }
     $css = file_get_contents( $path );
-    return is_string( $css ) ? $css : '';
+    return is_string( $css ) ? figmapress_connector_snapshot_css_compatibility( $css ) : '';
+}
+
+/**
+ * Keep snapshot CSS compatible with html2canvas while preserving the public
+ * stylesheet's progressive color-mix() declarations. Every affected rule has
+ * an rgba fallback immediately before the modern declaration.
+ */
+function figmapress_connector_snapshot_css_compatibility( $css ) {
+    $compatible = preg_replace(
+        '/^[\t ]*(?:outline|background|border-bottom):[^;\r\n]*color-mix\([^;\r\n]*;[\t ]*$/mi',
+        '',
+        (string) $css
+    );
+    return is_string( $compatible ) ? $compatible : '';
 }
 
 /**
