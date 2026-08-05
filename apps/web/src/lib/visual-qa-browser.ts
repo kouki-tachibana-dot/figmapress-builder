@@ -326,7 +326,10 @@ export async function runVisualQa(
       );
     }
     const generatedHeight = visiblePreview
-      ? visiblePreview.getBoundingClientRect().height
+      ? Math.max(
+          visiblePreview.getBoundingClientRect().height,
+          visiblePreview.scrollHeight,
+        )
       : Math.max(1, frameDocument.body.scrollHeight);
     const markedSections = visiblePreview
       ? Array.from(
