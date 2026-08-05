@@ -335,6 +335,57 @@ test("real Figma bounds produce a high-fidelity editable Elementor document", as
   assert.ok(result.warnings.some((warning) => warning.includes("高忠実度モード")));
 });
 
+test("rich text font-size overrides preserve the base line-height ratio", async () => {
+  const file: MockFigmaFile = {
+    document: {
+      id: "0:0",
+      name: "Mobile rich text",
+      type: "DOCUMENT",
+      children: [{
+        id: "1:0",
+        name: "Page",
+        type: "CANVAS",
+        children: [{
+          id: "46:210",
+          name: "SP-page",
+          type: "FRAME",
+          absoluteBoundingBox: { x: 0, y: 0, width: 440, height: 707 },
+          children: [{
+            id: "2023:563",
+            name: "Mobile heading",
+            type: "TEXT",
+            characters: "明石\n元気",
+            textAutoResize: "WIDTH_AND_HEIGHT",
+            absoluteBoundingBox: { x: 30, y: 78, width: 349, height: 125 },
+            style: {
+              fontFamily: "Inter",
+              fontSize: 84,
+              fontWeight: 700,
+              lineHeightPx: 101.64,
+            },
+            characterStyleOverrides: [1, 1, 1, 2, 2],
+            styleOverrideTable: {
+              "1": { fontSize: 48 },
+              "2": { fontSize: 54 },
+            },
+          }],
+        }],
+      }],
+    },
+  };
+
+  const result = await convertFile(file);
+  const heading = result.elementorTemplate.content[0]?.elements[0];
+  const editor = String(heading?.settings.editor);
+
+  assert.match(editor, /font-size:10\.909vw/);
+  assert.match(editor, /font-size:12\.273vw/);
+  assert.match(editor, /line-height:1\.21/);
+  assert.doesNotMatch(editor, /line-height:2\.118/);
+  assert.match(result.previewHtml, /line-height:1\.21/);
+  assert.doesNotMatch(result.previewHtml, /line-height:2\.118/);
+});
+
 test("Japanese Figma text records its webfont and deterministic glyph fallback", async () => {
   const file: MockFigmaFile = {
     document: {
