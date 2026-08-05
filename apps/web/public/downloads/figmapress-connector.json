@@ -1,11 +1,11 @@
 {
   "name": "FigmaPress Connector",
   "slug": "figmapress-connector",
-  "version": "0.16.10",
+  "version": "0.16.11",
   "requires": "6.4",
   "requires_php": "7.4",
   "tested": "7.0",
   "homepage": "https://figmapress-builder.vercel.app",
   "download_url": "https://figmapress-builder.vercel.app/downloads/figmapress-connector.zip",
-  "changelog": "<h4>0.16.10</h4><ul><li>Elementorがクリック伝播を停止する構成でもスマホメニューが反応するキャプチャ方式へ強化しました。</li><li>実ページ上のクリック経路に合わせてメニュー操作の互換性を改善しました。</li></ul><h4>0.16.9</h4><ul><li>Elementorがメニューボタンを再描画しても動作を維持する委譲イベント方式へ変更しました。</li><li>スマホメニューの開閉、リンク選択、外側クリック、Escapeキー操作を動的なDOMでも安定化しました。</li></ul><h4>0.16.8</h4><ul><li>Elementorが段階的に描画される環境でもスマホメニューを確実に初期化できるようにしました。</li><li>メニューボタンが現れる前に初期化済みになる競合を解消しました。</li></ul>"
+  "changelog": "<h4>0.16.11</h4><ul><li>Elementorより先にwindowでメニューボタン操作を捕捉し、競合するクリック処理を遮断します。</li><li>実ページ上でメニュー状態が直後に戻る問題への最終防御を追加しました。</li></ul><h4>0.16.10</h4><ul><li>Elementorがクリック伝播を停止する構成でもスマホメニューが反応するキャプチャ方式へ強化しました。</li><li>実ページ上のクリック経路に合わせてメニュー操作の互換性を改善しました。</li></ul><h4>0.16.9</h4><ul><li>Elementorがメニューボタンを再描画しても動作を維持する委譲イベント方式へ変更しました。</li><li>スマホメニューの開閉、リンク選択、外側クリック、Escapeキー操作を動的なDOMでも安定化しました。</li></ul>"
 }
