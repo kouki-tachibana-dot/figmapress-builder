@@ -3,7 +3,7 @@ Contributors: figmapress
 Tags: blocks, figma, gutenberg, elementor
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 0.16.14
+Stable tag: 0.16.15
 License: GPLv2 or later
 
 Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
@@ -15,6 +15,10 @@ Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
    create a draft page containing figmapress/* blocks.
 
 == Changelog ==
+= 0.16.15 =
+* 赤いスマホCTA上のハンバーガー線を白へ切り替え、視認性を確保しました。
+* 操作位置、クリック領域、アイコン表示の3層を実ページに合わせて仕上げました。
+
 = 0.16.14 =
 * スマホのハンバーガー線をCTAより前面へ表示し、操作位置を明確にしました。
 * 透明な標準チェック領域を最前面、表示アイコンをその直下に固定しました。

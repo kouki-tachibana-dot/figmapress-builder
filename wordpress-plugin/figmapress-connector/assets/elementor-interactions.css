@@ -732,6 +732,10 @@ html {
         width: 40px;
     }
 
+    .figmapress-nav--mobile .figmapress-nav__toggle > span:not(.screen-reader-text) {
+        background: #fff;
+    }
+
     .figmapress-nav--mobile .figmapress-nav__state:not([style]) {
         height: 40px;
         right: 3px;
