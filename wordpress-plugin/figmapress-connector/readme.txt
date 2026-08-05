@@ -3,7 +3,7 @@ Contributors: figmapress
 Tags: blocks, figma, gutenberg, elementor
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 0.16.6
+Stable tag: 0.16.7
 License: GPLv2 or later
 
 Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
@@ -15,6 +15,10 @@ Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
    create a draft page containing figmapress/* blocks.
 
 == Changelog ==
+= 0.16.7 =
+* スマホヘッダーのCTAとメニューアイコンへFigma座標を適用しました。
+* アコーディオンの各見出しと本文をFigma上の位置へ直接合わせ、縦方向の累積ずれを削減しました。
+
 = 0.16.6 =
 * Figmaの実測座標と縦横比をナビ、問い合わせフォーム、アコーディオンへ引き継ぐ設計寸法モードを追加しました。
 * PC・スマホで機能Widgetの高さ、入力欄、文字位置が周辺セクションとずれる問題を改善しました。

@@ -976,41 +976,36 @@ html {
 }
 
 .figmapress-accordion--fidelity details {
-    height: var(--figmapress-accordion-row-height, 5.5cqw);
-    position: relative;
-}
-
-.figmapress-accordion--fidelity details:first-child[open] {
-    height: var(--figmapress-accordion-first-height, 11.6cqw);
+    display: contents;
 }
 
 .figmapress-accordion--fidelity summary {
     font-size: var(--figmapress-accordion-title-size, 2.15cqw);
-    height: var(--figmapress-accordion-row-height, 5.5cqw);
     line-height: 1.2;
     min-height: 0;
     padding: 0;
+    position: absolute;
+    right: 3%;
 }
 
 .figmapress-accordion--fidelity .figmapress-accordion__content {
     font-size: max(12px, 1.3cqw);
-    height: calc(var(--figmapress-accordion-first-height, 11.6cqw) - var(--figmapress-accordion-row-height, 5.5cqw));
     line-height: 1.5;
     overflow: hidden;
-    padding: 0 8% 0 0;
+    background: var(--figmapress-panel, #fff);
+    padding: 0;
+    position: absolute;
+    z-index: 2;
 }
 
-.figmapress-accordion--fidelity details:not(:first-child)[open] .figmapress-accordion__content {
-    background: var(--figmapress-panel, #fff);
-    border: 1px solid var(--figmapress-accent, #d50327);
-    height: auto;
+.figmapress-accordion--fidelity summary::after {
+    background: rgba(32, 32, 32, .24);
+    bottom: calc(-1 * var(--figmapress-accordion-row-height, 5.5cqw) / 2);
+    content: "";
+    height: 1px;
     left: 0;
-    min-height: var(--figmapress-accordion-first-height, 11.6cqw);
-    padding: 3%;
     position: absolute;
     right: 0;
-    top: 100%;
-    z-index: 3;
 }
 
 .figmapress-accordion--fidelity .figmapress-accordion__icon {
@@ -1061,9 +1056,26 @@ html {
     }
 
     .figmapress-nav--fidelity .figmapress-nav__toggle {
+        margin: 0;
         position: absolute;
         right: 0;
         top: 50%;
         transform: translateY(-50%);
+    }
+
+    .figmapress-nav--fidelity .figmapress-nav__toggle[style] {
+        right: auto;
+        transform: none;
+    }
+
+    .figmapress-nav--fidelity .figmapress-nav__mobile-cta {
+        display: flex;
+        flex: none;
+        font-size: inherit;
+        height: auto;
+        min-width: 0;
+        padding: 0;
+        position: absolute;
+        width: auto;
     }
 }
