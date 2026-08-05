@@ -234,7 +234,13 @@ test("mobile navigation keeps its CTA and device-specific anchor targets", async
   assert.match(widget, /'layout_variant'/);
   assert.match(widget, /figmapress-nav--mobile/);
   assert.match(widget, /figmapress-nav__mobile-cta/);
+  assert.match(widget, /figmapress_connector_design_geometry/);
+  assert.match(widget, /figmapress-contact--fidelity/);
+  assert.match(widget, /figmapress-accordion--fidelity/);
   assert.match(style, /\.figmapress-nav--mobile/);
+  assert.match(style, /\.figmapress-nav--fidelity/);
+  assert.match(style, /\.figmapress-contact--fidelity/);
+  assert.match(style, /\.figmapress-accordion--fidelity/);
   assert.match(style, /linear-gradient\(rgba\(255, 255, 255, \.97\)/);
   assert.match(style, /\.elementor-widget-figmapress-nav[^}]*height:\s*auto/s);
   assert.match(style, /\.figmapress-nav[^}]*height:\s*auto/s);
