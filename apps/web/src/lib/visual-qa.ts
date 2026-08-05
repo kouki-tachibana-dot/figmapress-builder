@@ -16,12 +16,11 @@ export function resolveVisualQaDraftGate(input: {
   error: boolean;
   acknowledged: boolean;
 }): VisualQaDraftGate {
-  const hasFailure = input.resultStatuses.includes("fail");
+  const hasFailure = input.error || input.resultStatuses.includes("fail");
   const complete =
     input.referenceCount > 0 &&
-    input.resultStatuses.length === input.referenceCount &&
     !input.busy &&
-    !input.error;
+    (input.error || input.resultStatuses.length === input.referenceCount);
   if (!input.enabled || input.referenceCount <= 0) {
     return { state: "off", blocksDraft: false, complete, hasFailure };
   }

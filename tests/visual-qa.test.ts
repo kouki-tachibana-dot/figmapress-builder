@@ -416,6 +416,34 @@ test("Elementor visual QA gate blocks only incomplete or unacknowledged failures
   });
   assert.equal(acknowledged.blocksDraft, false);
 
+  const unavailable = resolveVisualQaDraftGate({
+    enabled: true,
+    referenceCount: 2,
+    resultStatuses: [],
+    busy: false,
+    error: true,
+    acknowledged: false,
+  });
+  assert.deepEqual(
+    {
+      state: unavailable.state,
+      blocksDraft: unavailable.blocksDraft,
+      complete: unavailable.complete,
+      hasFailure: unavailable.hasFailure,
+    },
+    { state: "warning", blocksDraft: true, complete: true, hasFailure: true },
+  );
+
+  const unavailableAcknowledged = resolveVisualQaDraftGate({
+    enabled: true,
+    referenceCount: 2,
+    resultStatuses: [],
+    busy: false,
+    error: true,
+    acknowledged: true,
+  });
+  assert.equal(unavailableAcknowledged.blocksDraft, false);
+
   const gutenberg = resolveVisualQaDraftGate({
     enabled: false,
     referenceCount: 2,

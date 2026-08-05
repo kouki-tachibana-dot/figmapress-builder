@@ -1934,7 +1934,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.25.2 live</span>
+          <span className="status-pill"><i /> v0.25.3 live</span>
         </nav>
       </header>
 
@@ -2767,8 +2767,8 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                     type="checkbox"
                   />
                   <span>
-                    <strong>重大な視覚差分を確認しました</strong>
-                    <small>差分レポートを確認したうえで、調整用のElementor下書きを作成します。</small>
+                    <strong>{visualQaError ? "自動比較を完了できませんでした" : "重大な視覚差分を確認しました"}</strong>
+                    <small>{visualQaError ? "生成プレビューを手動確認したうえで、調整用のElementor下書きを作成します。" : "差分レポートを確認したうえで、調整用のElementor下書きを作成します。"}</small>
                   </span>
                 </label>
               )}
@@ -2923,7 +2923,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.25.2</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.25.3</span></div>
       </footer>
     </main>
   );
