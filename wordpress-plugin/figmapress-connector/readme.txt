@@ -3,7 +3,7 @@ Contributors: figmapress
 Tags: blocks, figma, gutenberg, elementor
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 0.16.5
+Stable tag: 0.16.6
 License: GPLv2 or later
 
 Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
@@ -15,6 +15,10 @@ Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
    create a draft page containing figmapress/* blocks.
 
 == Changelog ==
+= 0.16.6 =
+* Figmaの実測座標と縦横比をナビ、問い合わせフォーム、アコーディオンへ引き継ぐ設計寸法モードを追加しました。
+* PC・スマホで機能Widgetの高さ、入力欄、文字位置が周辺セクションとずれる問題を改善しました。
+
 = 0.16.5 =
 * 機能Widget CSSに古い比較エンジン向けの色フォールバックを追加しました。
 * 実ページVisual QAがcolor-mix()で停止する互換性問題を修正しました。

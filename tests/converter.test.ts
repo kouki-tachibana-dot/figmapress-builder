@@ -993,6 +993,15 @@ test("Figma interaction layers become functional Elementor widgets", async () =>
   assert.equal((accordion?.settings.items as Array<{ title: string }>).length, 4);
   assert.equal((accordion?.settings.items as Array<{ content: string }>)[0]?.content, "活動内容");
   assert.equal(form?.settings._element_id, "contact");
+  assert.deepEqual(
+    JSON.parse(String(navigation?.settings.design_geometry)).root,
+    { width: 1920, height: 115 },
+  );
+  assert.deepEqual(
+    JSON.parse(String(form?.settings.design_geometry)).root,
+    { width: 1920, height: 900 },
+  );
+  assert.ok(JSON.parse(String(accordion?.settings.design_geometry)).root.height > 0);
   assert.ok(elements.some((element) => element.settings._element_id === "thoughts"));
 });
 

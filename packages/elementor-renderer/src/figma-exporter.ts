@@ -96,6 +96,8 @@ interface FigmaVisualAsset {
 interface AccordionItem {
   title: string;
   content: string;
+  titleBounds?: FigmaBounds;
+  contentBounds?: FigmaBounds;
 }
 
 interface AccordionPlan {
@@ -439,6 +441,9 @@ function navigationElement(
   );
   const background = descendants(node).find((child) => /nav bar background/i.test(child.name));
   const topBar = descendants(node).find((child) => /top bar/i.test(child.name));
+  const ctaBackground = ctaText?.absoluteBoundingBox
+    ? smallestContainingVisual(node, ctaText.absoluteBoundingBox)
+    : undefined;
 
   const settings: ElementorSettings = {
     ...widgetPosition(node, bounds, parentBounds, parentNode),
@@ -470,6 +475,20 @@ function navigationElement(
     background_color: solidColor(background?.fills) ?? "rgba(255,255,255,0.92)",
     accent_color: solidColor(topBar?.fills) ?? "#D10B2C",
     text_color: solidColor(menuTexts[0]?.fills) ?? "#202020",
+    design_geometry: JSON.stringify({
+      root: { width: round(bounds.width), height: round(bounds.height) },
+      background: relativeDesignBox(background?.absoluteBoundingBox, bounds),
+      topBar: relativeDesignBox(topBar?.absoluteBoundingBox, bounds),
+      logo: relativeDesignBox(logoNode?.absoluteBoundingBox, bounds),
+      items: menuTexts.map((item) => ({
+        ...relativeDesignBox(item.absoluteBoundingBox, bounds),
+        ...designTextStyle(item, bounds.width),
+      })),
+      cta: {
+        ...relativeDesignBox(ctaBackground?.absoluteBoundingBox, bounds),
+        ...designTextStyle(ctaText, bounds.width),
+      },
+    }),
   };
   applyEffects(settings, node);
   return widget(context.ids, node.id, "figmapress-nav", settings);
@@ -497,7 +516,15 @@ function contactFormElement(
 
   const exact = (pattern: RegExp, fallback: string): string =>
     copy.find((value) => pattern.test(value)) ?? fallback;
-  const title = copy.find((value) => /声を聞かせて|お問い合わせ|ご相談ください/.test(value)) ?? "お問い合わせ";
+  const titleNode = texts.find((child) => /声を聞かせて|お問い合わせ|ご相談ください/.test(child.characters ?? ""));
+  const title = titleNode?.characters?.trim() ?? "お問い合わせ";
+  const nameNode = texts.find((child) => /^(?:お名前|氏名|name)$/i.test(child.characters?.trim() ?? ""));
+  const emailNode = texts.find((child) => /メールアドレス|e-?mail/i.test(child.characters?.trim() ?? ""));
+  const regionNode = texts.find((child) => /お住まいの地域|地域|area/i.test(child.characters?.trim() ?? ""));
+  const messageNode = texts.find((child) => /ご相談・ご意見の内容|お問い合わせ内容|message/i.test(child.characters?.trim() ?? ""));
+  const replyNode = texts.find((child) => /^返信希望$/.test(child.characters?.trim() ?? ""));
+  const replyYesNode = texts.find((child) => /^希望する$/.test(child.characters?.trim() ?? ""));
+  const replyNoNode = texts.find((child) => /^希望しない$/.test(child.characters?.trim() ?? ""));
   const panel = descendants(node).find((child) => {
     const childBounds = child.absoluteBoundingBox;
     return childBounds && childBounds.width > bounds.width * 0.4 && childBounds.width < bounds.width * 0.9
@@ -517,6 +544,40 @@ function contactFormElement(
       && candidate.width > buttonBounds.width && candidate.height > buttonBounds.height
       && candidate.height < bounds.height * 0.2;
   }) : undefined;
+  const controlCandidates = descendants(node).filter((child) => {
+    const candidate = child.absoluteBoundingBox;
+    if (!candidate || child === panel || child === buttonBackground || child.type === "TEXT") return false;
+    if (!solidColor(child.fills)) return false;
+    return candidate.width > bounds.width * 0.18
+      && candidate.width < bounds.width * 0.75
+      && candidate.height > bounds.height * 0.025
+      && candidate.height < bounds.height * 0.3;
+  });
+  const controlFor = (labelNode: FigmaNode | undefined): FigmaNode | undefined => {
+    const labelBounds = labelNode?.absoluteBoundingBox;
+    if (!labelBounds) return undefined;
+    const labelCenterY = labelBounds.y + labelBounds.height / 2;
+    return controlCandidates
+      .filter((candidate) => {
+        const candidateBounds = candidate.absoluteBoundingBox as FigmaBounds;
+        return candidateBounds.x > labelBounds.x + labelBounds.width
+          && labelCenterY >= candidateBounds.y - candidateBounds.height * 0.35
+          && labelCenterY <= candidateBounds.y + candidateBounds.height * 1.35;
+      })
+      .sort((left, right) => {
+        const leftBounds = left.absoluteBoundingBox as FigmaBounds;
+        const rightBounds = right.absoluteBoundingBox as FigmaBounds;
+        return Math.abs((leftBounds.y + leftBounds.height / 2) - labelCenterY)
+          - Math.abs((rightBounds.y + rightBounds.height / 2) - labelCenterY);
+      })[0];
+  };
+  const fieldGeometry = (labelNode: FigmaNode | undefined) => ({
+    label: {
+      ...relativeDesignBox(labelNode?.absoluteBoundingBox, bounds),
+      ...designTextStyle(labelNode, bounds.width),
+    },
+    control: relativeDesignBox(controlFor(labelNode)?.absoluteBoundingBox, bounds),
+  });
 
   const settings: ElementorSettings = {
     ...widgetPosition(node, bounds, parentBounds, parentNode),
@@ -536,6 +597,44 @@ function contactFormElement(
     panel_color: solidColor(panel?.fills) ?? "#FFE2E8",
     text_color: "#202020",
     success_message: "送信しました。お問い合わせありがとうございます。",
+    design_geometry: JSON.stringify({
+      root: { width: round(bounds.width), height: round(bounds.height) },
+      panel: relativeDesignBox(panel?.absoluteBoundingBox, bounds),
+      title: {
+        ...relativeDesignBox(titleNode?.absoluteBoundingBox, bounds),
+        ...designTextStyle(titleNode, bounds.width),
+      },
+      fields: {
+        name: fieldGeometry(nameNode),
+        email: fieldGeometry(emailNode),
+        region: fieldGeometry(regionNode),
+        message: fieldGeometry(messageNode),
+      },
+      reply: {
+        label: {
+          ...relativeDesignBox(replyNode?.absoluteBoundingBox, bounds),
+          ...designTextStyle(replyNode, bounds.width),
+        },
+        yes: {
+          ...relativeDesignBox(replyYesNode?.absoluteBoundingBox, bounds),
+          ...designTextStyle(replyYesNode, bounds.width),
+        },
+        no: {
+          ...relativeDesignBox(replyNoNode?.absoluteBoundingBox, bounds),
+          ...designTextStyle(replyNoNode, bounds.width),
+        },
+      },
+      button: {
+        box: {
+          ...relativeDesignBox(buttonBackground?.absoluteBoundingBox, bounds),
+          ...designTextStyle(buttonNode, bounds.width),
+        },
+        text: {
+          ...relativeDesignBox(buttonNode?.absoluteBoundingBox, bounds),
+          ...designTextStyle(buttonNode, bounds.width),
+        },
+      },
+    }),
   };
   applyEffects(settings, node);
   return widget(context.ids, node.id, "figmapress-contact-form", settings);
@@ -706,7 +805,19 @@ function accordionPlan(node: FigmaNode): AccordionPlan | null {
       .sort((left, right) => (left.absoluteBoundingBox?.y ?? 0) - (right.absoluteBoundingBox?.y ?? 0))
       .map((child) => child.characters?.trim() ?? "")
       .join("\n");
-    return { title: title.characters?.trim() ?? `項目 ${index + 1}`, content };
+    const contentNodes = all
+      .filter((child) => child.type === "TEXT" && child !== title && child.characters?.trim() && child.absoluteBoundingBox)
+      .filter((child) => {
+        const candidate = child.absoluteBoundingBox as FigmaBounds;
+        return candidate.y > titleBounds.y + 8 && candidate.y < nextY - 6
+          && candidate.x >= x && candidate.x <= x + width;
+      });
+    return {
+      title: title.characters?.trim() ?? `項目 ${index + 1}`,
+      content,
+      titleBounds,
+      contentBounds: unionBounds(contentNodes.map((child) => child.absoluteBoundingBox as FigmaBounds)),
+    };
   });
   return { bounds: { x, y, width, height: Math.max(120, bottom - y) }, items };
 }
@@ -732,7 +843,69 @@ function accordionElement(
     accent_color: "#D50327",
     background_color: "#FFFFFF",
     text_color: "#202020",
+    design_geometry: JSON.stringify({
+      root: { width: round(plan.bounds.width), height: round(plan.bounds.height) },
+      items: plan.items.map((item) => ({
+        title: relativeDesignBox(item.titleBounds, plan.bounds),
+        content: relativeDesignBox(item.contentBounds, plan.bounds),
+      })),
+    }),
   });
+}
+
+function relativeDesignBox(
+  box: FigmaBounds | undefined,
+  root: FigmaBounds,
+): { x: number; y: number; width: number; height: number } | null {
+  if (!box || root.width <= 0 || root.height <= 0) return null;
+  return {
+    x: round(percent(box.x - root.x, root.width)),
+    y: round(percent(box.y - root.y, root.height)),
+    width: round(percent(box.width, root.width)),
+    height: round(percent(box.height, root.height)),
+  };
+}
+
+function designTextStyle(
+  node: FigmaNode | undefined,
+  rootWidth: number,
+): { fontSize: number; fontWeight: number; letterSpacing: number } {
+  const style = node?.style ?? {};
+  return {
+    fontSize: round(percent(style.fontSize ?? 16, rootWidth)),
+    fontWeight: round(style.fontWeight ?? 400),
+    letterSpacing: round(percent(style.letterSpacing ?? 0, rootWidth)),
+  };
+}
+
+function smallestContainingVisual(node: FigmaNode, target: FigmaBounds): FigmaNode | undefined {
+  const centerX = target.x + target.width / 2;
+  const centerY = target.y + target.height / 2;
+  return descendants(node)
+    .filter((candidate) => {
+      const box = candidate.absoluteBoundingBox;
+      return Boolean(
+        box
+        && candidate.type !== "TEXT"
+        && solidColor(candidate.fills)
+        && centerX >= box.x
+        && centerX <= box.x + box.width
+        && centerY >= box.y
+        && centerY <= box.y + box.height
+        && box.width >= target.width
+        && box.height >= target.height,
+      );
+    })
+    .sort((left, right) => area(left) - area(right))[0];
+}
+
+function unionBounds(boxes: FigmaBounds[]): FigmaBounds | undefined {
+  if (!boxes.length) return undefined;
+  const left = Math.min(...boxes.map((box) => box.x));
+  const top = Math.min(...boxes.map((box) => box.y));
+  const right = Math.max(...boxes.map((box) => box.x + box.width));
+  const bottom = Math.max(...boxes.map((box) => box.y + box.height));
+  return { x: left, y: top, width: right - left, height: bottom - top };
 }
 
 function descendants(node: FigmaNode): FigmaNode[] {

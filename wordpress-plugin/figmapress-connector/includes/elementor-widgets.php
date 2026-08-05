@@ -17,6 +17,56 @@ function figmapress_connector_css_color( $value, $fallback ) {
     return $fallback;
 }
 
+/** Decode Figma geometry stored in an Elementor hidden setting. */
+function figmapress_connector_design_geometry( $settings ) {
+    $raw = isset( $settings['design_geometry'] ) ? $settings['design_geometry'] : '';
+    if ( ! is_string( $raw ) || '' === $raw ) {
+        return null;
+    }
+    $geometry = json_decode( $raw, true );
+    return is_array( $geometry ) ? $geometry : null;
+}
+
+/** Convert a normalized Figma box into safe inline positioning. */
+function figmapress_connector_geometry_style( $box, $include_text = false ) {
+    if ( ! is_array( $box ) ) {
+        return '';
+    }
+    $style = '';
+    foreach ( array( 'x' => 'left', 'y' => 'top', 'width' => 'width', 'height' => 'height' ) as $key => $property ) {
+        if ( isset( $box[ $key ] ) && is_numeric( $box[ $key ] ) ) {
+            $style .= $property . ':' . (float) $box[ $key ] . '%;';
+        }
+    }
+    if ( $include_text ) {
+        if ( isset( $box['fontSize'] ) && is_numeric( $box['fontSize'] ) ) {
+            $style .= 'font-size:' . (float) $box['fontSize'] . 'cqw;';
+        }
+        if ( isset( $box['fontWeight'] ) && is_numeric( $box['fontWeight'] ) ) {
+            $style .= 'font-weight:' . max( 100, min( 900, (int) $box['fontWeight'] ) ) . ';';
+        }
+        if ( isset( $box['letterSpacing'] ) && is_numeric( $box['letterSpacing'] ) ) {
+            $style .= 'letter-spacing:' . (float) $box['letterSpacing'] . 'cqw;';
+        }
+    }
+    return $style;
+}
+
+/** Preserve a Figma component's imported width-to-height ratio. */
+function figmapress_connector_aspect_style( $geometry ) {
+    if (
+        ! is_array( $geometry )
+        || ! isset( $geometry['root']['width'], $geometry['root']['height'] )
+        || ! is_numeric( $geometry['root']['width'] )
+        || ! is_numeric( $geometry['root']['height'] )
+        || (float) $geometry['root']['width'] <= 0
+        || (float) $geometry['root']['height'] <= 0
+    ) {
+        return '';
+    }
+    return 'aspect-ratio:' . (float) $geometry['root']['width'] . '/' . (float) $geometry['root']['height'] . ';';
+}
+
 abstract class FigmaPress_Widget_Base extends \Elementor\Widget_Base {
     public function get_categories() {
         return array( 'figmapress' );
@@ -113,6 +163,13 @@ final class FigmaPress_Nav_Widget extends FigmaPress_Widget_Base {
                 'default' => 'single',
             )
         );
+        $this->add_control(
+            'design_geometry',
+            array(
+                'type'    => \Elementor\Controls_Manager::HIDDEN,
+                'default' => '',
+            )
+        );
         $this->end_controls_section();
 
         $this->start_controls_section(
@@ -150,10 +207,16 @@ final class FigmaPress_Nav_Widget extends FigmaPress_Widget_Base {
         $background = figmapress_connector_css_color( isset( $settings['background_color'] ) ? $settings['background_color'] : '', '#FFFFFF' );
         $accent     = figmapress_connector_css_color( isset( $settings['accent_color'] ) ? $settings['accent_color'] : '', '#D10B2C' );
         $text       = figmapress_connector_css_color( isset( $settings['text_color'] ) ? $settings['text_color'] : '', '#202020' );
+        $geometry   = figmapress_connector_design_geometry( $settings );
+        $fidelity   = is_array( $geometry );
+        $nav_style  = '--figmapress-nav-bg:' . $background . ';--figmapress-accent:' . $accent . ';--figmapress-text:' . $text . ';' . figmapress_connector_aspect_style( $geometry );
         ?>
-        <nav class="figmapress-nav<?php echo $is_mobile ? ' figmapress-nav--mobile' : ''; ?>" aria-label="<?php esc_attr_e( 'メインナビゲーション', 'figmapress-connector' ); ?>" style="--figmapress-nav-bg:<?php echo esc_attr( $background ); ?>;--figmapress-accent:<?php echo esc_attr( $accent ); ?>;--figmapress-text:<?php echo esc_attr( $text ); ?>">
+        <nav class="figmapress-nav<?php echo $is_mobile ? ' figmapress-nav--mobile' : ''; ?><?php echo $fidelity ? ' figmapress-nav--fidelity' : ''; ?>" aria-label="<?php esc_attr_e( 'メインナビゲーション', 'figmapress-connector' ); ?>" style="<?php echo esc_attr( $nav_style ); ?>">
+            <?php if ( $fidelity && ! empty( $geometry['topBar'] ) ) : ?>
+                <span class="figmapress-nav__topbar" aria-hidden="true" style="<?php echo esc_attr( figmapress_connector_geometry_style( $geometry['topBar'] ) ); ?>"></span>
+            <?php endif; ?>
             <?php if ( $logo ) : ?>
-                <a class="figmapress-nav__logo" href="<?php echo esc_url( $home_url ); ?>" aria-label="<?php esc_attr_e( 'ページ先頭', 'figmapress-connector' ); ?>"><img src="<?php echo esc_url( $logo ); ?>" alt="<?php esc_attr_e( 'サイトロゴ', 'figmapress-connector' ); ?>"></a>
+                <a class="figmapress-nav__logo" href="<?php echo esc_url( $home_url ); ?>" aria-label="<?php esc_attr_e( 'ページ先頭', 'figmapress-connector' ); ?>"<?php echo $fidelity && ! empty( $geometry['logo'] ) ? ' style="' . esc_attr( figmapress_connector_geometry_style( $geometry['logo'] ) ) . '"' : ''; ?>><img src="<?php echo esc_url( $logo ); ?>" alt="<?php esc_attr_e( 'サイトロゴ', 'figmapress-connector' ); ?>"></a>
             <?php endif; ?>
             <button class="figmapress-nav__toggle" type="button" aria-controls="<?php echo esc_attr( $menu_id ); ?>" aria-expanded="false"><span></span><span></span><span></span><span class="screen-reader-text"><?php esc_html_e( 'メニューを開く', 'figmapress-connector' ); ?></span></button>
             <?php if ( $is_mobile && ! empty( $settings['cta_label'] ) ) : ?>
@@ -161,14 +224,15 @@ final class FigmaPress_Nav_Widget extends FigmaPress_Widget_Base {
             <?php endif; ?>
             <div class="figmapress-nav__panel" id="<?php echo esc_attr( $menu_id ); ?>">
                 <ul class="figmapress-nav__items">
-                    <?php foreach ( $items as $item ) :
+                    <?php foreach ( $items as $index => $item ) :
                         $url = isset( $item['url']['url'] ) ? $item['url']['url'] : '#';
+                        $item_geometry = $fidelity && isset( $geometry['items'][ $index ] ) ? $geometry['items'][ $index ] : null;
                         ?>
-                        <li><a href="<?php echo esc_url( $url ); ?>"><?php echo esc_html( isset( $item['label'] ) ? $item['label'] : '' ); ?></a></li>
+                        <li<?php echo $item_geometry ? ' style="' . esc_attr( figmapress_connector_geometry_style( $item_geometry, true ) ) . '"' : ''; ?>><a href="<?php echo esc_url( $url ); ?>"><?php echo esc_html( isset( $item['label'] ) ? $item['label'] : '' ); ?></a></li>
                     <?php endforeach; ?>
                 </ul>
                 <?php if ( ! empty( $settings['cta_label'] ) ) : ?>
-                    <a class="figmapress-nav__cta" href="<?php echo esc_url( $cta_url ); ?>"><?php echo esc_html( $settings['cta_label'] ); ?></a>
+                    <a class="figmapress-nav__cta" href="<?php echo esc_url( $cta_url ); ?>"<?php echo $fidelity && ! empty( $geometry['cta'] ) ? ' style="' . esc_attr( figmapress_connector_geometry_style( $geometry['cta'], true ) ) . '"' : ''; ?>><?php echo esc_html( $settings['cta_label'] ); ?></a>
                 <?php endif; ?>
             </div>
         </nav>
@@ -436,6 +500,13 @@ final class FigmaPress_Contact_Form_Widget extends FigmaPress_Widget_Base {
                 'input_type'  => 'email',
             )
         );
+        $this->add_control(
+            'design_geometry',
+            array(
+                'type'    => \Elementor\Controls_Manager::HIDDEN,
+                'default' => '',
+            )
+        );
         $this->end_controls_section();
 
         $this->start_controls_section(
@@ -473,21 +544,30 @@ final class FigmaPress_Contact_Form_Widget extends FigmaPress_Widget_Base {
         $field       = function ( $key, $fallback ) use ( $settings ) {
             return isset( $settings[ $key ] ) && '' !== $settings[ $key ] ? $settings[ $key ] : $fallback;
         };
+        $geometry    = figmapress_connector_design_geometry( $settings );
+        $fidelity    = is_array( $geometry );
+        $root_style  = '--figmapress-panel:' . $panel . ';--figmapress-accent:' . $accent . ';--figmapress-text:' . $text . ';' . figmapress_connector_aspect_style( $geometry );
+        $field_box   = function ( $name, $part ) use ( $geometry ) {
+            return is_array( $geometry ) && isset( $geometry['fields'][ $name ][ $part ] )
+                ? $geometry['fields'][ $name ][ $part ]
+                : null;
+        };
         ?>
-        <section class="figmapress-contact" style="--figmapress-panel:<?php echo esc_attr( $panel ); ?>;--figmapress-accent:<?php echo esc_attr( $accent ); ?>;--figmapress-text:<?php echo esc_attr( $text ); ?>">
-            <h2><?php echo esc_html( $field( 'title', 'お問い合わせ' ) ); ?></h2>
+        <section class="figmapress-contact<?php echo $fidelity ? ' figmapress-contact--fidelity' : ''; ?>" style="<?php echo esc_attr( $root_style ); ?>">
+            <?php if ( $fidelity && ! empty( $geometry['panel'] ) ) : ?><span class="figmapress-contact__panel" aria-hidden="true" style="<?php echo esc_attr( figmapress_connector_geometry_style( $geometry['panel'] ) ); ?>"></span><?php endif; ?>
+            <h2<?php echo $fidelity && ! empty( $geometry['title'] ) ? ' style="' . esc_attr( figmapress_connector_geometry_style( $geometry['title'], true ) ) . '"' : ''; ?>><?php echo esc_html( $field( 'title', 'お問い合わせ' ) ); ?></h2>
             <form class="figmapress-contact__form" data-endpoint="<?php echo esc_url( rest_url( 'figmapress/v1/contact' ) ); ?>" novalidate>
                 <input type="hidden" name="page_id" value="<?php echo esc_attr( $page_id ); ?>">
                 <input type="hidden" name="widget_id" value="<?php echo esc_attr( $this->get_id() ); ?>">
                 <input type="hidden" name="rendered_at" value="<?php echo esc_attr( $rendered_at ); ?>">
                 <input type="hidden" name="form_token" value="<?php echo esc_attr( $token ); ?>">
                 <label class="figmapress-contact__honeypot" aria-hidden="true">Website<input type="text" name="website" tabindex="-1" autocomplete="off"></label>
-                <label><span><?php echo esc_html( $field( 'name_label', 'お名前' ) ); ?></span><input name="name" type="text" maxlength="120" autocomplete="name" required></label>
-                <label><span><?php echo esc_html( $field( 'email_label', 'メールアドレス' ) ); ?></span><input name="email" type="email" maxlength="254" autocomplete="email" required></label>
-                <label><span><?php echo esc_html( $field( 'region_label', 'お住まいの地域' ) ); ?></span><input name="region" type="text" maxlength="160" autocomplete="address-level1"></label>
-                <label><span><?php echo esc_html( $field( 'message_label', 'ご相談・ご意見の内容' ) ); ?></span><textarea name="message" maxlength="5000" rows="6" required></textarea></label>
-                <fieldset><legend><?php echo esc_html( $field( 'reply_label', '返信希望' ) ); ?></legend><label><input name="reply_preference" type="radio" value="yes" checked> <?php echo esc_html( $field( 'reply_yes_label', '希望する' ) ); ?></label><label><input name="reply_preference" type="radio" value="no"> <?php echo esc_html( $field( 'reply_no_label', '希望しない' ) ); ?></label></fieldset>
-                <button type="submit"><?php echo esc_html( $field( 'button_text', '送信する' ) ); ?></button>
+                <label class="figmapress-contact__field figmapress-contact__field--name"><span<?php echo $fidelity ? ' style="' . esc_attr( figmapress_connector_geometry_style( $field_box( 'name', 'label' ), true ) ) . '"' : ''; ?>><?php echo esc_html( $field( 'name_label', 'お名前' ) ); ?></span><input name="name" type="text" maxlength="120" autocomplete="name" required<?php echo $fidelity ? ' style="' . esc_attr( figmapress_connector_geometry_style( $field_box( 'name', 'control' ) ) ) . '"' : ''; ?>></label>
+                <label class="figmapress-contact__field figmapress-contact__field--email"><span<?php echo $fidelity ? ' style="' . esc_attr( figmapress_connector_geometry_style( $field_box( 'email', 'label' ), true ) ) . '"' : ''; ?>><?php echo esc_html( $field( 'email_label', 'メールアドレス' ) ); ?></span><input name="email" type="email" maxlength="254" autocomplete="email" required<?php echo $fidelity ? ' style="' . esc_attr( figmapress_connector_geometry_style( $field_box( 'email', 'control' ) ) ) . '"' : ''; ?>></label>
+                <label class="figmapress-contact__field figmapress-contact__field--region"><span<?php echo $fidelity ? ' style="' . esc_attr( figmapress_connector_geometry_style( $field_box( 'region', 'label' ), true ) ) . '"' : ''; ?>><?php echo esc_html( $field( 'region_label', 'お住まいの地域' ) ); ?></span><input name="region" type="text" maxlength="160" autocomplete="address-level1"<?php echo $fidelity ? ' style="' . esc_attr( figmapress_connector_geometry_style( $field_box( 'region', 'control' ) ) ) . '"' : ''; ?>></label>
+                <label class="figmapress-contact__field figmapress-contact__field--message"><span<?php echo $fidelity ? ' style="' . esc_attr( figmapress_connector_geometry_style( $field_box( 'message', 'label' ), true ) ) . '"' : ''; ?>><?php echo esc_html( $field( 'message_label', 'ご相談・ご意見の内容' ) ); ?></span><textarea name="message" maxlength="5000" rows="6" required<?php echo $fidelity ? ' style="' . esc_attr( figmapress_connector_geometry_style( $field_box( 'message', 'control' ) ) ) . '"' : ''; ?>></textarea></label>
+                <fieldset><legend<?php echo $fidelity && ! empty( $geometry['reply']['label'] ) ? ' style="' . esc_attr( figmapress_connector_geometry_style( $geometry['reply']['label'], true ) ) . '"' : ''; ?>><?php echo esc_html( $field( 'reply_label', '返信希望' ) ); ?></legend><label class="figmapress-contact__reply figmapress-contact__reply--yes"<?php echo $fidelity && ! empty( $geometry['reply']['yes'] ) ? ' style="' . esc_attr( figmapress_connector_geometry_style( $geometry['reply']['yes'], true ) ) . '"' : ''; ?>><input name="reply_preference" type="radio" value="yes" checked><span><?php echo esc_html( $field( 'reply_yes_label', '希望する' ) ); ?></span></label><label class="figmapress-contact__reply figmapress-contact__reply--no"<?php echo $fidelity && ! empty( $geometry['reply']['no'] ) ? ' style="' . esc_attr( figmapress_connector_geometry_style( $geometry['reply']['no'], true ) ) . '"' : ''; ?>><input name="reply_preference" type="radio" value="no"><span><?php echo esc_html( $field( 'reply_no_label', '希望しない' ) ); ?></span></label></fieldset>
+                <button type="submit"<?php echo $fidelity && ! empty( $geometry['button']['box'] ) ? ' style="' . esc_attr( figmapress_connector_geometry_style( $geometry['button']['box'], true ) ) . '"' : ''; ?>><?php echo esc_html( $field( 'button_text', '送信する' ) ); ?></button>
                 <p class="figmapress-contact__status" data-success="<?php echo esc_attr( $field( 'success_message', '送信しました。お問い合わせありがとうございます。' ) ); ?>" aria-live="polite"></p>
             </form>
         </section>
@@ -555,6 +635,13 @@ final class FigmaPress_Accordion_Widget extends FigmaPress_Widget_Base {
                 'return_value' => 'yes',
             )
         );
+        $this->add_control(
+            'design_geometry',
+            array(
+                'type'    => \Elementor\Controls_Manager::HIDDEN,
+                'default' => '',
+            )
+        );
         $this->end_controls_section();
 
         $this->start_controls_section(
@@ -587,8 +674,26 @@ final class FigmaPress_Accordion_Widget extends FigmaPress_Widget_Base {
         $background = figmapress_connector_css_color( isset( $settings['background_color'] ) ? $settings['background_color'] : '', '#FFFFFF' );
         $accent     = figmapress_connector_css_color( isset( $settings['accent_color'] ) ? $settings['accent_color'] : '', '#D50327' );
         $text       = figmapress_connector_css_color( isset( $settings['text_color'] ) ? $settings['text_color'] : '', '#202020' );
+        $geometry   = figmapress_connector_design_geometry( $settings );
+        $fidelity   = is_array( $geometry );
+        $root_width = $fidelity && isset( $geometry['root']['width'] ) ? (float) $geometry['root']['width'] : 0;
+        $root_height = $fidelity && isset( $geometry['root']['height'] ) ? (float) $geometry['root']['height'] : 0;
+        $accordion_style = '--figmapress-panel:' . $background . ';--figmapress-accent:' . $accent . ';--figmapress-text:' . $text . ';' . figmapress_connector_aspect_style( $geometry );
+        if ( $root_width > 0 && $root_height > 0 && ! empty( $geometry['items'][0]['title'] ) ) {
+            $first_title = $geometry['items'][0]['title'];
+            $accordion_style .= '--figmapress-accordion-title-x:' . (float) $first_title['x'] . '%;';
+            $accordion_style .= '--figmapress-accordion-title-size:' . ( (float) $first_title['height'] * $root_height / $root_width / 1.2 ) . 'cqw;';
+            if ( ! empty( $geometry['items'][1]['title'] ) ) {
+                $first_step = ( (float) $geometry['items'][1]['title']['y'] - (float) $first_title['y'] ) * $root_height / $root_width;
+                $accordion_style .= '--figmapress-accordion-first-height:' . $first_step . 'cqw;';
+            }
+            if ( ! empty( $geometry['items'][2]['title'] ) && ! empty( $geometry['items'][1]['title'] ) ) {
+                $row_step = ( (float) $geometry['items'][2]['title']['y'] - (float) $geometry['items'][1]['title']['y'] ) * $root_height / $root_width;
+                $accordion_style .= '--figmapress-accordion-row-height:' . $row_step . 'cqw;';
+            }
+        }
         ?>
-        <div class="figmapress-accordion" data-multiple="<?php echo 'yes' === ( isset( $settings['allow_multiple'] ) ? $settings['allow_multiple'] : '' ) ? 'true' : 'false'; ?>" style="--figmapress-panel:<?php echo esc_attr( $background ); ?>;--figmapress-accent:<?php echo esc_attr( $accent ); ?>;--figmapress-text:<?php echo esc_attr( $text ); ?>">
+        <div class="figmapress-accordion<?php echo $fidelity ? ' figmapress-accordion--fidelity' : ''; ?>" data-multiple="<?php echo 'yes' === ( isset( $settings['allow_multiple'] ) ? $settings['allow_multiple'] : '' ) ? 'true' : 'false'; ?>" style="<?php echo esc_attr( $accordion_style ); ?>">
             <?php foreach ( $items as $index => $item ) : ?>
                 <details<?php echo 0 === $index && 'yes' === ( isset( $settings['open_first'] ) ? $settings['open_first'] : 'yes' ) ? ' open' : ''; ?>>
                     <summary><span><?php echo esc_html( isset( $item['title'] ) ? $item['title'] : '' ); ?></span><span class="figmapress-accordion__icon" aria-hidden="true"></span></summary>

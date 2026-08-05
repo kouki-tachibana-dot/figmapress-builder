@@ -773,3 +773,297 @@ html {
         padding-right: 8px;
     }
 }
+
+/*
+ * High-fidelity mode uses the normalized geometry imported with each Figma
+ * component. The controls remain native and editable, while their resting
+ * state follows the source frame instead of a one-size-fits-all layout.
+ */
+.figmapress-nav--fidelity {
+    border: 0;
+    container-type: inline-size;
+    display: block;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+    position: relative;
+}
+
+.figmapress-nav--fidelity .figmapress-nav__topbar {
+    background: var(--figmapress-accent, #d10b2c);
+    display: block;
+    position: absolute;
+}
+
+.figmapress-nav--fidelity .figmapress-nav__logo {
+    display: block;
+    margin: 0;
+    padding: 0;
+    position: absolute;
+}
+
+.figmapress-nav--fidelity .figmapress-nav__logo img {
+    height: 100%;
+    max-width: none;
+    object-fit: contain;
+    width: 100%;
+}
+
+.figmapress-nav--fidelity .figmapress-nav__panel,
+.figmapress-nav--fidelity .figmapress-nav__items {
+    display: block;
+    inset: 0;
+    margin: 0;
+    padding: 0;
+    position: absolute;
+}
+
+.figmapress-nav--fidelity .figmapress-nav__panel {
+    background: transparent;
+    box-shadow: none;
+}
+
+.figmapress-nav--fidelity .figmapress-nav__items li {
+    display: block;
+    line-height: 1.2;
+    position: absolute;
+}
+
+.figmapress-nav--fidelity .figmapress-nav__items a,
+.figmapress-nav--fidelity .figmapress-nav__cta {
+    align-items: center;
+    display: flex;
+    font-size: inherit;
+    font-weight: inherit;
+    height: 100%;
+    justify-content: center;
+    letter-spacing: inherit;
+    min-height: 0;
+    min-width: 0;
+    padding: 0;
+    width: 100%;
+}
+
+.figmapress-nav--fidelity .figmapress-nav__cta {
+    border-radius: 0 0 0 min(10px, .521cqw);
+    line-height: 1.2;
+    position: absolute;
+}
+
+.figmapress-contact--fidelity {
+    container-type: inline-size;
+    height: auto;
+    min-height: 0 !important;
+    overflow: visible;
+    padding: 0 !important;
+    position: relative;
+}
+
+.figmapress-contact--fidelity .figmapress-contact__panel {
+    background: var(--figmapress-panel, #ffe2e8);
+    display: block;
+    position: absolute;
+}
+
+.figmapress-contact--fidelity h2 {
+    align-items: center;
+    display: flex;
+    justify-content: center;
+    line-height: 1.2;
+    margin: 0;
+    max-width: none;
+    padding: 0;
+    position: absolute;
+    white-space: nowrap;
+}
+
+.figmapress-contact--fidelity .figmapress-contact__form {
+    background: transparent;
+    inset: 0;
+    margin: 0;
+    max-width: none;
+    padding: 0;
+    position: absolute;
+}
+
+.figmapress-contact--fidelity .figmapress-contact__field {
+    display: contents !important;
+    margin: 0 !important;
+}
+
+.figmapress-contact--fidelity .figmapress-contact__field > span,
+.figmapress-contact--fidelity .figmapress-contact__field > input,
+.figmapress-contact--fidelity .figmapress-contact__field > textarea {
+    margin: 0;
+    position: absolute;
+}
+
+.figmapress-contact--fidelity .figmapress-contact__field > span {
+    align-items: center;
+    display: flex;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.figmapress-contact--fidelity input[type="text"],
+.figmapress-contact--fidelity input[type="email"],
+.figmapress-contact--fidelity textarea {
+    border-radius: min(5px, .261cqw);
+    min-height: 0 !important;
+    padding: min(8px, .417cqw) min(12px, .625cqw);
+}
+
+.figmapress-contact--fidelity textarea {
+    resize: none;
+}
+
+.figmapress-contact--fidelity fieldset {
+    display: contents;
+    margin: 0;
+    padding: 0;
+}
+
+.figmapress-contact--fidelity fieldset legend,
+.figmapress-contact--fidelity .figmapress-contact__reply {
+    align-items: center;
+    display: flex;
+    float: none;
+    line-height: 1.2;
+    margin: 0;
+    padding: 0;
+    position: absolute;
+    white-space: nowrap;
+}
+
+.figmapress-contact--fidelity .figmapress-contact__reply {
+    gap: min(8px, .417cqw);
+}
+
+.figmapress-contact--fidelity .figmapress-contact__reply input[type="radio"] {
+    flex: 0 0 auto;
+    height: min(22px, 1.146cqw);
+    margin: 0;
+    transform: translateX(calc(-100% - min(7px, .365cqw)));
+    width: min(22px, 1.146cqw);
+}
+
+.figmapress-contact--fidelity button[type="submit"] {
+    font-size: inherit;
+    line-height: 1.2;
+    margin: 0;
+    min-height: 0;
+    padding: 0;
+    position: absolute;
+}
+
+.figmapress-contact--fidelity .figmapress-contact__status {
+    bottom: 1%;
+    left: 20%;
+    margin: 0;
+    position: absolute;
+    width: 60%;
+}
+
+.figmapress-accordion--fidelity {
+    aspect-ratio: inherit;
+    box-shadow: min(15px, 1.08cqw) min(15px, 1.08cqw) 0 var(--figmapress-accent, #d50327);
+    container-type: inline-size;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+    padding: 0 3% 0 var(--figmapress-accordion-title-x, 6.75%);
+    position: relative;
+}
+
+.figmapress-accordion--fidelity details {
+    height: var(--figmapress-accordion-row-height, 5.5cqw);
+    position: relative;
+}
+
+.figmapress-accordion--fidelity details:first-child[open] {
+    height: var(--figmapress-accordion-first-height, 11.6cqw);
+}
+
+.figmapress-accordion--fidelity summary {
+    font-size: var(--figmapress-accordion-title-size, 2.15cqw);
+    height: var(--figmapress-accordion-row-height, 5.5cqw);
+    line-height: 1.2;
+    min-height: 0;
+    padding: 0;
+}
+
+.figmapress-accordion--fidelity .figmapress-accordion__content {
+    font-size: max(12px, 1.3cqw);
+    height: calc(var(--figmapress-accordion-first-height, 11.6cqw) - var(--figmapress-accordion-row-height, 5.5cqw));
+    line-height: 1.5;
+    overflow: hidden;
+    padding: 0 8% 0 0;
+}
+
+.figmapress-accordion--fidelity details:not(:first-child)[open] .figmapress-accordion__content {
+    background: var(--figmapress-panel, #fff);
+    border: 1px solid var(--figmapress-accent, #d50327);
+    height: auto;
+    left: 0;
+    min-height: var(--figmapress-accordion-first-height, 11.6cqw);
+    padding: 3%;
+    position: absolute;
+    right: 0;
+    top: 100%;
+    z-index: 3;
+}
+
+.figmapress-accordion--fidelity .figmapress-accordion__icon {
+    height: max(18px, 1.7cqw);
+    width: max(18px, 1.7cqw);
+}
+
+@media (max-width: 767px) {
+    .figmapress-nav--fidelity .figmapress-nav__panel {
+        background:
+            linear-gradient(rgba(255, 255, 255, .97), rgba(255, 255, 255, .97)),
+            var(--figmapress-nav-bg, #fff);
+        box-shadow: 0 16px 28px rgba(0, 0, 0, .14);
+        display: none;
+        inset: auto 0 auto;
+        padding: 12px 18px 18px;
+        top: 100%;
+    }
+
+    .figmapress-nav--fidelity.is-open .figmapress-nav__panel {
+        display: block;
+    }
+
+    .figmapress-nav--fidelity .figmapress-nav__items {
+        display: grid;
+        inset: auto;
+        margin-bottom: 10px;
+        position: relative;
+    }
+
+    .figmapress-nav--fidelity .figmapress-nav__items li {
+        font-size: 15px !important;
+        height: auto !important;
+        left: auto !important;
+        position: relative;
+        top: auto !important;
+        width: auto !important;
+    }
+
+    .figmapress-nav--fidelity .figmapress-nav__items a {
+        border-bottom: 1px solid rgba(0, 0, 0, .1);
+        justify-content: flex-start;
+        padding: 13px 5px;
+    }
+
+    .figmapress-nav--fidelity .figmapress-nav__panel .figmapress-nav__cta {
+        display: none;
+    }
+
+    .figmapress-nav--fidelity .figmapress-nav__toggle {
+        position: absolute;
+        right: 0;
+        top: 50%;
+        transform: translateY(-50%);
+    }
+}
