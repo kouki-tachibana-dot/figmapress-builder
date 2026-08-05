@@ -1590,9 +1590,26 @@ function textRuns(node: FigmaNode): RichRun[] {
   for (let index = 1; index <= value.length; index += 1) {
     const next = overrides[index] ?? current;
     if (index < value.length && next === current) continue;
+    const baseStyle = node.style ?? {};
+    const overrideStyle = node.styleOverrideTable[String(current)] ?? {};
+    const style = { ...baseStyle, ...overrideStyle };
+    // Figma's override table can change only the font size while leaving the
+    // node-level absolute lineHeightPx in the base style. Reusing that pixel
+    // value unchanged makes smaller rich-text runs render with 2x+ line
+    // heights (most visible in mobile hero headings). Preserve the base
+    // line-height ratio whenever the run does not define its own line height.
+    if (
+      overrideStyle.lineHeightPx === undefined
+      && positive(baseStyle.fontSize)
+      && positive(baseStyle.lineHeightPx)
+      && positive(overrideStyle.fontSize)
+    ) {
+      style.lineHeightPx = baseStyle.lineHeightPx
+        * (overrideStyle.fontSize / baseStyle.fontSize);
+    }
     runs.push({
       text: value.slice(start, index),
-      style: { ...(node.style ?? {}), ...(node.styleOverrideTable[String(current)] ?? {}) },
+      style,
     });
     start = index;
     current = next;
