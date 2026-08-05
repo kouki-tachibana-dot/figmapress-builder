@@ -441,6 +441,9 @@ function navigationElement(
   );
   const background = descendants(node).find((child) => /nav bar background/i.test(child.name));
   const topBar = descendants(node).find((child) => /top bar/i.test(child.name));
+  const toggleNode = descendants(node).find((child) =>
+    /(?:hamburger|menu.?icon|header\/menu|メニュー.?アイコン)/i.test(child.name),
+  );
   const ctaBackground = ctaText?.absoluteBoundingBox
     ? smallestContainingVisual(node, ctaText.absoluteBoundingBox)
     : undefined;
@@ -480,6 +483,7 @@ function navigationElement(
       background: relativeDesignBox(background?.absoluteBoundingBox, bounds),
       topBar: relativeDesignBox(topBar?.absoluteBoundingBox, bounds),
       logo: relativeDesignBox(logoNode?.absoluteBoundingBox, bounds),
+      toggle: relativeDesignBox(toggleNode?.absoluteBoundingBox, bounds),
       items: menuTexts.map((item) => ({
         ...relativeDesignBox(item.absoluteBoundingBox, bounds),
         ...designTextStyle(item, bounds.width),

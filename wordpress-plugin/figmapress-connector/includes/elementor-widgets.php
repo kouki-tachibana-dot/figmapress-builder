@@ -218,9 +218,9 @@ final class FigmaPress_Nav_Widget extends FigmaPress_Widget_Base {
             <?php if ( $logo ) : ?>
                 <a class="figmapress-nav__logo" href="<?php echo esc_url( $home_url ); ?>" aria-label="<?php esc_attr_e( 'ページ先頭', 'figmapress-connector' ); ?>"<?php echo $fidelity && ! empty( $geometry['logo'] ) ? ' style="' . esc_attr( figmapress_connector_geometry_style( $geometry['logo'] ) ) . '"' : ''; ?>><img src="<?php echo esc_url( $logo ); ?>" alt="<?php esc_attr_e( 'サイトロゴ', 'figmapress-connector' ); ?>"></a>
             <?php endif; ?>
-            <button class="figmapress-nav__toggle" type="button" aria-controls="<?php echo esc_attr( $menu_id ); ?>" aria-expanded="false"><span></span><span></span><span></span><span class="screen-reader-text"><?php esc_html_e( 'メニューを開く', 'figmapress-connector' ); ?></span></button>
+            <button class="figmapress-nav__toggle" type="button" aria-controls="<?php echo esc_attr( $menu_id ); ?>" aria-expanded="false"<?php echo $fidelity && ! empty( $geometry['toggle'] ) ? ' style="' . esc_attr( figmapress_connector_geometry_style( $geometry['toggle'] ) ) . '"' : ''; ?>><span></span><span></span><span></span><span class="screen-reader-text"><?php esc_html_e( 'メニューを開く', 'figmapress-connector' ); ?></span></button>
             <?php if ( $is_mobile && ! empty( $settings['cta_label'] ) ) : ?>
-                <a class="figmapress-nav__mobile-cta" href="<?php echo esc_url( $cta_url ); ?>"><?php echo esc_html( $settings['cta_label'] ); ?></a>
+                <a class="figmapress-nav__mobile-cta" href="<?php echo esc_url( $cta_url ); ?>"<?php echo $fidelity && ! empty( $geometry['cta'] ) ? ' style="' . esc_attr( figmapress_connector_geometry_style( $geometry['cta'], true ) ) . '"' : ''; ?>><?php echo esc_html( $settings['cta_label'] ); ?></a>
             <?php endif; ?>
             <div class="figmapress-nav__panel" id="<?php echo esc_attr( $menu_id ); ?>">
                 <ul class="figmapress-nav__items">
@@ -695,9 +695,16 @@ final class FigmaPress_Accordion_Widget extends FigmaPress_Widget_Base {
         ?>
         <div class="figmapress-accordion<?php echo $fidelity ? ' figmapress-accordion--fidelity' : ''; ?>" data-multiple="<?php echo 'yes' === ( isset( $settings['allow_multiple'] ) ? $settings['allow_multiple'] : '' ) ? 'true' : 'false'; ?>" style="<?php echo esc_attr( $accordion_style ); ?>">
             <?php foreach ( $items as $index => $item ) : ?>
+                <?php
+                $item_geometry = $fidelity && isset( $geometry['items'][ $index ] ) ? $geometry['items'][ $index ] : null;
+                $summary_box   = is_array( $item_geometry ) && isset( $item_geometry['title'] ) && is_array( $item_geometry['title'] ) ? $item_geometry['title'] : null;
+                if ( is_array( $summary_box ) ) {
+                    unset( $summary_box['width'] );
+                }
+                ?>
                 <details<?php echo 0 === $index && 'yes' === ( isset( $settings['open_first'] ) ? $settings['open_first'] : 'yes' ) ? ' open' : ''; ?>>
-                    <summary><span><?php echo esc_html( isset( $item['title'] ) ? $item['title'] : '' ); ?></span><span class="figmapress-accordion__icon" aria-hidden="true"></span></summary>
-                    <div class="figmapress-accordion__content"><?php echo wp_kses_post( wpautop( isset( $item['content'] ) ? $item['content'] : '' ) ); ?></div>
+                    <summary<?php echo $summary_box ? ' style="' . esc_attr( figmapress_connector_geometry_style( $summary_box, true ) ) . '"' : ''; ?>><span><?php echo esc_html( isset( $item['title'] ) ? $item['title'] : '' ); ?></span><span class="figmapress-accordion__icon" aria-hidden="true"></span></summary>
+                    <div class="figmapress-accordion__content"<?php echo $item_geometry && ! empty( $item_geometry['content'] ) ? ' style="' . esc_attr( figmapress_connector_geometry_style( $item_geometry['content'] ) ) . '"' : ''; ?>><?php echo wp_kses_post( wpautop( isset( $item['content'] ) ? $item['content'] : '' ) ); ?></div>
                 </details>
             <?php endforeach; ?>
         </div>
