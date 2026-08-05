@@ -204,6 +204,7 @@ final class FigmaPress_Nav_Widget extends FigmaPress_Widget_Base {
         $home_url   = isset( $settings['home_url']['url'] ) ? $settings['home_url']['url'] : '#top';
         $is_mobile  = isset( $settings['layout_variant'] ) && 'mobile' === $settings['layout_variant'];
         $menu_id    = 'figmapress-menu-' . $this->get_id();
+        $menu_state_id = $menu_id . '-state';
         $background = figmapress_connector_css_color( isset( $settings['background_color'] ) ? $settings['background_color'] : '', '#FFFFFF' );
         $accent     = figmapress_connector_css_color( isset( $settings['accent_color'] ) ? $settings['accent_color'] : '', '#D10B2C' );
         $text       = figmapress_connector_css_color( isset( $settings['text_color'] ) ? $settings['text_color'] : '', '#202020' );
@@ -218,7 +219,8 @@ final class FigmaPress_Nav_Widget extends FigmaPress_Widget_Base {
             <?php if ( $logo ) : ?>
                 <a class="figmapress-nav__logo" href="<?php echo esc_url( $home_url ); ?>" aria-label="<?php esc_attr_e( 'ページ先頭', 'figmapress-connector' ); ?>"<?php echo $fidelity && ! empty( $geometry['logo'] ) ? ' style="' . esc_attr( figmapress_connector_geometry_style( $geometry['logo'] ) ) . '"' : ''; ?>><img src="<?php echo esc_url( $logo ); ?>" alt="<?php esc_attr_e( 'サイトロゴ', 'figmapress-connector' ); ?>"></a>
             <?php endif; ?>
-            <button class="figmapress-nav__toggle" type="button" aria-controls="<?php echo esc_attr( $menu_id ); ?>" aria-expanded="false"<?php echo $fidelity && ! empty( $geometry['toggle'] ) ? ' style="' . esc_attr( figmapress_connector_geometry_style( $geometry['toggle'] ) ) . '"' : ''; ?>><span></span><span></span><span></span><span class="screen-reader-text"><?php esc_html_e( 'メニューを開く', 'figmapress-connector' ); ?></span></button>
+            <input class="figmapress-nav__state" id="<?php echo esc_attr( $menu_state_id ); ?>" type="checkbox" aria-controls="<?php echo esc_attr( $menu_id ); ?>" aria-label="<?php esc_attr_e( 'メニューを開閉', 'figmapress-connector' ); ?>">
+            <label class="figmapress-nav__toggle" for="<?php echo esc_attr( $menu_state_id ); ?>"<?php echo $fidelity && ! empty( $geometry['toggle'] ) ? ' style="' . esc_attr( figmapress_connector_geometry_style( $geometry['toggle'] ) ) . '"' : ''; ?>><span></span><span></span><span></span><span class="screen-reader-text"><?php esc_html_e( 'メニューを開閉', 'figmapress-connector' ); ?></span></label>
             <?php if ( $is_mobile && ! empty( $settings['cta_label'] ) ) : ?>
                 <a class="figmapress-nav__mobile-cta" href="<?php echo esc_url( $cta_url ); ?>"<?php echo $fidelity && ! empty( $geometry['cta'] ) ? ' style="' . esc_attr( figmapress_connector_geometry_style( $geometry['cta'], true ) ) . '"' : ''; ?>><?php echo esc_html( $settings['cta_label'] ); ?></a>
             <?php endif; ?>

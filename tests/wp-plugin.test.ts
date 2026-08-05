@@ -208,9 +208,10 @@ test("Connector updates one draft for a stable Figma source", async () => {
 });
 
 test("functional widgets include keyboard, reduced-motion, and timeout safeguards", async () => {
-  const [script, style] = await Promise.all([
+  const [script, style, widgets] = await Promise.all([
     readFile(interactionScriptPath, "utf8"),
     readFile(interactionStylePath, "utf8"),
+    readFile(elementorWidgetsPath, "utf8"),
   ]);
   assert.match(script, /event\.key === "Escape"/);
   assert.match(script, /event\.key === "ArrowLeft"/);
@@ -221,11 +222,14 @@ test("functional widgets include keyboard, reduced-motion, and timeout safeguard
   assert.match(script, /querySelectorAll\("\.figmapress-nav\.is-open"\)/);
   assert.match(script, /window\.addEventListener\("click",[\s\S]*?\}, true\);/);
   assert.match(script, /event\.stopPropagation\(\)/);
+  assert.match(script, /figmapress-nav__state/);
   assert.match(script, /AbortController/);
   assert.match(script, /controller\.abort\(\)/);
   assert.match(script, /aria-busy/);
   assert.match(style, /prefers-reduced-motion:\s*reduce/);
   assert.match(style, /focus-visible/);
+  assert.match(style, /figmapress-nav__state:checked/);
+  assert.match(widgets, /class="figmapress-nav__state"/);
   assert.match(style, /\.figmapress-carousel/);
 });
 

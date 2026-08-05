@@ -163,6 +163,20 @@
     display: none;
 }
 
+.figmapress-nav__state {
+    height: 1px;
+    opacity: 0;
+    overflow: hidden;
+    position: absolute;
+    width: 1px;
+}
+
+.figmapress-nav__state:focus-visible + .figmapress-nav__toggle {
+    outline: 3px solid rgba(209, 11, 44, .38);
+    outline: 3px solid color-mix(in srgb, var(--figmapress-accent, #d10b2c) 38%, transparent);
+    outline-offset: 4px;
+}
+
 .figmapress-nav__mobile-cta {
     display: none;
 }
@@ -651,6 +665,10 @@ html {
         display: block;
     }
 
+    .figmapress-nav__state:checked ~ .figmapress-nav__panel {
+        display: block;
+    }
+
     .figmapress-nav__items {
         align-items: stretch;
         display: grid;
@@ -1026,6 +1044,10 @@ html {
     }
 
     .figmapress-nav--fidelity.is-open .figmapress-nav__panel {
+        display: block;
+    }
+
+    .figmapress-nav--fidelity .figmapress-nav__state:checked ~ .figmapress-nav__panel {
         display: block;
     }
 
