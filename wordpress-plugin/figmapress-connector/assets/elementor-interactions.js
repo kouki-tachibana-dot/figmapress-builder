@@ -30,7 +30,7 @@
         document.querySelectorAll(".figmapress-nav.is-open").forEach(function (nav) {
             if (!nav.contains(target) || target.closest("a")) setNavigationOpen(nav, false, false);
         });
-    });
+    }, true);
 
     document.addEventListener("keydown", function (event) {
         if (event.key === "Escape") {
