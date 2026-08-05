@@ -3,9 +3,9 @@
 
     function initNavigation(scope) {
         scope.querySelectorAll(".figmapress-nav:not([data-figmapress-ready])").forEach(function (nav) {
-            nav.dataset.figmapressReady = "true";
             var toggle = nav.querySelector(".figmapress-nav__toggle");
             if (!toggle) return;
+            nav.dataset.figmapressReady = "true";
             var toggleLabel = toggle.querySelector(".screen-reader-text");
             function setOpen(open, restoreFocus) {
                 nav.classList.toggle("is-open", open);
