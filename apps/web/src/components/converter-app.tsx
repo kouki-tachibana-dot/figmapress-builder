@@ -565,7 +565,7 @@ ${snapshot.styles}
 html,body{margin:0!important;min-height:100%;padding:0!important;background:#fff}
 *,*::before,*::after{box-sizing:border-box}
 .figmapress-figma-preview,.figmapress-layout{container-type:inline-size;overflow:hidden;position:relative;width:100%}
-</style></head><body>${snapshot.html}</body></html>`;
+</style></head><body class="elementor-page elementor-page-${snapshot.postId}"><div class="elementor elementor-${snapshot.postId}" data-elementor-id="${snapshot.postId}" data-elementor-type="wp-page">${snapshot.html}</div></body></html>`;
 }
 
 function visualReferencesFor(
