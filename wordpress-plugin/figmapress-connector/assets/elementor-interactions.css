@@ -659,6 +659,7 @@ html {
 
     .figmapress-nav__state + .figmapress-nav__toggle {
         pointer-events: none;
+        z-index: 9;
     }
 
     .figmapress-nav__toggle > span:not(.screen-reader-text) {
