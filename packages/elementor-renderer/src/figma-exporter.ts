@@ -1384,21 +1384,27 @@ function containerPosition(
   context: RenderContext,
 ): ElementorSettings {
   if (isAutoLayout(parentNode)) {
+    const width = flowSize(node, bounds, parent, parentNode);
     return {
-      width: flowSize(node, bounds, parent, parentNode),
+      width,
+      width_tablet: width,
+      width_mobile: width,
       min_height: canvasSize(bounds.height, context),
       flex_grow: node.layoutGrow && node.layoutGrow > 0 ? "1" : "0",
       flex_shrink: "0",
       ...(node.layoutAlign ? { flex_align_self: flexAlignment(node.layoutAlign) } : {}),
     };
   }
+  const width = size(percent(bounds.width, parent.width), "%");
   return {
     position: "absolute",
     _offset_orientation_h: "start",
     _offset_x: size(percent(bounds.x - parent.x, parent.width), "%"),
     _offset_orientation_v: "start",
     _offset_y: size(percent(bounds.y - parent.y, parent.height), "%"),
-    width: size(percent(bounds.width, parent.width), "%"),
+    width,
+    width_tablet: width,
+    width_mobile: width,
     min_height: canvasSize(bounds.height, context),
   };
 }
