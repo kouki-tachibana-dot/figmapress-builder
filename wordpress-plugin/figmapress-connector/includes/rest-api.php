@@ -740,6 +740,37 @@ function figmapress_connector_embed_snapshot_css_images( $css, &$total_bytes, &$
 }
 
 /**
+ * Return Elementor's active frontend foundation CSS for an isolated snapshot.
+ * REST rendering does not run the complete theme enqueue lifecycle on every
+ * host, so wp_print_styles() can omit the .e-con rules that apply container
+ * height, positioning and flex layout variables.
+ */
+function figmapress_connector_snapshot_elementor_frontend_css() {
+    $candidates = array();
+    if ( defined( 'ELEMENTOR_ASSETS_PATH' ) ) {
+        $candidates[] = trailingslashit( ELEMENTOR_ASSETS_PATH ) . 'css/frontend.min.css';
+    }
+    if ( defined( 'ELEMENTOR_PATH' ) ) {
+        $candidates[] = trailingslashit( ELEMENTOR_PATH ) . 'assets/css/frontend.min.css';
+    }
+
+    foreach ( array_unique( $candidates ) as $path ) {
+        if ( ! is_string( $path ) || ! is_readable( $path ) ) {
+            continue;
+        }
+        $size = filesize( $path );
+        if ( false === $size || $size <= 0 || $size > 1500000 ) {
+            continue;
+        }
+        $css = file_get_contents( $path );
+        if ( is_string( $css ) && '' !== trim( $css ) ) {
+            return $css;
+        }
+    }
+    return '';
+}
+
+/**
  * Render the stored Elementor document through Elementor's real frontend
  * renderer. The response is authenticated and never exposes the draft publicly.
  */
@@ -785,15 +816,24 @@ function figmapress_connector_rest_elementor_snapshot( WP_REST_Request $request 
         $embedded_asset_bytes = 0;
         $embedded_asset_cache = array();
         $html                 = figmapress_connector_embed_snapshot_html_images( $html, $embedded_asset_bytes, $embedded_asset_cache );
+        $styles = '';
+        $elementor_frontend_css = figmapress_connector_snapshot_elementor_frontend_css();
+        if ( '' !== $elementor_frontend_css ) {
+            $styles .= '<style data-figmapress-elementor-frontend-css>'
+                . $elementor_frontend_css
+                . '</style>';
+        }
+
         ob_start();
         wp_print_styles();
-        $styles = ob_get_clean();
-        if ( ! is_string( $styles ) ) {
-            $styles = '';
+        $printed_styles = ob_get_clean();
+        if ( ! is_string( $printed_styles ) ) {
+            $printed_styles = '';
         }
-        if ( strlen( $styles ) > 500000 ) {
-            $styles = substr( $styles, 0, 500000 );
+        if ( strlen( $printed_styles ) > 500000 ) {
+            $printed_styles = substr( $printed_styles, 0, 500000 );
         }
+        $styles .= $printed_styles;
 
         // Elementor's generated post stylesheet contains background images.
         // Inline the local file after the regular styles so those images can
