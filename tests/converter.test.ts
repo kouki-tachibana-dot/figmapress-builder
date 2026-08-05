@@ -388,6 +388,43 @@ test("rich text font-size overrides preserve the base line-height ratio", async 
   assert.match(result.previewHtml, /display:block;font-size:0;line-height:0;max-width:100%/);
 });
 
+test("mobile containers preserve their Figma width across Elementor breakpoints", async () => {
+  const file: MockFigmaFile = {
+    document: {
+      id: "0:0",
+      name: "Mobile container width",
+      type: "DOCUMENT",
+      children: [{
+        id: "1:0",
+        name: "Page",
+        type: "CANVAS",
+        children: [{
+          id: "46:210",
+          name: "SP-page",
+          type: "FRAME",
+          absoluteBoundingBox: { x: 0, y: 0, width: 440, height: 600 },
+          children: [{
+            id: "2023:900",
+            name: "Footer button outline",
+            type: "FRAME",
+            absoluteBoundingBox: { x: 30, y: 100, width: 380, height: 48 },
+            fills: [{ type: "SOLID", color: { r: 1, g: 1, b: 1 }, opacity: 0 }],
+            strokes: [{ type: "SOLID", color: { r: 1, g: 1, b: 1 } }],
+            strokeWeight: 1,
+          }],
+        }],
+      }],
+    },
+  };
+
+  const result = await convertFile(file);
+  const outlinedContainer = result.elementorTemplate.content[0]?.elements[0];
+  assert.equal(outlinedContainer?.elType, "container");
+  assert.deepEqual(outlinedContainer?.settings.width, { unit: "%", size: 86.364, sizes: [] });
+  assert.deepEqual(outlinedContainer?.settings.width_tablet, outlinedContainer?.settings.width);
+  assert.deepEqual(outlinedContainer?.settings.width_mobile, outlinedContainer?.settings.width);
+});
+
 test("Japanese Figma text records its webfont and deterministic glyph fallback", async () => {
   const file: MockFigmaFile = {
     document: {
