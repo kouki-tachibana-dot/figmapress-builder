@@ -291,6 +291,9 @@ test("Connector exposes authenticated Elementor snapshots with stable Figma node
   assert.match(rest, /'omittedAssetsCount'/);
   assert.match(rest, /data:' \. \$type \. ';base64,/);
   assert.match(rest, /post-' \. \$post_id \. '\.css/);
+  assert.match(rest, /figmapress_connector_snapshot_elementor_frontend_css/);
+  assert.match(rest, /data-figmapress-elementor-frontend-css/);
+  assert.match(rest, /ELEMENTOR_PATH/);
   assert.match(rest, /figmapress_connector_validate_owned_elementor_draft/);
   assert.match(rest, /hash_equals\( \$stored_request_id, \$request_id \)/);
   assert.match(plugin, /data-figmapress-node-id/);

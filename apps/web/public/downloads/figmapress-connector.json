@@ -1,11 +1,11 @@
 {
   "name": "FigmaPress Connector",
   "slug": "figmapress-connector",
-  "version": "0.16.2",
+  "version": "0.16.3",
   "requires": "6.4",
   "requires_php": "7.4",
   "tested": "7.0",
   "homepage": "https://figmapress-builder.vercel.app",
   "download_url": "https://figmapress-builder.vercel.app/downloads/figmapress-connector.zip",
-  "changelog": "<h4>0.16.2</h4><ul><li>実ページVisual QAでWordPress生成の比較用画像を優先し、画像数が多いページでも欠落を防ぎました。</li><li>同じ画像の重複埋め込みを除外し、QAレスポンス容量を抑えました。</li></ul><h4>0.16.1</h4><ul><li>共有サーバーで取得に時間がかかるFigma画像向けに、段階保存の通信枠を拡張しました。</li><li>スマホメニューの展開パネルを不透明化しました。</li></ul>"
+  "changelog": "<h4>0.16.3</h4><ul><li>REST経由の実ページVisual QAでもElementor本体のコンテナCSSを確実に適用します。</li><li>PC・スマホの高さと絶対配置が実サイトと異なる誤判定を修正しました。</li></ul><h4>0.16.2</h4><ul><li>実ページVisual QAでWordPress生成の比較用画像を優先し、画像数が多いページでも欠落を防ぎました。</li><li>同じ画像の重複埋め込みを除外し、QAレスポンス容量を抑えました。</li></ul>"
 }
