@@ -99,6 +99,41 @@ function waitForImage(image: HTMLImageElement, timeoutMs: number): Promise<void>
   });
 }
 
+function waitForStylesheet(
+  stylesheet: HTMLLinkElement,
+  timeoutMs: number,
+): Promise<void> {
+  if (stylesheet.sheet) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(
+      () => reject(new Error("実ページのスタイルシート読み込みがタイムアウトしました。")),
+      timeoutMs,
+    );
+    const finish = () => {
+      window.clearTimeout(timeout);
+      resolve();
+    };
+    const fail = () => {
+      window.clearTimeout(timeout);
+      reject(new Error("実ページのスタイルシートを読み込めませんでした。"));
+    };
+    stylesheet.addEventListener("load", finish, { once: true });
+    stylesheet.addEventListener("error", fail, { once: true });
+  });
+}
+
+async function waitForStylesheets(
+  document: Document,
+  timeoutMs: number,
+): Promise<void> {
+  await Promise.all(
+    Array.from(
+      document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'),
+      (stylesheet) => waitForStylesheet(stylesheet, timeoutMs),
+    ),
+  );
+}
+
 async function waitForFonts(
   document: Document,
   timeoutMs: number,
@@ -219,6 +254,11 @@ export async function runVisualQa(
       }
     });
 
+    // DOM readiness intentionally does not wait for slow media, but the
+    // WordPress snapshot contains external Elementor stylesheets. Measuring
+    // before those links finish produces a stable yet misleading low score.
+    // Wait for CSS first because it can also discover fonts and backgrounds.
+    await waitForStylesheets(frameDocument, 12_000);
     await Promise.all(
       Array.from(frameDocument.images, (image) => waitForImage(image, 8_000)),
     );

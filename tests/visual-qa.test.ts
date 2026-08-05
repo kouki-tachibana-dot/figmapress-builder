@@ -40,6 +40,8 @@ test("browser Visual QA waits for the srcdoc DOM separately from slow media", as
   const source = await readFile(browserVisualQaPath, "utf8");
   assert.match(source, /document\?\.URL === "about:srcdoc"/);
   assert.match(source, /document\.readyState !== "loading"/);
+  assert.match(source, /waitForStylesheets\(frameDocument, 12_000\)/);
+  assert.match(source, /link\[rel="stylesheet"\]/);
   assert.match(source, /waitForImage\(image, 8_000\)/);
 });
 
