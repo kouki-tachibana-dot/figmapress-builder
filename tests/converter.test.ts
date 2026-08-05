@@ -297,7 +297,7 @@ test("real Figma bounds produce a high-fidelity editable Elementor document", as
   assert.equal(punctuation?.settings._transform_rotate_popover, "transform");
   assert.deepEqual(punctuation?.settings._transform_rotateZ_effect, { unit: "deg", size: 7.54, sizes: [] });
   assert.deepEqual(mixedHeading?.settings.typography_font_size, { unit: "vw", size: 4.375, sizes: [] });
-  assert.match(String(mixedHeading?.settings.editor), /<span style="display:block;max-width:100%"><span/);
+  assert.match(String(mixedHeading?.settings.editor), /<span style="display:block;font-size:0;line-height:0;max-width:100%"><span/);
   assert.match(String(mixedHeading?.settings.editor), /font-size:3\.75vw/);
   assert.match(String(mixedHeading?.settings.editor), /font-size:4\.375vw/);
   assert.match(String(fixedParagraph?.settings.editor), /white-space:pre-wrap/);
@@ -382,8 +382,10 @@ test("rich text font-size overrides preserve the base line-height ratio", async 
   assert.match(editor, /font-size:12\.273vw/);
   assert.match(editor, /line-height:1\.21/);
   assert.doesNotMatch(editor, /line-height:2\.118/);
+  assert.match(editor, /display:block;font-size:0;line-height:0;max-width:100%/);
   assert.match(result.previewHtml, /line-height:1\.21/);
   assert.doesNotMatch(result.previewHtml, /line-height:2\.118/);
+  assert.match(result.previewHtml, /display:block;font-size:0;line-height:0;max-width:100%/);
 });
 
 test("Japanese Figma text records its webfont and deterministic glyph fallback", async () => {
