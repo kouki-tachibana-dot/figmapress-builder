@@ -229,6 +229,7 @@ test("functional widgets include keyboard, reduced-motion, and timeout safeguard
   assert.match(style, /prefers-reduced-motion:\s*reduce/);
   assert.match(style, /focus-visible/);
   assert.match(style, /figmapress-nav__state:checked/);
+  assert.match(style, /figmapress-nav__state \+ \.figmapress-nav__toggle[\s\S]*?pointer-events:\s*none/);
   assert.match(widgets, /class="figmapress-nav__state"/);
   assert.match(style, /\.figmapress-carousel/);
 });

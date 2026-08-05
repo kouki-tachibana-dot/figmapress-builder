@@ -641,6 +641,26 @@ html {
         width: 48px;
     }
 
+    .figmapress-nav__state {
+        cursor: pointer;
+        height: 48px;
+        opacity: 0;
+        right: 14px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 48px;
+        z-index: 10;
+    }
+
+    .figmapress-nav__state[style] {
+        right: auto;
+        transform: none;
+    }
+
+    .figmapress-nav__state + .figmapress-nav__toggle {
+        pointer-events: none;
+    }
+
     .figmapress-nav__toggle > span:not(.screen-reader-text) {
         background: var(--figmapress-accent, #d10b2c);
         display: block;
@@ -708,6 +728,12 @@ html {
         gap: 4px;
         margin: 0 3px 0 auto;
         padding: 8px;
+        width: 40px;
+    }
+
+    .figmapress-nav--mobile .figmapress-nav__state:not([style]) {
+        height: 40px;
+        right: 3px;
         width: 40px;
     }
 

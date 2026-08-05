@@ -1,11 +1,11 @@
 {
   "name": "FigmaPress Connector",
   "slug": "figmapress-connector",
-  "version": "0.16.12",
+  "version": "0.16.13",
   "requires": "6.4",
   "requires_php": "7.4",
   "tested": "7.0",
   "homepage": "https://figmapress-builder.vercel.app",
   "download_url": "https://figmapress-builder.vercel.app/downloads/figmapress-connector.zip",
-  "changelog": "<h4>0.16.12</h4><ul><li>スマホメニューをブラウザー標準のチェック操作でも開閉できる構造へ変更しました。</li><li>JavaScript最適化やElementorのイベント競合があってもメニュー機能を維持します。</li></ul><h4>0.16.11</h4><ul><li>Elementorより先にwindowでメニューボタン操作を捕捉し、競合するクリック処理を遮断します。</li><li>実ページ上でメニュー状態が直後に戻る問題への最終防御を追加しました。</li></ul><h4>0.16.10</h4><ul><li>Elementorがクリック伝播を停止する構成でもスマホメニューが反応するキャプチャ方式へ強化しました。</li><li>実ページ上のクリック経路に合わせてメニュー操作の互換性を改善しました。</li></ul>"
+  "changelog": "<h4>0.16.13</h4><ul><li>ブラウザー標準のメニューチェック領域をFigmaのアイコン座標へ直接重ねました。</li><li>Elementorに妨げられるラベル経由を避け、ユーザー操作を標準部品へ直接届けます。</li></ul><h4>0.16.12</h4><ul><li>スマホメニューをブラウザー標準のチェック操作でも開閉できる構造へ変更しました。</li><li>JavaScript最適化やElementorのイベント競合があってもメニュー機能を維持します。</li></ul><h4>0.16.11</h4><ul><li>Elementorより先にwindowでメニューボタン操作を捕捉し、競合するクリック処理を遮断します。</li><li>実ページ上でメニュー状態が直後に戻る問題への最終防御を追加しました。</li></ul>"
 }
