@@ -155,6 +155,32 @@ async function waitForFonts(
   }
 }
 
+function enforceElementorResponsiveVariant(
+  document: Document,
+  variant: "desktop" | "mobile",
+): void {
+  const layouts = Array.from(
+    document.querySelectorAll<HTMLElement>(".figmapress-layout"),
+  );
+  const hasResponsiveLayouts = layouts.some((layout) =>
+    layout.classList.contains("figmapress-layout--desktop")
+    || layout.classList.contains("figmapress-layout--mobile"),
+  );
+  if (!hasResponsiveLayouts) return;
+
+  layouts.forEach((layout) => {
+    const matchesVariant = layout.classList.contains(
+      `figmapress-layout--${variant}`,
+    );
+    layout.style.setProperty(
+      "display",
+      matchesVariant ? "var(--display, flex)" : "none",
+      "important",
+    );
+    layout.toggleAttribute("aria-hidden", !matchesVariant);
+  });
+}
+
 async function loadReferenceImage(url: string): Promise<HTMLImageElement> {
   const image = new Image();
   image.decoding = "async";
@@ -263,6 +289,12 @@ export async function runVisualQa(
     // before those links finish produces a stable yet misleading low score.
     // Wait for CSS first because it can also discover fonts and backgrounds.
     await waitForStylesheets(frameDocument, 12_000);
+    // Elementor's responsive visibility rules depend on the complete frontend
+    // page context. The authenticated snapshot intentionally contains only the
+    // rendered document, so those rules can otherwise leave both the PC and
+    // mobile roots visible and produce a confidently wrong comparison. Pin the
+    // requested variant explicitly inside this isolated QA document.
+    enforceElementorResponsiveVariant(frameDocument, variant);
     await Promise.all(
       Array.from(frameDocument.images, (image) => waitForImage(image, 8_000)),
     );
@@ -282,6 +314,17 @@ export async function runVisualQa(
         (left, right) =>
           right.getBoundingClientRect().height - left.getBoundingClientRect().height,
       )[0];
+    const visibleElementorLayouts = visiblePreviews.filter((element) =>
+      element.classList.contains("figmapress-layout"),
+    );
+    if (
+      frameDocument.querySelector(".figmapress-layout--desktop, .figmapress-layout--mobile")
+      && visibleElementorLayouts.length !== 1
+    ) {
+      throw new Error(
+        "実ページのPC／スマホ表示を分離できませんでした。Connectorを更新して再試行してください。",
+      );
+    }
     const generatedHeight = visiblePreview
       ? visiblePreview.getBoundingClientRect().height
       : Math.max(1, frameDocument.body.scrollHeight);
