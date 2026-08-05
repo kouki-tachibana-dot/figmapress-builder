@@ -2822,6 +2822,32 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                       </span>
                     ))}
                   </div>
+                  <div className="actual-visual-qa-details">
+                    {wpVisualQaResults.map((result) => (
+                      <details className="visual-qa-diff" key={result.variant}>
+                        <summary>
+                          {result.variant === "desktop" ? "PC" : "スマホ"}実ページの差分内訳
+                        </summary>
+                        <dl className="visual-qa-metrics">
+                          <div><dt>差分面積</dt><dd>{result.changedPixelRatio}%</dd></div>
+                          <div><dt>平均色差</dt><dd>{result.meanColorError}</dd></div>
+                          <div><dt>全体高差</dt><dd>{result.heightDifferenceRatio}%</dd></div>
+                          <div><dt>測定寸法</dt><dd>{result.width}×{result.height}</dd></div>
+                        </dl>
+                        <ul>
+                          {result.recommendations.map((recommendation) => (
+                            <li key={recommendation}>{recommendation}</li>
+                          ))}
+                        </ul>
+                        {/* Generated in-browser as a data URL; Next Image cannot optimize it. */}
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          alt={`${result.variant === "desktop" ? "PC" : "スマホ"}実Elementorページの視覚差分ヒートマップ`}
+                          src={result.diffImageUrl}
+                        />
+                      </details>
+                    ))}
+                  </div>
                   {(wpVisualCorrections.wholePage.length > 0 || wpVisualCorrections.sections.length > 0 || wpVisualCorrections.textGeometry.length > 0 || wpVisualCorrections.mediaGeometry.length > 0 || wpVisualCorrections.decorationGeometry.length > 0) && (
                     <small>
                       実測で改善した補正だけを下書きへ再保存しました。全体補正 {wpVisualCorrections.wholePage.length}件／セクション補正 {wpVisualCorrections.sections.length}件／文字寸法補正 {wpVisualCorrections.textGeometry.length}件／画像補正 {wpVisualCorrections.mediaGeometry.length}件／背景・枠補正 {wpVisualCorrections.decorationGeometry.length}件。
