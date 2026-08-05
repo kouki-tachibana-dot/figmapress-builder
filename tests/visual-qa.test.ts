@@ -59,6 +59,8 @@ test("actual-page Visual QA refuses a misleading score when snapshot images are 
   );
   assert.match(source, /snapshot\.omittedAssetsCount/);
   assert.match(source, /比較用画像を\$\{snapshot\.omittedAssetsCount\}件準備できませんでした/);
+  assert.match(source, /elementor-page-\$\{snapshot\.postId\}/);
+  assert.match(source, /elementor-\$\{snapshot\.postId\}/);
   assert.match(source, /実Elementorページの視覚差分ヒートマップ/);
   assert.match(source, /result\.meanColorError/);
 });
