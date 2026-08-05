@@ -44,6 +44,9 @@ test("browser Visual QA waits for the srcdoc DOM separately from slow media", as
   assert.match(source, /link\[rel="stylesheet"\]/);
   assert.match(source, /setAttribute\("loading", "eager"\)/);
   assert.match(source, /\.figmapress-figma-preview, \.figmapress-layout/);
+  assert.match(source, /enforceElementorResponsiveVariant\(frameDocument, variant\)/);
+  assert.match(source, /matchesVariant \? "var\(--display, flex\)" : "none"/);
+  assert.match(source, /visibleElementorLayouts\.length !== 1/);
   assert.match(source, /waitForImage\(image, 8_000\)/);
 });
 
