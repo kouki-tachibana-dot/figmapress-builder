@@ -219,7 +219,8 @@ test("functional widgets include keyboard, reduced-motion, and timeout safeguard
   assert.match(script, /toggle\.focus\(\)/);
   assert.match(script, /target\.closest\("\.figmapress-nav__toggle"\)/);
   assert.match(script, /querySelectorAll\("\.figmapress-nav\.is-open"\)/);
-  assert.match(script, /document\.addEventListener\("click",[\s\S]*?\}, true\);/);
+  assert.match(script, /window\.addEventListener\("click",[\s\S]*?\}, true\);/);
+  assert.match(script, /event\.stopPropagation\(\)/);
   assert.match(script, /AbortController/);
   assert.match(script, /controller\.abort\(\)/);
   assert.match(script, /aria-busy/);

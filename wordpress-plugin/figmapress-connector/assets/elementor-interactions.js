@@ -18,11 +18,13 @@
         });
     }
 
-    document.addEventListener("click", function (event) {
+    window.addEventListener("click", function (event) {
         var target = event.target instanceof Element ? event.target : null;
         if (!target) return;
         var toggle = target.closest(".figmapress-nav__toggle");
         if (toggle) {
+            event.preventDefault();
+            event.stopPropagation();
             var owner = toggle.closest(".figmapress-nav");
             if (owner) setNavigationOpen(owner, !owner.classList.contains("is-open"), false);
             return;
