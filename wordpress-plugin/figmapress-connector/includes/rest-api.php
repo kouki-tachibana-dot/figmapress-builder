@@ -771,6 +771,26 @@ function figmapress_connector_snapshot_elementor_frontend_css() {
 }
 
 /**
+ * Read the Connector widget stylesheet for authenticated snapshot parity.
+ *
+ * REST requests do not always run the normal wp_enqueue_scripts lifecycle.
+ * Relying only on an enqueued handle can therefore leave functional widgets
+ * unstyled in Visual QA even though the public Elementor page is correct.
+ */
+function figmapress_connector_snapshot_interactions_css() {
+    $path = FIGMAPRESS_CONNECTOR_DIR . 'assets/elementor-interactions.css';
+    if ( ! is_readable( $path ) ) {
+        return '';
+    }
+    $size = filesize( $path );
+    if ( false === $size || $size <= 0 || $size > 100000 ) {
+        return '';
+    }
+    $css = file_get_contents( $path );
+    return is_string( $css ) ? $css : '';
+}
+
+/**
  * Render the stored Elementor document through Elementor's real frontend
  * renderer. The response is authenticated and never exposes the draft publicly.
  */
@@ -785,6 +805,10 @@ function figmapress_connector_rest_elementor_snapshot( WP_REST_Request $request 
 
     try {
         $frontend = \Elementor\Plugin::$instance->frontend;
+        // The REST lifecycle can skip the hooks that normally register these
+        // assets. Register them explicitly before Elementor resolves widget
+        // style dependencies and before wp_print_styles() runs.
+        figmapress_connector_register_elementor_assets();
         if ( method_exists( $frontend, 'enqueue_styles' ) ) {
             $frontend->enqueue_styles();
         }
@@ -821,6 +845,12 @@ function figmapress_connector_rest_elementor_snapshot( WP_REST_Request $request 
         if ( '' !== $elementor_frontend_css ) {
             $styles .= '<style data-figmapress-elementor-frontend-css>'
                 . $elementor_frontend_css
+                . '</style>';
+        }
+        $interactions_css = figmapress_connector_snapshot_interactions_css();
+        if ( '' !== $interactions_css ) {
+            $styles .= '<style data-figmapress-interactions-css>'
+                . $interactions_css
                 . '</style>';
         }
 
