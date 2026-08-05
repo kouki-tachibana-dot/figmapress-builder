@@ -53,6 +53,7 @@ import {
 } from "@/lib/visual-qa";
 import { readApi } from "@/lib/api-client";
 import { resolveFigmaRequestAuthentication } from "@/lib/figma-client-auth";
+import { shouldProxyWordPressDraft } from "@/lib/wordpress-transport";
 
 type SourceMode = "figma" | "json";
 type OutputTarget = "gutenberg" | "elementor";
@@ -1420,8 +1421,14 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
             slug: page?.slug || "/",
             content: output.pageContent,
           };
+      const serializedPayload = JSON.stringify(payload);
+      const useWordPressProxy = shouldProxyWordPressDraft(
+        wpTransport,
+        wpTarget,
+        new TextEncoder().encode(serializedPayload).byteLength,
+      );
       let createdResult: WordPressResult;
-      if (wpTransport === "direct") {
+      if (!useWordPressProxy) {
         const result = await createWordPressDraftDirect(
           credentials,
           wpTarget === "elementor"
@@ -1447,7 +1454,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         const response = await fetch("/api/wordpress", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: serializedPayload,
         });
         const data = await readApi<{ ok: true; result: WordPressResult }>(response);
         setWpResult(data.result);

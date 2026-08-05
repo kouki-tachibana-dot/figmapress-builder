@@ -17,7 +17,7 @@ import {
 } from "@/lib/request-security";
 
 export const runtime = "nodejs";
-export const maxDuration = 30;
+export const maxDuration = 120;
 
 const CommonSchema = z.object({
     baseUrl: z.string().trim().min(8).max(500),
