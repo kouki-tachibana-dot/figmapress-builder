@@ -181,6 +181,25 @@ function enforceElementorResponsiveVariant(
   });
 }
 
+function renderedContentHeight(element: HTMLElement): number {
+  const rootRect = element.getBoundingClientRect();
+  let bottom = rootRect.bottom;
+  element.querySelectorAll<HTMLElement>("*").forEach((descendant) => {
+    const view = descendant.ownerDocument.defaultView;
+    const style = view?.getComputedStyle(descendant);
+    if (
+      style?.display === "none"
+      || style?.visibility === "hidden"
+      || style?.position === "fixed"
+    ) {
+      return;
+    }
+    const rect = descendant.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) bottom = Math.max(bottom, rect.bottom);
+  });
+  return Math.max(rootRect.height, element.scrollHeight, bottom - rootRect.top);
+}
+
 async function loadReferenceImage(url: string): Promise<HTMLImageElement> {
   const image = new Image();
   image.decoding = "async";
@@ -326,10 +345,7 @@ export async function runVisualQa(
       );
     }
     const generatedHeight = visiblePreview
-      ? Math.max(
-          visiblePreview.getBoundingClientRect().height,
-          visiblePreview.scrollHeight,
-        )
+      ? renderedContentHeight(visiblePreview)
       : Math.max(1, frameDocument.body.scrollHeight);
     const markedSections = visiblePreview
       ? Array.from(
