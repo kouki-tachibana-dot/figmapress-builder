@@ -70,29 +70,29 @@ test("Connector bounds synchronous media localization", async () => {
   assert.match(source, /'previous_icon', 'next_icon'/);
 });
 
-test("Connector saves through Elementor and verifies persisted elements", async () => {
+test("Connector checkpoints large documents before optional Elementor bookkeeping", async () => {
   const source = await readFile(restApiPath, "utf8");
   assert.match(source, /\\Elementor\\Plugin::\$instance->documents->get\( \$post_id \)/);
   assert.match(source, /\$document->save\(/);
   const storeFunction = source.indexOf(
     "function figmapress_connector_store_elementor_document",
   );
-  const firstRead = source.indexOf(
-    "figmapress_connector_read_elementor_data( $post_id )",
-    storeFunction,
-  );
   const directWrite = source.indexOf(
     "update_metadata(\n        'post',\n        $post_id,\n        '_elementor_data'",
-    firstRead,
+    storeFunction,
   );
-  const secondRead = source.indexOf(
+  const documentSave = source.indexOf("$document->save(", directWrite);
+  const finalRead = source.indexOf(
     "figmapress_connector_read_elementor_data( $post_id )",
-    firstRead + 1,
+    documentSave,
   );
 
-  assert.ok(firstRead > 0, "Document API output must be read back");
-  assert.ok(directWrite > firstRead, "sanitized metadata must be preserved after Document API save");
-  assert.ok(secondRead > directWrite, "direct metadata output must be read back again");
+  assert.ok(directWrite > storeFunction, "editable data must be checkpointed first");
+  assert.ok(documentSave > directWrite, "Elementor bookkeeping must run only after the checkpoint");
+  assert.ok(finalRead > documentSave, "the final persisted data must be verified");
+  assert.match(source, /\$expected_elements > 350 \|\| \$encoded_bytes > 600000/);
+  assert.match(source, /! \$document_api_skipped/);
+  assert.match(source, /'documentApiSkipped'\s*=>\s*\$document_api_skipped/);
   assert.match(source, /is_array\( \$stored_value \)/);
   assert.match(source, /\$stored_elements !== \$expected_elements/);
   assert.match(source, /figmapress_elementor_save_failed/);
