@@ -7,6 +7,15 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 define( 'FIGMAPRESS_CONNECTOR_MANIFEST_URL', 'https://figmapress-builder.vercel.app/downloads/figmapress-connector.json' );
 
+function figmapress_connector_clear_update_manifest_cache() {
+    delete_site_transient( 'figmapress_connector_manifest' );
+}
+
+// WordPress removes its update_plugins transient when an administrator clicks
+// "Check again". Mirror that lifecycle so our separately cached manifest can
+// never hide a release that WordPress was explicitly asked to discover.
+add_action( 'delete_site_transient_update_plugins', 'figmapress_connector_clear_update_manifest_cache' );
+
 function figmapress_connector_update_manifest() {
     $cached = get_site_transient( 'figmapress_connector_manifest' );
     if ( is_array( $cached ) ) {
@@ -86,7 +95,7 @@ add_filter( 'plugins_api', 'figmapress_connector_plugin_information', 20, 3 );
 
 function figmapress_connector_clear_update_manifest( $upgrader, $options ) {
     if ( isset( $options['type'] ) && 'plugin' === $options['type'] ) {
-        delete_site_transient( 'figmapress_connector_manifest' );
+        figmapress_connector_clear_update_manifest_cache();
     }
 }
 add_action( 'upgrader_process_complete', 'figmapress_connector_clear_update_manifest', 10, 2 );
