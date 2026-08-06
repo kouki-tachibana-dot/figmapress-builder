@@ -1132,10 +1132,45 @@ function figmapress_connector_ensure_elementor_containers() {
 }
 
 function figmapress_connector_store_elementor_document( $post_id, $content, $page_settings, $page_template ) {
+    $expected_elements = figmapress_connector_count_elementor_elements( $content );
+    $encoded_content   = wp_json_encode( $content );
+    if ( false === $encoded_content ) {
+        return new WP_Error(
+            'figmapress_elementor_encode_failed',
+            'Elementor data could not be encoded for storage.',
+            array(
+                'status'           => 500,
+                'expectedElements' => $expected_elements,
+            )
+        );
+    }
+    $encoded_bytes = strlen( $encoded_content );
+
+    // Store the complete editable document before calling Elementor's
+    // Document API. On shared hosts a multi-megabyte absolute-positioned page
+    // can spend the whole PHP request inside Document::save(), leaving an empty
+    // draft and a stale request lock. Elementor reads these same metadata keys,
+    // so this direct write is both a durable checkpoint and the fast path for
+    // large documents.
+    $direct_meta_write = update_metadata(
+        'post',
+        $post_id,
+        '_elementor_data',
+        wp_slash( $encoded_content )
+    );
+    update_post_meta( $post_id, '_elementor_edit_mode', 'builder' );
+    update_post_meta( $post_id, '_elementor_template_type', 'wp-page' );
+    update_post_meta( $post_id, '_elementor_version', defined( 'ELEMENTOR_VERSION' ) ? ELEMENTOR_VERSION : '' );
+    update_post_meta( $post_id, '_elementor_page_settings', $page_settings );
     update_post_meta( $post_id, '_wp_page_template', $page_template );
 
     $saved_with_document_api = false;
-    if ( class_exists( '\\Elementor\\Plugin' ) && isset( \Elementor\Plugin::$instance->documents ) ) {
+    $document_api_skipped    = $expected_elements > 350 || $encoded_bytes > 600000;
+    if (
+        ! $document_api_skipped &&
+        class_exists( '\\Elementor\\Plugin' ) &&
+        isset( \Elementor\Plugin::$instance->documents )
+    ) {
         try {
             $document = \Elementor\Plugin::$instance->documents->get( $post_id );
             if ( $document && method_exists( $document, 'save' ) ) {
@@ -1149,52 +1184,26 @@ function figmapress_connector_store_elementor_document( $post_id, $content, $pag
         } catch ( Throwable $error ) {
             $saved_with_document_api = false;
         }
-    }
 
-    $expected_elements = figmapress_connector_count_elementor_elements( $content );
-    $stored_data       = figmapress_connector_read_elementor_data( $post_id );
-    $stored_elements   = is_array( $stored_data )
-        ? figmapress_connector_count_elementor_elements( $stored_data )
-        : 0;
-
-    // Elementor can keep the element count while silently removing unknown
-    // FigmaPress metadata. That metadata is required to identify the actual
-    // rendered section during Visual QA, so preserve the complete, already
-    // sanitized document after letting Document::save() update its internals.
-    $encoded_content = wp_json_encode( $content );
-    if ( false === $encoded_content ) {
-        return new WP_Error(
-            'figmapress_elementor_encode_failed',
-            'Elementor data could not be encoded for storage.',
-            array(
-                'status'           => 500,
-                'expectedElements' => $expected_elements,
-            )
+        // Elementor may normalize the document while dropping FigmaPress QA
+        // metadata. Restore the already-sanitized source after its bookkeeping.
+        $direct_meta_write = update_metadata(
+            'post',
+            $post_id,
+            '_elementor_data',
+            wp_slash( $encoded_content )
         );
+        update_post_meta( $post_id, '_elementor_page_settings', $page_settings );
+        update_post_meta( $post_id, '_wp_page_template', $page_template );
     }
-    $encoded_bytes     = strlen( $encoded_content );
-    $direct_meta_write = update_metadata(
-        'post',
-        $post_id,
-        '_elementor_data',
-        wp_slash( $encoded_content )
-    );
-    update_post_meta( $post_id, '_elementor_edit_mode', 'builder' );
-    update_post_meta( $post_id, '_elementor_template_type', 'wp-page' );
-    update_post_meta( $post_id, '_elementor_version', defined( 'ELEMENTOR_VERSION' ) ? ELEMENTOR_VERSION : '' );
-    update_post_meta( $post_id, '_elementor_page_settings', $page_settings );
 
-    // Some persistent object caches can briefly retain the value written by
-    // Document::save(). Force the verification read back to the database.
+    // Persistent object caches can briefly retain an older value. Force the
+    // verification read back to the database after the final metadata write.
     wp_cache_delete( $post_id, 'post_meta' );
     $stored_data     = figmapress_connector_read_elementor_data( $post_id );
     $stored_elements = is_array( $stored_data )
         ? figmapress_connector_count_elementor_elements( $stored_data )
         : 0;
-
-    // Elementor reads the template assignment from WordPress post meta, so
-    // restore it after Document::save() processes document settings.
-    update_post_meta( $post_id, '_wp_page_template', $page_template );
 
     if ( ! is_array( $stored_data ) || $stored_elements !== $expected_elements ) {
         return new WP_Error(
@@ -1205,6 +1214,7 @@ function figmapress_connector_store_elementor_document( $post_id, $content, $pag
                 'expectedElements'      => $expected_elements,
                 'storedElements'        => $stored_elements,
                 'documentSaveCompleted' => $saved_with_document_api,
+                'documentApiSkipped'    => $document_api_skipped,
                 'directMetaWrite'       => false !== $direct_meta_write,
                 'encodedBytes'          => $encoded_bytes,
             )
