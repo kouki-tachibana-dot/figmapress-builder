@@ -268,6 +268,8 @@ test("functional widgets include keyboard, reduced-motion, and timeout safeguard
   assert.match(script, /window\.addEventListener\("click",[\s\S]*?\}, true\);/);
   assert.match(script, /event\.stopPropagation\(\)/);
   assert.match(script, /figmapress-nav__state/);
+  assert.match(script, /state\.addEventListener\("change"/);
+  assert.match(script, /setNavigationOpen\(nav, state\.checked, false\)/);
   assert.match(script, /AbortController/);
   assert.match(script, /controller\.abort\(\)/);
   assert.match(script, /aria-busy/);
@@ -289,10 +291,15 @@ test("mobile navigation keeps its CTA and device-specific anchor targets", async
   assert.match(widget, /figmapress-nav--mobile/);
   assert.match(widget, /figmapress-nav__mobile-cta/);
   assert.match(widget, /figmapress_connector_design_geometry/);
+  assert.match(widget, /figmapress_connector_inferred_mobile_toggle_geometry/);
+  assert.match(widget, /figmapress-nav--toggle-inferred/);
+  assert.match(widget, /aria-expanded="false"/);
   assert.match(widget, /figmapress-contact--fidelity/);
   assert.match(widget, /figmapress-accordion--fidelity/);
   assert.match(style, /\.figmapress-nav--mobile/);
   assert.match(style, /\.figmapress-nav--fidelity/);
+  assert.match(style, /\.figmapress-nav--mobile\.figmapress-nav--toggle-inferred/);
+  assert.match(style, /background:\s*var\(--figmapress-accent, #d10b2c\)/);
   assert.match(style, /\.figmapress-contact--fidelity/);
   assert.match(style, /\.figmapress-accordion--fidelity/);
   assert.match(style, /linear-gradient\(rgba\(255, 255, 255, \.97\)/);

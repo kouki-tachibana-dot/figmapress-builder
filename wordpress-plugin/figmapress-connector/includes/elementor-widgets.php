@@ -67,6 +67,42 @@ function figmapress_connector_aspect_style( $geometry ) {
     return 'aspect-ratio:' . (float) $geometry['root']['width'] . '/' . (float) $geometry['root']['height'] . ';';
 }
 
+/**
+ * Keep the functional mobile menu clear of a Figma CTA when the design does
+ * not contain a menu icon of its own. The inferred 40px target sits 8px to
+ * the left of the CTA and is normalized to the imported component geometry.
+ */
+function figmapress_connector_inferred_mobile_toggle_geometry( $geometry ) {
+    if (
+        ! is_array( $geometry )
+        || ! isset( $geometry['root']['width'], $geometry['root']['height'], $geometry['cta']['x'], $geometry['cta']['y'], $geometry['cta']['height'] )
+        || ! is_numeric( $geometry['root']['width'] )
+        || ! is_numeric( $geometry['root']['height'] )
+        || ! is_numeric( $geometry['cta']['x'] )
+        || ! is_numeric( $geometry['cta']['y'] )
+        || ! is_numeric( $geometry['cta']['height'] )
+        || (float) $geometry['root']['width'] <= 0
+        || (float) $geometry['root']['height'] <= 0
+    ) {
+        return null;
+    }
+
+    $root_width     = (float) $geometry['root']['width'];
+    $root_height    = (float) $geometry['root']['height'];
+    $control_width  = min( 100, 4000 / $root_width );
+    $control_height = min( 100, 4000 / $root_height );
+    $gap            = 800 / $root_width;
+    $left           = max( 0, (float) $geometry['cta']['x'] - $gap - $control_width );
+    $top            = max( 0, (float) $geometry['cta']['y'] + ( (float) $geometry['cta']['height'] - $control_height ) / 2 );
+
+    return array(
+        'x'      => round( $left, 3 ),
+        'y'      => round( $top, 3 ),
+        'width'  => round( $control_width, 3 ),
+        'height' => round( $control_height, 3 ),
+    );
+}
+
 abstract class FigmaPress_Widget_Base extends \Elementor\Widget_Base {
     public function get_categories() {
         return array( 'figmapress' );
@@ -218,9 +254,15 @@ final class FigmaPress_Nav_Widget extends FigmaPress_Widget_Base {
         $text       = figmapress_connector_css_color( isset( $settings['text_color'] ) ? $settings['text_color'] : '', '#202020' );
         $geometry   = figmapress_connector_design_geometry( $settings );
         $fidelity   = is_array( $geometry );
+        $toggle_geometry = $fidelity && ! empty( $geometry['toggle'] ) ? $geometry['toggle'] : null;
+        $toggle_inferred = false;
+        if ( $is_mobile && $fidelity && ! $toggle_geometry ) {
+            $toggle_geometry = figmapress_connector_inferred_mobile_toggle_geometry( $geometry );
+            $toggle_inferred = is_array( $toggle_geometry );
+        }
         $nav_style  = '--figmapress-nav-bg:' . $background . ';--figmapress-accent:' . $accent . ';--figmapress-text:' . $text . ';' . figmapress_connector_aspect_style( $geometry );
         ?>
-        <nav class="figmapress-nav<?php echo $is_mobile ? ' figmapress-nav--mobile' : ''; ?><?php echo $fidelity ? ' figmapress-nav--fidelity' : ''; ?>" aria-label="<?php esc_attr_e( 'メインナビゲーション', 'figmapress-connector' ); ?>" style="<?php echo esc_attr( $nav_style ); ?>">
+        <nav class="figmapress-nav<?php echo $is_mobile ? ' figmapress-nav--mobile' : ''; ?><?php echo $fidelity ? ' figmapress-nav--fidelity' : ''; ?><?php echo $toggle_inferred ? ' figmapress-nav--toggle-inferred' : ''; ?>" aria-label="<?php esc_attr_e( 'メインナビゲーション', 'figmapress-connector' ); ?>" style="<?php echo esc_attr( $nav_style ); ?>">
             <?php if ( $fidelity && ! empty( $geometry['topBar'] ) ) : ?>
                 <span class="figmapress-nav__topbar" aria-hidden="true" style="<?php echo esc_attr( figmapress_connector_geometry_style( $geometry['topBar'] ) ); ?>"></span>
             <?php endif; ?>
@@ -230,8 +272,8 @@ final class FigmaPress_Nav_Widget extends FigmaPress_Widget_Base {
             <?php if ( $fidelity && $cta_icon && ! empty( $geometry['ctaIcon'] ) ) : ?>
                 <img class="figmapress-nav__cta-icon" src="<?php echo esc_url( $cta_icon ); ?>" alt="" aria-hidden="true" style="<?php echo esc_attr( figmapress_connector_geometry_style( $geometry['ctaIcon'] ) ); ?>">
             <?php endif; ?>
-            <input class="figmapress-nav__state" id="<?php echo esc_attr( $menu_state_id ); ?>" type="checkbox" aria-controls="<?php echo esc_attr( $menu_id ); ?>" aria-label="<?php esc_attr_e( 'メニューを開閉', 'figmapress-connector' ); ?>"<?php echo $fidelity && ! empty( $geometry['toggle'] ) ? ' style="' . esc_attr( figmapress_connector_geometry_style( $geometry['toggle'] ) ) . '"' : ''; ?>>
-            <label class="figmapress-nav__toggle" for="<?php echo esc_attr( $menu_state_id ); ?>"<?php echo $fidelity && ! empty( $geometry['toggle'] ) ? ' style="' . esc_attr( figmapress_connector_geometry_style( $geometry['toggle'] ) ) . '"' : ''; ?>><span></span><span></span><span></span><span class="screen-reader-text"><?php esc_html_e( 'メニューを開閉', 'figmapress-connector' ); ?></span></label>
+            <input class="figmapress-nav__state" id="<?php echo esc_attr( $menu_state_id ); ?>" type="checkbox" aria-controls="<?php echo esc_attr( $menu_id ); ?>" aria-label="<?php esc_attr_e( 'メニューを開閉', 'figmapress-connector' ); ?>"<?php echo $toggle_geometry ? ' style="' . esc_attr( figmapress_connector_geometry_style( $toggle_geometry ) ) . '"' : ''; ?>>
+            <label class="figmapress-nav__toggle" for="<?php echo esc_attr( $menu_state_id ); ?>" aria-expanded="false"<?php echo $toggle_geometry ? ' style="' . esc_attr( figmapress_connector_geometry_style( $toggle_geometry ) ) . '"' : ''; ?>><span></span><span></span><span></span><span class="screen-reader-text"><?php esc_html_e( 'メニューを開閉', 'figmapress-connector' ); ?></span></label>
             <?php if ( $is_mobile && ! empty( $settings['cta_label'] ) ) : ?>
                 <a class="figmapress-nav__mobile-cta" href="<?php echo esc_url( $cta_url ); ?>"<?php echo $fidelity && ! empty( $geometry['cta'] ) ? ' style="' . esc_attr( figmapress_connector_geometry_style( $geometry['cta'], true ) ) . '"' : ''; ?>><?php echo esc_html( $settings['cta_label'] ); ?></a>
             <?php endif; ?>

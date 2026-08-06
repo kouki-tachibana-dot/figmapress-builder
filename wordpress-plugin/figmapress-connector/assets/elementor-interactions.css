@@ -1143,5 +1143,19 @@ html {
         padding: 0;
         position: absolute;
         width: auto;
+        z-index: 1;
+    }
+
+    .figmapress-nav--mobile.figmapress-nav--toggle-inferred .figmapress-nav__toggle {
+        align-content: center;
+        background: rgba(255, 255, 255, .82);
+        border-radius: 6px;
+        justify-items: center;
+        padding: 8px;
+    }
+
+    .figmapress-nav--mobile.figmapress-nav--toggle-inferred .figmapress-nav__toggle > span:not(.screen-reader-text) {
+        background: var(--figmapress-accent, #d10b2c);
+        width: 22px;
     }
 }

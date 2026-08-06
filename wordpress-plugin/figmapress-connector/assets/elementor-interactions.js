@@ -15,7 +15,16 @@
 
     function initNavigation(scope) {
         scope.querySelectorAll(".figmapress-nav").forEach(function (nav) {
-            if (!nav.querySelector(".figmapress-nav__toggle")) return;
+            var toggle = nav.querySelector(".figmapress-nav__toggle");
+            var state = nav.querySelector(".figmapress-nav__state");
+            if (!toggle) return;
+            if (state && state.dataset.figmapressBound !== "true") {
+                state.dataset.figmapressBound = "true";
+                state.addEventListener("change", function () {
+                    setNavigationOpen(nav, state.checked, false);
+                });
+            }
+            toggle.setAttribute("aria-expanded", state && state.checked ? "true" : "false");
             nav.dataset.figmapressReady = "true";
         });
     }
