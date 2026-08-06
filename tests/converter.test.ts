@@ -1090,18 +1090,33 @@ test("Figma interaction layers become functional Elementor widgets", async () =>
               ],
             },
             {
+              id: "35:0",
+              name: "Sec/Results Sec",
+              type: "FRAME",
+              absoluteBoundingBox: { x: 0, y: 1100, width: 1920, height: 300 },
+              children: [
+                text("35:1", "Filter label", "市民相談", 300, 1200, 180),
+              ],
+            },
+            {
               id: "40:0",
               name: "Comp/Button-CTA",
               type: "FRAME",
               absoluteBoundingBox: { x: 0, y: 1515, width: 1920, height: 900 },
-              children: [
-                text("40:1", "Heading", "あなたの声を聞かせてください。", 600, 1580, 700, 50),
-                text("40:2", "Label", "お名前", 430, 1700),
-                text("40:3", "Label", "メールアドレス", 430, 1780, 180),
-                text("40:4", "Label", "お住まいの地域", 430, 1860, 180),
-                text("40:5", "Label", "ご相談・ご意見の内容", 430, 1940, 220),
-                text("40:6", "Button", "相談・意見を送る →", 800, 2200, 260),
-              ],
+              children: [{
+                id: "40:group",
+                name: "Comp/Button-CTA",
+                type: "FRAME",
+                absoluteBoundingBox: { x: 300, y: 1560, width: 1320, height: 760 },
+                children: [
+                  text("40:1", "Heading", "あなたの声を聞かせてください。", 600, 1580, 700, 50),
+                  text("40:2", "Label", "お名前", 430, 1700),
+                  text("40:3", "Label", "メールアドレス", 430, 1780, 180),
+                  text("40:4", "Label", "お住まいの地域", 430, 1860, 180),
+                  text("40:5", "Label", "ご相談・ご意見の内容", 430, 1940, 220),
+                  text("40:6", "Button", "相談・意見を送る →", 800, 2200, 260),
+                ],
+              }],
             },
           ],
         }],
@@ -1127,6 +1142,13 @@ test("Figma interaction layers become functional Elementor widgets", async () =>
   assert.equal((accordion?.settings.items as Array<{ title: string }>).length, 4);
   assert.equal((accordion?.settings.items as Array<{ content: string }>)[0]?.content, "活動内容");
   assert.equal(form?.settings._element_id, "contact");
+  assert.equal(elements.filter((element) => element.settings._element_id === "contact").length, 1);
+  assert.notEqual(
+    elements.find((element) => element.settings.figmapress_node_id === "35:0")?.settings._element_id,
+    "contact",
+  );
+  assert.equal(result.qualityReport?.metrics.expectedFunctionalWidgets.contactForm, 1);
+  assert.equal(result.qualityReport?.metrics.functionalWidgets.contactForm, 1);
   assert.deepEqual(
     JSON.parse(String(navigation?.settings.design_geometry)).root,
     { width: 1920, height: 115 },

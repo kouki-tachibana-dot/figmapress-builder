@@ -326,7 +326,10 @@ export function collectRenderedNodeIds(document: FigmaNode): string[] {
       const bounds = node.absoluteBoundingBox;
       const prioritizedVisual = functionalVisual
         || /(?:carousel|slider|カルーセル|スライダー|header.?logo|cta.?icon)/i.test(node.name);
+      const functionalContainer = /(?:carousel|slider|カルーセル|スライダー)/i.test(node.name)
+        && !/(?:item|prev|previous|next|arrow|dot|項目|前へ|次へ)/i.test(node.name);
       const renderGroup = FIGMA_RENDER_GROUP_TYPES.has(node.type)
+        && !functionalContainer
         && !hasText(node)
         && hasComplexVisual(node);
       const renderLeaf = FIGMA_RENDERABLE_TYPES.has(node.type) || hasOwnImageFill(node);

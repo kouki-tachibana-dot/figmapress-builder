@@ -566,20 +566,35 @@ function countExpectedFunctionalWidgets(roots: FigmaNode[]): {
   accordion: number;
 } {
   const result = { navigation: 0, carousel: 0, contactForm: 0, accordion: 0 };
+  const countOutermostMatches = (
+    root: FigmaNode,
+    matches: (node: FigmaNode) => boolean,
+  ): number => {
+    let count = 0;
+    const visit = (node: FigmaNode): void => {
+      if (node.visible === false) return;
+      if (matches(node)) {
+        count += 1;
+        return;
+      }
+      for (const child of node.children ?? []) visit(child);
+    };
+    visit(root);
+    return count;
+  };
   for (const root of roots) {
-    const nodes = flatten(root).map(({ node }) => node).filter((node) => node.visible !== false);
-    result.navigation += nodes.filter((node) => {
+    result.navigation += countOutermostMatches(root, (node) => {
       if (!/(?:\{wp:nav\}|header.*(?:sec|section)|navigation)/i.test(node.name)) return false;
       const menuLabels = [node, ...nodeDescendants(node)]
         .filter((child) => child.type === "TEXT" && child.characters?.trim())
         .filter((child) => /想い|政策|活動報告|プロフィール|thought|polic|activit|profile/i.test(child.characters ?? ""));
       return menuLabels.length >= 2;
-    }).length;
-    result.carousel += nodes.filter((node) =>
+    });
+    result.carousel += countOutermostMatches(root, (node) =>
       /(?:\{wp:carousel\}|carousel|slider|スライダー|カルーセル)/i.test(node.name)
       && !/(?:item|prev|previous|next|arrow|dot|項目|前へ|次へ)/i.test(node.name)
-    ).length;
-    result.contactForm += nodes.filter((node) => {
+    );
+    result.contactForm += countOutermostMatches(root, (node) => {
       if (!/(?:\{wp:form\}|contact.?form|button.?cta|お問い合わせ)/i.test(node.name)) return false;
       const copy = nodeDescendants(node)
         .filter((child) => child.type === "TEXT" && child.characters?.trim())
@@ -588,13 +603,13 @@ function countExpectedFunctionalWidgets(roots: FigmaNode[]): {
       return /メールアドレス|e-?mail/i.test(copy)
         && /ご相談|ご意見|message|お問い合わせ内容/i.test(copy)
         && /お名前|氏名|name/i.test(copy);
-    }).length;
-    result.accordion += nodes.filter((node) =>
+    });
+    result.accordion += countOutermostMatches(root, (node) =>
       /(?:\{wp:accordion\}|profile|プロフィール|faq|よくある質問)/i.test(node.name)
       && nodeDescendants(node).filter((child) =>
         child.type === "TEXT" && /^\s*\d{4}年度\s*$/.test(child.characters ?? "")
       ).length >= 3
-    ).length;
+    );
   }
   return result;
 }
