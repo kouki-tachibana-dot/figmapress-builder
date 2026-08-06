@@ -106,6 +106,13 @@ final class FigmaPress_Nav_Widget extends FigmaPress_Widget_Base {
                 'type'  => \Elementor\Controls_Manager::MEDIA,
             )
         );
+        $this->add_control(
+            'cta_icon',
+            array(
+                'label' => esc_html__( 'CTAアイコン', 'figmapress-connector' ),
+                'type'  => \Elementor\Controls_Manager::MEDIA,
+            )
+        );
         $repeater = new \Elementor\Repeater();
         $repeater->add_control(
             'label',
@@ -200,6 +207,7 @@ final class FigmaPress_Nav_Widget extends FigmaPress_Widget_Base {
         $settings   = $this->get_settings_for_display();
         $items      = isset( $settings['items'] ) && is_array( $settings['items'] ) ? $settings['items'] : array();
         $logo       = isset( $settings['logo']['url'] ) ? $settings['logo']['url'] : '';
+        $cta_icon   = isset( $settings['cta_icon']['url'] ) ? $settings['cta_icon']['url'] : '';
         $cta_url    = isset( $settings['cta_url']['url'] ) ? $settings['cta_url']['url'] : '#contact';
         $home_url   = isset( $settings['home_url']['url'] ) ? $settings['home_url']['url'] : '#top';
         $is_mobile  = isset( $settings['layout_variant'] ) && 'mobile' === $settings['layout_variant'];
@@ -218,6 +226,9 @@ final class FigmaPress_Nav_Widget extends FigmaPress_Widget_Base {
             <?php endif; ?>
             <?php if ( $logo ) : ?>
                 <a class="figmapress-nav__logo" href="<?php echo esc_url( $home_url ); ?>" aria-label="<?php esc_attr_e( 'ページ先頭', 'figmapress-connector' ); ?>"<?php echo $fidelity && ! empty( $geometry['logo'] ) ? ' style="' . esc_attr( figmapress_connector_geometry_style( $geometry['logo'] ) ) . '"' : ''; ?>><img src="<?php echo esc_url( $logo ); ?>" alt="<?php esc_attr_e( 'サイトロゴ', 'figmapress-connector' ); ?>"></a>
+            <?php endif; ?>
+            <?php if ( $fidelity && $cta_icon && ! empty( $geometry['ctaIcon'] ) ) : ?>
+                <img class="figmapress-nav__cta-icon" src="<?php echo esc_url( $cta_icon ); ?>" alt="" aria-hidden="true" style="<?php echo esc_attr( figmapress_connector_geometry_style( $geometry['ctaIcon'] ) ); ?>">
             <?php endif; ?>
             <input class="figmapress-nav__state" id="<?php echo esc_attr( $menu_state_id ); ?>" type="checkbox" aria-controls="<?php echo esc_attr( $menu_id ); ?>" aria-label="<?php esc_attr_e( 'メニューを開閉', 'figmapress-connector' ); ?>"<?php echo $fidelity && ! empty( $geometry['toggle'] ) ? ' style="' . esc_attr( figmapress_connector_geometry_style( $geometry['toggle'] ) ) . '"' : ''; ?>>
             <label class="figmapress-nav__toggle" for="<?php echo esc_attr( $menu_state_id ); ?>"<?php echo $fidelity && ! empty( $geometry['toggle'] ) ? ' style="' . esc_attr( figmapress_connector_geometry_style( $geometry['toggle'] ) ) . '"' : ''; ?>><span></span><span></span><span></span><span class="screen-reader-text"><?php esc_html_e( 'メニューを開閉', 'figmapress-connector' ); ?></span></label>

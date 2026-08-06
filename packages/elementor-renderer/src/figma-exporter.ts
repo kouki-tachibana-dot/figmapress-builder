@@ -434,7 +434,18 @@ function navigationElement(
   const explicitlyNamed = /(?:\{wp:nav\}|header.*(?:sec|section)|navigation)/i.test(node.name);
   if (!explicitlyNamed || menuTexts.length < 2) return null;
 
-  const logoNode = descendants(node).find((child) => /(?:header\/logo|\blogo\b|ロゴ)/i.test(child.name));
+  const navigationVisuals = descendants(node)
+    .filter((child) => child.absoluteBoundingBox && visualUrl(child, context.assets))
+    .sort((left, right) => {
+      const leftBounds = left.absoluteBoundingBox as FigmaBounds;
+      const rightBounds = right.absoluteBoundingBox as FigmaBounds;
+      return leftBounds.x - rightBounds.x || area(right) - area(left);
+    });
+  const logoNode = descendants(node).find((child) => /(?:header\/logo|\blogo\b|ロゴ)/i.test(child.name))
+    ?? navigationVisuals.find((child) => {
+      const childBounds = child.absoluteBoundingBox as FigmaBounds;
+      return childBounds.x + childBounds.width / 2 < bounds.x + bounds.width * 0.6;
+    });
   const logoUrl = logoNode ? visualUrl(logoNode, context.assets) ?? "" : "";
   const ctaText = descendants(node).find((child) =>
     child.type === "TEXT" && /(?:headercta\/text|ご相談|お問い合わせ|contact)/i.test(`${child.name} ${child.characters ?? ""}`),
@@ -447,6 +458,19 @@ function navigationElement(
   const ctaBackground = ctaText?.absoluteBoundingBox
     ? smallestContainingVisual(node, ctaText.absoluteBoundingBox)
     : undefined;
+  const ctaBounds = ctaBackground?.absoluteBoundingBox;
+  const ctaIconNode = ctaBounds ? navigationVisuals
+    .filter((child) => child !== logoNode)
+    .find((child) => {
+      const childBounds = child.absoluteBoundingBox as FigmaBounds;
+      const centerX = childBounds.x + childBounds.width / 2;
+      const centerY = childBounds.y + childBounds.height / 2;
+      return centerX >= ctaBounds.x
+        && centerX <= ctaBounds.x + ctaBounds.width
+        && centerY >= ctaBounds.y
+        && centerY <= ctaBounds.y + ctaBounds.height;
+    }) : undefined;
+  const ctaIconUrl = ctaIconNode ? visualUrl(ctaIconNode, context.assets) ?? "" : "";
 
   const settings: ElementorSettings = {
     ...widgetPosition(node, bounds, parentBounds, parentNode),
@@ -460,6 +484,13 @@ function navigationElement(
       alt: "サイトロゴ",
       source: "library",
       figmapress_key: mediaKey(`${node.id}:logo`, logoUrl),
+    } : undefined,
+    cta_icon: ctaIconUrl ? {
+      url: ctaIconUrl,
+      id: "",
+      alt: "",
+      source: "library",
+      figmapress_key: mediaKey(`${node.id}:cta-icon`, ctaIconUrl),
     } : undefined,
     items: menuTexts.map((item, index) => ({
       _id: hashId(`${item.id}:menu:${index}`),
@@ -483,6 +514,7 @@ function navigationElement(
       background: relativeDesignBox(background?.absoluteBoundingBox, bounds),
       topBar: relativeDesignBox(topBar?.absoluteBoundingBox, bounds),
       logo: relativeDesignBox(logoNode?.absoluteBoundingBox, bounds),
+      ctaIcon: relativeDesignBox(ctaIconNode?.absoluteBoundingBox, bounds),
       toggle: relativeDesignBox(toggleNode?.absoluteBoundingBox, bounds),
       items: menuTexts.map((item) => ({
         ...relativeDesignBox(item.absoluteBoundingBox, bounds),
@@ -561,7 +593,7 @@ function contactFormElement(
     const labelBounds = labelNode?.absoluteBoundingBox;
     if (!labelBounds) return undefined;
     const labelCenterY = labelBounds.y + labelBounds.height / 2;
-    return controlCandidates
+    const horizontal = controlCandidates
       .filter((candidate) => {
         const candidateBounds = candidate.absoluteBoundingBox as FigmaBounds;
         return candidateBounds.x > labelBounds.x + labelBounds.width
@@ -573,6 +605,26 @@ function contactFormElement(
         const rightBounds = right.absoluteBoundingBox as FigmaBounds;
         return Math.abs((leftBounds.y + leftBounds.height / 2) - labelCenterY)
           - Math.abs((rightBounds.y + rightBounds.height / 2) - labelCenterY);
+      })[0];
+    if (horizontal) return horizontal;
+
+    const labelBottom = labelBounds.y + labelBounds.height;
+    return controlCandidates
+      .filter((candidate) => {
+        const candidateBounds = candidate.absoluteBoundingBox as FigmaBounds;
+        const verticalGap = candidateBounds.y - labelBottom;
+        return verticalGap >= -2
+          && verticalGap <= bounds.height * 0.08
+          && Math.abs(candidateBounds.x - labelBounds.x) <= bounds.width * 0.15;
+      })
+      .sort((left, right) => {
+        const leftBounds = left.absoluteBoundingBox as FigmaBounds;
+        const rightBounds = right.absoluteBoundingBox as FigmaBounds;
+        const leftScore = Math.max(0, leftBounds.y - labelBottom)
+          + Math.abs(leftBounds.x - labelBounds.x) * 0.25;
+        const rightScore = Math.max(0, rightBounds.y - labelBottom)
+          + Math.abs(rightBounds.x - labelBounds.x) * 0.25;
+        return leftScore - rightScore;
       })[0];
   };
   const fieldGeometry = (labelNode: FigmaNode | undefined) => ({
@@ -1028,7 +1080,7 @@ function menuAnchor(label: string, context: RenderContext): string {
   if (/政策|policy|policies/i.test(label)) return anchorHref("policies", context);
   if (/活動報告|activit|report/i.test(label)) return anchorHref("activities", context);
   if (/プロフィール|profile/i.test(label)) return anchorHref("profile", context);
-  if (/相談|問合|contact/i.test(label)) return anchorHref("contact", context);
+  if (/相談|問(?:い)?合わせ|問合|contact/i.test(label)) return anchorHref("contact", context);
   return anchorHref(slug(label) || "section", context);
 }
 
@@ -1055,7 +1107,7 @@ function sectionAnchorSettings(node: FigmaNode, context: RenderContext): Element
   if (/policy|policies|政策/i.test(name)) return { _element_id: anchorId("policies", context) };
   if (/activit|report|活動報告|news/i.test(name)) return { _element_id: anchorId("activities", context) };
   if (/profile|プロフィール/i.test(name)) return { _element_id: anchorId("profile", context) };
-  if (/contact|相談|問合/i.test(name)) return { _element_id: anchorId("contact", context) };
+  if (/contact|相談|問(?:い)?合わせ|問合/i.test(name)) return { _element_id: anchorId("contact", context) };
   if (!/^(?:group|frame|section)\b/i.test(name)) return {};
   const copy = descendants(node)
     .filter((child) => child.type === "TEXT" && child.characters?.trim())
@@ -1066,7 +1118,7 @@ function sectionAnchorSettings(node: FigmaNode, context: RenderContext): Element
   if (/policy|policies|政策/i.test(copy)) return { _element_id: anchorId("policies", context) };
   if (/activit|report|活動報告|news/i.test(copy)) return { _element_id: anchorId("activities", context) };
   if (/profile|プロフィール/i.test(copy)) return { _element_id: anchorId("profile", context) };
-  if (/contact|相談|問合/i.test(copy)) return { _element_id: anchorId("contact", context) };
+  if (/contact|相談|問(?:い)?合わせ|問合/i.test(copy)) return { _element_id: anchorId("contact", context) };
   return {};
 }
 
@@ -1181,7 +1233,7 @@ function sectionAnchorFromText(value: string): string | null {
   if (/policy|policies|政策/i.test(value)) return "policies";
   if (/activit|report|活動報告|news/i.test(value)) return "activities";
   if (/profile|プロフィール/i.test(value)) return "profile";
-  if (/contact|相談|問合|声を聞かせて/i.test(value)) return "contact";
+  if (/contact|相談|問(?:い)?合わせ|問合|声を聞かせて/i.test(value)) return "contact";
   return null;
 }
 
@@ -1398,6 +1450,7 @@ function containerPosition(
   const width = size(percent(bounds.width, parent.width), "%");
   return {
     position: "absolute",
+    z_index: 1,
     _offset_orientation_h: "start",
     _offset_x: size(percent(bounds.x - parent.x, parent.width), "%"),
     _offset_orientation_v: "start",
