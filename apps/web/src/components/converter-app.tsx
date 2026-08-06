@@ -64,6 +64,7 @@ const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
+const DEFERRED_MEDIA_CONNECTOR_VERSION = "0.16.16";
 
 function versionAtLeast(version: string | undefined, minimum: string): boolean {
   if (!version) return false;
@@ -1426,6 +1427,10 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         wpTransport,
         wpTarget,
         new TextEncoder().encode(serializedPayload).byteLength,
+        versionAtLeast(
+          wpStatus?.connectorVersion,
+          DEFERRED_MEDIA_CONNECTOR_VERSION,
+        ),
       );
       let createdResult: WordPressResult;
       if (!useWordPressProxy) {
@@ -1941,7 +1946,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.25.7 live</span>
+          <span className="status-pill"><i /> v0.25.8 live</span>
         </nav>
       </header>
 
@@ -2930,7 +2935,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.25.7</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.25.8</span></div>
       </footer>
     </main>
   );
