@@ -1037,6 +1037,10 @@ html {
     display: contents;
 }
 
+.figmapress-accordion details[data-has-content="false"] summary {
+    cursor: default;
+}
+
 .figmapress-accordion--fidelity summary {
     font-size: var(--figmapress-accordion-title-size, 2.15cqw);
     line-height: 1.2;

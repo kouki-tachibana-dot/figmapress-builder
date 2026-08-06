@@ -705,19 +705,32 @@ final class FigmaPress_Accordion_Widget extends FigmaPress_Widget_Base {
                 $accordion_style .= '--figmapress-accordion-row-height:' . $row_step . 'cqw;';
             }
         }
+        $open_first = 'yes' === ( isset( $settings['open_first'] ) ? $settings['open_first'] : 'yes' );
+        $first_open_index = -1;
+        if ( $open_first ) {
+            foreach ( $items as $candidate_index => $candidate_item ) {
+                $candidate_content = isset( $candidate_item['content'] ) ? trim( wp_strip_all_tags( (string) $candidate_item['content'] ) ) : '';
+                if ( '' !== $candidate_content ) {
+                    $first_open_index = $candidate_index;
+                    break;
+                }
+            }
+        }
         ?>
         <div class="figmapress-accordion<?php echo $fidelity ? ' figmapress-accordion--fidelity' : ''; ?>" data-multiple="<?php echo 'yes' === ( isset( $settings['allow_multiple'] ) ? $settings['allow_multiple'] : '' ) ? 'true' : 'false'; ?>" style="<?php echo esc_attr( $accordion_style ); ?>">
             <?php foreach ( $items as $index => $item ) : ?>
                 <?php
                 $item_geometry = $fidelity && isset( $geometry['items'][ $index ] ) ? $geometry['items'][ $index ] : null;
                 $summary_box   = is_array( $item_geometry ) && isset( $item_geometry['title'] ) && is_array( $item_geometry['title'] ) ? $item_geometry['title'] : null;
+                $item_content  = isset( $item['content'] ) ? (string) $item['content'] : '';
+                $has_content   = '' !== trim( wp_strip_all_tags( $item_content ) );
                 if ( is_array( $summary_box ) ) {
                     unset( $summary_box['width'] );
                 }
                 ?>
-                <details<?php echo 0 === $index && 'yes' === ( isset( $settings['open_first'] ) ? $settings['open_first'] : 'yes' ) ? ' open' : ''; ?>>
-                    <summary<?php echo $summary_box ? ' style="' . esc_attr( figmapress_connector_geometry_style( $summary_box, true ) ) . '"' : ''; ?>><span><?php echo esc_html( isset( $item['title'] ) ? $item['title'] : '' ); ?></span><span class="figmapress-accordion__icon" aria-hidden="true"></span></summary>
-                    <div class="figmapress-accordion__content"<?php echo $item_geometry && ! empty( $item_geometry['content'] ) ? ' style="' . esc_attr( figmapress_connector_geometry_style( $item_geometry['content'] ) ) . '"' : ''; ?>><?php echo wp_kses_post( wpautop( isset( $item['content'] ) ? $item['content'] : '' ) ); ?></div>
+                <details data-has-content="<?php echo $has_content ? 'true' : 'false'; ?>"<?php echo $index === $first_open_index ? ' open' : ''; ?>>
+                    <summary<?php echo ! $has_content ? ' aria-disabled="true" tabindex="-1"' : ''; ?><?php echo $summary_box ? ' style="' . esc_attr( figmapress_connector_geometry_style( $summary_box, true ) ) . '"' : ''; ?>><span><?php echo esc_html( isset( $item['title'] ) ? $item['title'] : '' ); ?></span><span class="figmapress-accordion__icon" aria-hidden="true"></span></summary>
+                    <div class="figmapress-accordion__content"<?php echo $item_geometry && ! empty( $item_geometry['content'] ) ? ' style="' . esc_attr( figmapress_connector_geometry_style( $item_geometry['content'] ) ) . '"' : ''; ?>><?php echo wp_kses_post( wpautop( $item_content ) ); ?></div>
                 </details>
             <?php endforeach; ?>
         </div>
