@@ -295,25 +295,29 @@ test("browser splits large Elementor creation into bounded authenticated uploads
       : Response.json({ complete: false, received: chunk.index + 1, total: chunk.total });
   });
 
-  const result = await createWordPressDraftChunkedDirect(config, {
-    target: "elementor",
-    requestId: "22222222-2222-4222-8222-222222222222",
-    sourceKey: "figma:Abcdef123:46:12",
-    title: "ホーム",
-    slug: "/",
-    pageTemplate: "elementor_canvas",
-    template: {
+  const result = await createWordPressDraftChunkedDirect(
+    config,
+    {
+      target: "elementor",
+      requestId: "22222222-2222-4222-8222-222222222222",
+      sourceKey: "figma:Abcdef123:46:12",
       title: "ホーム",
-      type: "page",
-      version: "0.4",
-      page_settings: {},
-      content: [{ id: "1234abcd", settings: { text: "明石".repeat(60_000) } }],
+      slug: "/",
+      pageTemplate: "elementor_canvas",
+      template: {
+        title: "ホーム",
+        type: "page",
+        version: "0.4",
+        page_settings: {},
+        content: [{ id: "1234abcd", settings: { text: "明石".repeat(60_000) } }],
+      },
     },
-  });
+    { chunkBytes: 32_000, maxChunks: 128 },
+  );
 
   assert.equal(result.status, "draft");
-  assert.ok(requests.length > 2);
-  assert.ok(requests.every((request) => request.body.length < 130_000));
+  assert.ok(requests.length > 6);
+  assert.ok(requests.every((request) => request.body.length < 48_000));
   assert.ok(requests.every((request) => /elementor\/uploads\/22222222/.test(request.url)));
   const reconstructed = requests
     .map((request) => JSON.parse(request.body) as { index: number; chunk: string })

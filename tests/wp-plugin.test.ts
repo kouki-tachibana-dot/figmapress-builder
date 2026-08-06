@@ -242,6 +242,8 @@ test("Connector reconstructs bounded user-scoped Elementor uploads", async () =>
   assert.match(source, /get_current_user_id\(\)/);
   assert.match(source, /set_transient\( \$upload_key, \$state, 15 \* MINUTE_IN_SECONDS \)/);
   assert.match(source, /base64_decode\( \$chunk, true \)/);
+  assert.match(source, /\$total > 128/);
+  assert.match(source, /strlen\( \$chunk \) > 128000/);
   assert.match(source, /strlen\( \$decoded \) > 72000/);
   assert.match(source, /figmapress_connector_rest_create_elementor_page\( \$forward \)/);
 });
