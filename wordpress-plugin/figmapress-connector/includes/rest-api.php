@@ -305,6 +305,31 @@ function figmapress_connector_find_page_by_meta( $meta_key, $meta_value ) {
 }
 
 /**
+ * Release only the lock created by the current request, including when PHP is
+ * terminated by a host timeout while Elementor is storing a large document.
+ */
+function figmapress_connector_register_request_lock_cleanup( $lock_key, $lock_token ) {
+    register_shutdown_function(
+        static function () use ( $lock_key, $lock_token ) {
+            $current = get_option( $lock_key );
+            if (
+                is_array( $current ) && isset( $current['token'] ) &&
+                is_string( $current['token'] ) && hash_equals( $lock_token, $current['token'] )
+            ) {
+                delete_option( $lock_key );
+            }
+        }
+    );
+}
+
+function figmapress_connector_request_lock_is_stale( $started ) {
+    // Normal document persistence completes in seconds. A two-minute lock is
+    // enough to serialize writes while allowing a disconnected browser to
+    // recover without waiting for the previous ten-minute safety window.
+    return $started && $started < time() - ( 2 * MINUTE_IN_SECONDS );
+}
+
+/**
  * Receive a large Elementor page in bounded browser requests, then forward the
  * reconstructed JSON to the normal creation handler. Upload state is scoped to
  * the authenticated user and expires automatically.
@@ -418,7 +443,7 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
             $lock_started    = is_array( $existing_lock ) && isset( $existing_lock['started'] )
                 ? absint( $existing_lock['started'] )
                 : 0;
-            if ( $lock_started && $lock_started >= time() - ( 10 * MINUTE_IN_SECONDS ) ) {
+            if ( $lock_started && ! figmapress_connector_request_lock_is_stale( $lock_started ) ) {
                 return new WP_Error(
                     'figmapress_request_in_progress',
                     '同じElementor下書きを作成中です。少し待ってから同じボタンを再度押してください。',
@@ -472,9 +497,11 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
     }
 
     if ( '' !== $request_lock_key ) {
+        $lock_token       = wp_generate_uuid4();
         $lock_value       = array(
             'started' => time(),
             'user'    => get_current_user_id(),
+            'token'   => $lock_token,
         );
         $locked           = add_option( $request_lock_key, $lock_value, '', false );
         if ( ! $locked ) {
@@ -482,7 +509,7 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
             $started       = is_array( $existing_lock ) && isset( $existing_lock['started'] )
                 ? absint( $existing_lock['started'] )
                 : 0;
-            if ( $started && $started < time() - ( 10 * MINUTE_IN_SECONDS ) ) {
+            if ( figmapress_connector_request_lock_is_stale( $started ) ) {
                 delete_option( $request_lock_key );
                 $locked = add_option( $request_lock_key, $lock_value, '', false );
             }
@@ -494,6 +521,7 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
                 array( 'status' => 409 )
             );
         }
+        figmapress_connector_register_request_lock_cleanup( $request_lock_key, $lock_token );
     }
 
     $page_template = isset( $params['pageTemplate'] ) ? $params['pageTemplate'] : 'elementor_canvas';

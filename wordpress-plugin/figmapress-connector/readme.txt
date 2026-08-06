@@ -3,7 +3,7 @@ Contributors: figmapress
 Tags: blocks, figma, gutenberg, elementor
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 0.16.20
+Stable tag: 0.16.21
 License: GPLv2 or later
 
 Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
@@ -15,6 +15,10 @@ Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
    create a draft page containing figmapress/* blocks.
 
 == Changelog ==
+= 0.16.21 =
+* 大容量Elementor下書きの保存中に通信が切れても、リクエストロックを安全に解除して再送できるようにしました。
+* ロックをリクエスト固有トークンで保護し、別の更新処理を誤って解除しないようにしました。
+
 = 0.16.20 =
 * Figmaにメニューアイコンがないスマホヘッダーでは、操作ボタンをCTAの左へ自動配置して重なりを解消します。
 * メニューの標準チェック操作を開閉状態と同期し、外側タップ・リンク選択・Escキーで確実に閉じられるようにします。

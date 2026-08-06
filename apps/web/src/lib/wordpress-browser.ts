@@ -452,6 +452,15 @@ function base64Bytes(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
+function waitForRetry(delayMs: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
+function isRetryableChunkUploadError(error: unknown): boolean {
+  return error instanceof WordPressDirectError
+    && (error.kind === "network" || error.status === 409);
+}
+
 export async function createWordPressDraftChunkedDirect(
   config: BrowserWordPressConfig,
   input: Extract<BrowserDraftInput, { target: "elementor" }>,
@@ -468,36 +477,90 @@ export async function createWordPressDraftChunkedDirect(
   const bytes = new TextEncoder().encode(body);
   const chunkBytes = 72_000;
   const total = Math.ceil(bytes.byteLength / chunkBytes);
-  let result: BrowserWordPressResult | null = null;
-  for (let index = 0; index < total; index += 1) {
-    const response = await directFetch(
-      config,
-      `/figmapress/v1/elementor/uploads/${input.requestId}`,
-      {
-        method: "POST",
-        body: JSON.stringify({
+  if (total > 32) {
+    throw new WordPressDirectError(
+      "Elementorデータが大きすぎるため、変換対象を分割してください。",
+      "request",
+      413,
+    );
+  }
+
+  // A shared host can finish storing the final chunk after the browser-side
+  // connection has already been closed. Replaying the same request ID is safe:
+  // every chunk replaces its own index and the Connector serializes the final
+  // document write. Retry an interrupted upload as a whole so a lone final
+  // chunk can never leave an incomplete transient behind.
+  const retryDelays = [1_000, 2_500, 5_000, 10_000, 20_000, 30_000];
+  for (let round = 0; round <= retryDelays.length; round += 1) {
+    try {
+      let result: BrowserWordPressResult | null = null;
+      for (let index = 0; index < total; index += 1) {
+        const chunkBody = JSON.stringify({
           index,
           total,
           chunk: base64Bytes(bytes.subarray(index * chunkBytes, (index + 1) * chunkBytes)),
-        }),
-      },
-    );
-    const data = await responseJson<BrowserWordPressResult & { complete?: boolean }>(
-      response,
-      config.connectorToken,
-    );
-    if (index < total - 1) {
-      if (data.complete !== false) {
-        throw new WordPressDirectError("WordPressの分割受信状態を確認できませんでした。", "request");
+        });
+        let response: Response | null = null;
+        const chunkAttempts = index === total - 1 ? 1 : 3;
+        for (let attempt = 0; attempt < chunkAttempts; attempt += 1) {
+          try {
+            response = await directFetch(
+              config,
+              `/figmapress/v1/elementor/uploads/${input.requestId}`,
+              { method: "POST", body: chunkBody },
+            );
+            break;
+          } catch (error) {
+            if (
+              !(error instanceof WordPressDirectError)
+              || error.kind !== "network"
+              || attempt === chunkAttempts - 1
+            ) {
+              throw error;
+            }
+            await waitForRetry(250 * (attempt + 1));
+          }
+        }
+        if (!response) {
+          throw new WordPressDirectError(
+            "WordPressへの分割送信を再開できませんでした。",
+            "network",
+          );
+        }
+        const data = await responseJson<BrowserWordPressResult & { complete?: boolean }>(
+          response,
+          config.connectorToken,
+        );
+        if (data.status === "draft") {
+          result = data;
+          break;
+        }
+        if (data.complete !== false) {
+          throw new WordPressDirectError(
+            "WordPressの分割受信状態を確認できませんでした。",
+            "request",
+          );
+        }
+        if (index === total - 1) {
+          throw new WordPressDirectError(
+            "WordPressが下書きを保存中です。",
+            "request",
+            409,
+          );
+        }
       }
-      continue;
+      if (!result || result.status !== "draft") {
+        throw new WordPressDirectError("WordPressが下書き以外の状態を返しました。", "request");
+      }
+      return { ...result, target: "elementor" };
+    } catch (error) {
+      if (!isRetryableChunkUploadError(error) || round === retryDelays.length) {
+        throw error;
+      }
+      await waitForRetry(retryDelays[round] ?? 6_000);
     }
-    result = data;
   }
-  if (!result || result.status !== "draft") {
-    throw new WordPressDirectError("WordPressが下書き以外の状態を返しました。", "request");
-  }
-  return { ...result, target: "elementor" };
+  throw new WordPressDirectError("WordPressへの分割送信を完了できませんでした。", "network");
 }
 
 export async function localizeWordPressElementorMediaDirect(

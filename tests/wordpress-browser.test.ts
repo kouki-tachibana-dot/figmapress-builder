@@ -325,6 +325,79 @@ test("browser splits large Elementor creation into bounded authenticated uploads
   assert.match(reconstructed, /明石明石明石/);
 });
 
+test("browser retries a transient non-final Elementor chunk", async (context) => {
+  const receivedIndexes: number[] = [];
+  let interrupted = false;
+  context.mock.method(globalThis, "fetch", async (_input, init) => {
+    const chunk = JSON.parse(String(init?.body)) as { index: number; total: number };
+    receivedIndexes.push(chunk.index);
+    if (chunk.index === 0 && !interrupted) {
+      interrupted = true;
+      throw new TypeError("Failed to fetch");
+    }
+    return chunk.index === chunk.total - 1
+      ? Response.json({ id: 42, slug: "home", status: "draft", remainingMedia: 0 })
+      : Response.json({ complete: false, received: chunk.index + 1, total: chunk.total });
+  });
+
+  const result = await createWordPressDraftChunkedDirect(config, {
+    target: "elementor",
+    requestId: "33333333-3333-4333-8333-333333333333",
+    sourceKey: "figma:Abcdef123:46:12",
+    title: "ホーム",
+    slug: "/",
+    pageTemplate: "elementor_canvas",
+    template: {
+      title: "ホーム",
+      type: "page",
+      version: "0.4",
+      page_settings: {},
+      content: [{ id: "1234abcd", settings: { text: "再送".repeat(60_000) } }],
+    },
+  });
+
+  assert.equal(result.status, "draft");
+  assert.equal(receivedIndexes.filter((index) => index === 0).length, 2);
+});
+
+test("browser restarts an Elementor upload when final storage is still locked", async (context) => {
+  let round = 0;
+  context.mock.method(globalThis, "fetch", async (_input, init) => {
+    const chunk = JSON.parse(String(init?.body)) as { index: number; total: number };
+    if (chunk.index === 0) {
+      round += 1;
+    }
+    if (chunk.index === chunk.total - 1 && round === 1) {
+      return Response.json(
+        { code: "figmapress_request_in_progress", message: "保存中です。" },
+        { status: 409 },
+      );
+    }
+    return chunk.index === chunk.total - 1
+      ? Response.json({ id: 42, slug: "home", status: "draft", remainingMedia: 0 })
+      : Response.json({ complete: false, received: chunk.index + 1, total: chunk.total });
+  });
+
+  const result = await createWordPressDraftChunkedDirect(config, {
+    target: "elementor",
+    requestId: "44444444-4444-4444-8444-444444444444",
+    sourceKey: "figma:Abcdef123:46:12",
+    title: "ホーム",
+    slug: "/",
+    pageTemplate: "elementor_canvas",
+    template: {
+      title: "ホーム",
+      type: "page",
+      version: "0.4",
+      page_settings: {},
+      content: [{ id: "1234abcd", settings: { text: "再開".repeat(60_000) } }],
+    },
+  });
+
+  assert.equal(result.status, "draft");
+  assert.equal(round, 2);
+});
+
 test("browser resumes Elementor media without recreating the draft", async (context) => {
   const requests: Array<{ url: string; method?: string; body?: string }> = [];
   context.mock.method(globalThis, "fetch", async (input, init) => {
