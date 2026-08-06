@@ -17,6 +17,8 @@ export interface FigmaRenderAssets {
   renderedNodeUrls?: Record<string, string>;
 }
 
+type SectionAnchor = "thoughts" | "policies" | "activities" | "profile" | "contact";
+
 interface RenderContext {
   ids: ElementIdFactory;
   root: FigmaNode;
@@ -25,6 +27,7 @@ interface RenderContext {
   variant: "single" | "desktop" | "mobile";
   anchorSuffix: string;
   fallbackMenuTexts: FigmaNode[];
+  anchorTargets: Map<string, SectionAnchor>;
 }
 
 interface RichRun {
@@ -304,6 +307,7 @@ function createRenderContext(
   anchorSuffix: string,
   fallbackMenuTexts: FigmaNode[],
 ): RenderContext {
+  const anchorTargets = discoverSectionAnchorTargets(root);
   return {
     ids,
     root,
@@ -312,6 +316,7 @@ function createRenderContext(
     variant,
     anchorSuffix,
     fallbackMenuTexts,
+    anchorTargets,
   };
 }
 
@@ -375,16 +380,26 @@ function renderElement(
   if (node.visible === false || !bounds || bounds.width <= 0 || bounds.height <= 0) return null;
 
   const navigation = navigationElement(node, bounds, parentBounds, parentNode, context);
-  if (navigation) return navigation;
+  if (navigation) return withSectionAnchor(navigation, node, context);
   const contactForm = contactFormElement(node, bounds, parentBounds, parentNode, context);
-  if (contactForm) return contactForm;
+  if (contactForm) return withSectionAnchor(contactForm, node, context);
   const carousel = carouselElement(node, bounds, parentBounds, parentNode, context);
-  if (carousel) return carousel;
+  if (carousel) return withSectionAnchor(carousel, node, context);
 
   const asset = visualAsset(node, context.assets);
-  if (asset) return imageElement(node, bounds, parentBounds, parentNode, asset, context);
+  if (asset) {
+    return withSectionAnchor(
+      imageElement(node, bounds, parentBounds, parentNode, asset, context),
+      node,
+      context,
+    );
+  }
   if (node.type === "TEXT" && typeof node.characters === "string") {
-    return textElement(node, bounds, parentBounds, parentNode, context);
+    return withSectionAnchor(
+      textElement(node, bounds, parentBounds, parentNode, context),
+      node,
+      context,
+    );
   }
 
   const accordion = accordionPlan(node);
@@ -406,7 +421,7 @@ function renderElement(
   );
   if (!children.length && !hasVisibleStyle) return null;
 
-  return {
+  return withSectionAnchor({
     id: context.ids.create(node.id),
     elType: "container",
     isInner: true,
@@ -416,10 +431,9 @@ function renderElement(
       figmapress_node_id: node.id,
       figmapress_node_name: node.name,
       html_tag: htmlTag(node),
-      ...sectionAnchorSettings(node, context),
     },
     elements: children,
-  };
+  }, node, context);
 }
 
 function navigationElement(
@@ -1102,24 +1116,24 @@ function anchorHref(value: string, context: RenderContext): string {
 }
 
 function sectionAnchorSettings(node: FigmaNode, context: RenderContext): ElementorSettings {
-  const name = node.name;
-  if (/thought|message|想い|voice|現場の声/i.test(name)) return { _element_id: anchorId("thoughts", context) };
-  if (/policy|policies|政策/i.test(name)) return { _element_id: anchorId("policies", context) };
-  if (/activit|report|活動報告|news/i.test(name)) return { _element_id: anchorId("activities", context) };
-  if (/profile|プロフィール/i.test(name)) return { _element_id: anchorId("profile", context) };
-  if (/contact|相談|問(?:い)?合わせ|問合/i.test(name)) return { _element_id: anchorId("contact", context) };
-  if (!/^(?:group|frame|section)\b/i.test(name)) return {};
-  const copy = descendants(node)
-    .filter((child) => child.type === "TEXT" && child.characters?.trim())
-    .slice(0, 80)
-    .map((child) => child.characters)
-    .join(" ");
-  if (/thought|message|想い|voice|現場の声/i.test(copy)) return { _element_id: anchorId("thoughts", context) };
-  if (/policy|policies|政策/i.test(copy)) return { _element_id: anchorId("policies", context) };
-  if (/activit|report|活動報告|news/i.test(copy)) return { _element_id: anchorId("activities", context) };
-  if (/profile|プロフィール/i.test(copy)) return { _element_id: anchorId("profile", context) };
-  if (/contact|相談|問(?:い)?合わせ|問合/i.test(copy)) return { _element_id: anchorId("contact", context) };
-  return {};
+  const anchor = context.anchorTargets.get(node.id);
+  return anchor ? { _element_id: anchorId(anchor, context) } : {};
+}
+
+function withSectionAnchor(
+  element: ElementorElement,
+  node: FigmaNode,
+  context: RenderContext,
+): ElementorElement {
+  const anchor = sectionAnchorSettings(node, context);
+  if (!anchor._element_id) return element;
+  return {
+    ...element,
+    settings: {
+      ...element.settings,
+      ...anchor,
+    },
+  };
 }
 
 function slug(value: string): string {
@@ -1231,10 +1245,107 @@ function sectionAnchorFromText(value: string): string | null {
   if (/トップ|page.?top|\btop\b/i.test(value)) return "top";
   if (/thought|message|想い|voice|現場の声/i.test(value)) return "thoughts";
   if (/policy|policies|政策/i.test(value)) return "policies";
-  if (/activit|report|活動報告|news/i.test(value)) return "activities";
+  if (/activit|report|活動報告|news|results?|実績/i.test(value)) return "activities";
   if (/profile|プロフィール/i.test(value)) return "profile";
   if (/contact|相談|問(?:い)?合わせ|問合|声を聞かせて/i.test(value)) return "contact";
   return null;
+}
+
+function sectionTextMatchesAnchor(value: string, anchor: SectionAnchor): boolean {
+  switch (anchor) {
+    case "thoughts":
+      return /thought|message|想い|voice|現場の声/i.test(value);
+    case "policies":
+      return /policy|policies|政策/i.test(value);
+    case "activities":
+      return /activit|report|活動報告|news|results?|実績/i.test(value);
+    case "profile":
+      return /profile|プロフィール/i.test(value);
+    case "contact":
+      return /contact|相談|問(?:い)?合わせ|問合|声を聞かせて/i.test(value);
+  }
+}
+
+/**
+ * Resolve each section anchor to exactly one meaningful Figma container before
+ * rendering. This avoids duplicate HTML ids when nested groups repeat section
+ * words, while still allowing a nested policy/activity heading to be a target
+ * inside a broader visual section.
+ */
+function discoverSectionAnchorTargets(root: FigmaNode): Map<string, SectionAnchor> {
+  const anchors: SectionAnchor[] = ["thoughts", "policies", "activities", "profile", "contact"];
+  const candidates = new Map<SectionAnchor, Array<{
+    id: string;
+    score: number;
+    y: number;
+    area: number;
+  }>>(anchors.map((anchor) => [anchor, []]));
+  const rootBounds = root.absoluteBoundingBox;
+  const rootWidth = rootBounds?.width ?? 1;
+
+  const visit = (node: FigmaNode, depth: number): void => {
+    if (node.visible === false) return;
+    const bounds = node.absoluteBoundingBox;
+    const children = node.children ?? [];
+    const excluded = /(?:^|\b)(?:header|footer|hero|navigation|nav)(?:\b|\/)/i.test(node.name);
+    if (
+      node !== root
+      && node.type !== "TEXT"
+      && bounds
+      && bounds.width > 0
+      && bounds.height > 0
+      && !excluded
+    ) {
+      const nameAnchor = sectionAnchorFromText(node.name);
+      const directText = children
+        .filter((child) => child.type === "TEXT" && child.characters?.trim())
+        .map((child) => child.characters?.trim() ?? "")
+        .join(" ");
+      const descendantText = descendants(node)
+        .filter((child) => child.type === "TEXT" && child.characters?.trim())
+        .slice(0, 120)
+        .map((child) => child.characters?.trim() ?? "")
+        .join(" ");
+      const widthRatio = Math.min(1, bounds.width / rootWidth);
+
+      for (const anchor of anchors) {
+        let score = 0;
+        if (nameAnchor === anchor) score = 100_000 - depth * 100;
+        if (sectionTextMatchesAnchor(directText, anchor)) {
+          score = Math.max(score, 80_000 - depth * 100);
+        }
+        if (score === 0 && sectionTextMatchesAnchor(descendantText, anchor)) {
+          score = 20_000 - depth * 200;
+        }
+        if (score <= 0) continue;
+        score += Math.round(widthRatio * 100);
+        candidates.get(anchor)?.push({
+          id: node.id,
+          score,
+          y: bounds.y,
+          area: bounds.width * bounds.height,
+        });
+      }
+    }
+    for (const child of children) visit(child, depth + 1);
+  };
+  visit(root, 0);
+
+  const result = new Map<string, SectionAnchor>();
+  const usedNodes = new Set<string>();
+  for (const anchor of anchors) {
+    const target = candidates.get(anchor)
+      ?.sort((left, right) =>
+        right.score - left.score
+        || left.area - right.area
+        || left.y - right.y
+      )
+      .find((candidate) => !usedNodes.has(candidate.id));
+    if (!target) continue;
+    usedNodes.add(target.id);
+    result.set(target.id, anchor);
+  }
+  return result;
 }
 
 function findNode(root: FigmaNode, id: string): FigmaNode | null {

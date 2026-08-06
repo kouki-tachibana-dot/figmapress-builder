@@ -306,6 +306,66 @@ test("complex visual groups are rendered once while editable text stays native",
   assert.deepEqual(ids, ["1:0"]);
 });
 
+test("functional carousel visuals outrank decorative assets in the render budget", () => {
+  const decorations = Array.from({ length: 125 }, (_, index) => ({
+    id: `decorative:${index}`,
+    name: `Decoration ${index}`,
+    type: "VECTOR",
+    absoluteBoundingBox: { x: index * 2, y: 100, width: 1, height: 1 },
+  }));
+  const slides = Array.from({ length: 3 }, (_, index) => ({
+    id: `slide:${index}`,
+    name: `Comp/Carousel-Item ${index + 1}`,
+    type: "FRAME",
+    absoluteBoundingBox: { x: index * 300, y: 400, width: 280, height: 180 },
+    children: [{
+      id: `slide-vector:${index}`,
+      name: `Slide artwork ${index + 1}`,
+      type: "VECTOR",
+      absoluteBoundingBox: { x: index * 300, y: 400, width: 280, height: 180 },
+    }],
+  }));
+  const ids = collectRenderedNodeIds({
+    id: "0:0",
+    name: "Document",
+    type: "DOCUMENT",
+    children: [{
+      id: "1:0",
+      name: "Page",
+      type: "CANVAS",
+      children: [{
+        id: "2:0",
+        name: "PC-page",
+        type: "FRAME",
+        absoluteBoundingBox: { x: 0, y: 0, width: 1920, height: 1000 },
+        children: [{
+          id: "page:text",
+          name: "Heading",
+          type: "TEXT",
+          characters: "活動報告",
+          absoluteBoundingBox: { x: 0, y: 0, width: 200, height: 40 },
+        }, ...decorations, {
+          id: "carousel:0",
+          name: "Comp/Carousel",
+          type: "FRAME",
+          absoluteBoundingBox: { x: 100, y: 350, width: 1000, height: 300 },
+          children: [{
+            id: "carousel:text",
+            name: "Carousel label",
+            type: "TEXT",
+            characters: "活動報告",
+            absoluteBoundingBox: { x: 100, y: 350, width: 160, height: 30 },
+          }, ...slides],
+        }],
+      }],
+    }],
+  });
+
+  assert.equal(ids.length, 120);
+  assert.ok(slides.every((slide) => ids.includes(slide.id)));
+  assert.ok(!ids.includes("decorative:124"));
+});
+
 test("rendered responsive assets are budgeted across desktop and mobile roots", () => {
   const visualChildren = (prefix: string, count: number) =>
     Array.from({ length: count }, (_, index) => ({

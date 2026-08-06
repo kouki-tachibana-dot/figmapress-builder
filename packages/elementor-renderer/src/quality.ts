@@ -22,6 +22,7 @@ export interface FigmaQualityCheck {
     | "auto-layout"
     | "responsive"
     | "interactions"
+    | "navigation-integrity"
     | "component-geometry";
   label: string;
   status: QualityCheckStatus;
@@ -76,6 +77,18 @@ export interface FigmaQualityReport {
       carousel: number;
       contactForm: number;
       accordion: number;
+    };
+    expectedFunctionalWidgets: {
+      navigation: number;
+      carousel: number;
+      contactForm: number;
+      accordion: number;
+    };
+    navigationIntegrity: {
+      anchors: number;
+      duplicateAnchors: number;
+      navigationLinks: number;
+      missingTargets: number;
     };
     componentGeometry: {
       contactForms: number;
@@ -166,6 +179,13 @@ export function createFigmaQualityReport(
     && !isAutoLayout(parent),
   ).length;
   const functionalWidgets = countFunctionalWidgets(template.content);
+  const expectedFunctionalWidgets = countExpectedFunctionalWidgets(designRoots);
+  const missingFunctionalWidgets = [
+    ["メニュー", expectedFunctionalWidgets.navigation - functionalWidgets.navigation],
+    ["カルーセル", expectedFunctionalWidgets.carousel - functionalWidgets.carousel],
+    ["フォーム", expectedFunctionalWidgets.contactForm - functionalWidgets.contactForm],
+    ["アコーディオン", expectedFunctionalWidgets.accordion - functionalWidgets.accordion],
+  ].filter((entry): entry is [string, number] => Number(entry[1]) > 0);
   const functionalWidgetTotal =
     functionalWidgets.navigation
     + functionalWidgets.links
@@ -173,15 +193,27 @@ export function createFigmaQualityReport(
     + functionalWidgets.contactForm
     + functionalWidgets.accordion;
   const componentGeometry = inspectComponentGeometry(template.content);
+  const navigationIntegrity = inspectNavigationIntegrity(template.content);
   const boundedRatio = visibleNodes.length > 0 ? boundedNodes.length / visibleNodes.length : 0;
   const gradientRatio = gradients.visible > 0 ? gradients.mapped / gradients.visible : 1;
   const effectRatio = effects.visible > 0 ? effects.mapped / effects.visible : 1;
   const geometryPenalty = componentGeometry.contactForms - componentGeometry.validContactForms;
+  const navigationPenalty = Math.min(
+    30,
+    (navigationIntegrity.duplicateAnchors + navigationIntegrity.missingTargets) * 6,
+  );
+  const interactionPenalty = Math.min(
+    24,
+    missingFunctionalWidgets.reduce((total, [, missing]) => total + missing * 8, 0),
+  );
   const score = Math.max(
     0,
     Math.min(
       100,
-      Math.round(60 + boundedRatio * 25 + gradientRatio * 8 + effectRatio * 7) - geometryPenalty * 15,
+      Math.round(60 + boundedRatio * 25 + gradientRatio * 8 + effectRatio * 7)
+        - geometryPenalty * 15
+        - navigationPenalty
+        - interactionPenalty,
     ),
   );
   const checks: FigmaQualityCheck[] = [
@@ -264,10 +296,26 @@ export function createFigmaQualityReport(
     {
       id: "interactions",
       label: "実動パーツ",
-      status: functionalWidgetTotal > 0 ? "pass" : "info",
-      detail: functionalWidgetTotal > 0
+      status: missingFunctionalWidgets.length > 0
+        ? "warning"
+        : functionalWidgetTotal > 0 ? "pass" : "info",
+      detail: missingFunctionalWidgets.length > 0
+        ? `${missingFunctionalWidgets.map(([label, count]) => `${label}${count}`).join("・")}件を機能化できませんでした`
+        : functionalWidgetTotal > 0
         ? `メニュー${functionalWidgets.navigation}・リンク${functionalWidgets.links}・カルーセル${functionalWidgets.carousel}・フォーム${functionalWidgets.contactForm}・アコーディオン${functionalWidgets.accordion}`
         : "自動認識できる実動パーツはありません",
+    },
+    {
+      id: "navigation-integrity",
+      label: "ナビゲーション整合性",
+      status: navigationIntegrity.duplicateAnchors === 0 && navigationIntegrity.missingTargets === 0
+        ? navigationIntegrity.navigationLinks > 0 ? "pass" : "info"
+        : "warning",
+      detail: navigationIntegrity.duplicateAnchors > 0 || navigationIntegrity.missingTargets > 0
+        ? `重複アンカー${navigationIntegrity.duplicateAnchors}・移動先なし${navigationIntegrity.missingTargets}`
+        : navigationIntegrity.navigationLinks > 0
+          ? `${navigationIntegrity.navigationLinks}リンクの移動先を検証済み（アンカー${navigationIntegrity.anchors}）`
+          : "ページ内ナビゲーションはありません",
     },
     {
       id: "component-geometry",
@@ -301,6 +349,8 @@ export function createFigmaQualityReport(
       gradients,
       effects,
       functionalWidgets,
+      expectedFunctionalWidgets,
+      navigationIntegrity,
       componentGeometry,
     },
     checks,
@@ -506,5 +556,101 @@ function countFunctionalWidgets(elements: ElementorElement[]): {
     }
   };
   visit(elements);
+  return result;
+}
+
+function countExpectedFunctionalWidgets(roots: FigmaNode[]): {
+  navigation: number;
+  carousel: number;
+  contactForm: number;
+  accordion: number;
+} {
+  const result = { navigation: 0, carousel: 0, contactForm: 0, accordion: 0 };
+  for (const root of roots) {
+    const nodes = flatten(root).map(({ node }) => node).filter((node) => node.visible !== false);
+    result.navigation += nodes.filter((node) => {
+      if (!/(?:\{wp:nav\}|header.*(?:sec|section)|navigation)/i.test(node.name)) return false;
+      const menuLabels = [node, ...nodeDescendants(node)]
+        .filter((child) => child.type === "TEXT" && child.characters?.trim())
+        .filter((child) => /想い|政策|活動報告|プロフィール|thought|polic|activit|profile/i.test(child.characters ?? ""));
+      return menuLabels.length >= 2;
+    }).length;
+    result.carousel += nodes.filter((node) =>
+      /(?:\{wp:carousel\}|carousel|slider|スライダー|カルーセル)/i.test(node.name)
+      && !/(?:item|prev|previous|next|arrow|dot|項目|前へ|次へ)/i.test(node.name)
+    ).length;
+    result.contactForm += nodes.filter((node) => {
+      if (!/(?:\{wp:form\}|contact.?form|button.?cta|お問い合わせ)/i.test(node.name)) return false;
+      const copy = nodeDescendants(node)
+        .filter((child) => child.type === "TEXT" && child.characters?.trim())
+        .map((child) => child.characters ?? "")
+        .join(" ");
+      return /メールアドレス|e-?mail/i.test(copy)
+        && /ご相談|ご意見|message|お問い合わせ内容/i.test(copy)
+        && /お名前|氏名|name/i.test(copy);
+    }).length;
+    result.accordion += nodes.filter((node) =>
+      /(?:\{wp:accordion\}|profile|プロフィール|faq|よくある質問)/i.test(node.name)
+      && nodeDescendants(node).filter((child) =>
+        child.type === "TEXT" && /^\s*\d{4}年度\s*$/.test(child.characters ?? "")
+      ).length >= 3
+    ).length;
+  }
+  return result;
+}
+
+function inspectNavigationIntegrity(elements: ElementorElement[]): {
+  anchors: number;
+  duplicateAnchors: number;
+  navigationLinks: number;
+  missingTargets: number;
+} {
+  const anchorCounts = new Map<string, number>();
+  const targets: string[] = [];
+  const recordUrl = (value: unknown): void => {
+    if (!value || typeof value !== "object") return;
+    const url = (value as Record<string, unknown>).url;
+    if (typeof url === "string" && /^#[A-Za-z][\w:-]*$/.test(url)) targets.push(url.slice(1));
+  };
+  const visit = (items: ElementorElement[]): void => {
+    for (const item of items) {
+      const id = item.settings._element_id;
+      if (typeof id === "string" && id) {
+        anchorCounts.set(id, (anchorCounts.get(id) ?? 0) + 1);
+      }
+      if (item.widgetType === "figmapress-nav") {
+        const menuItems = Array.isArray(item.settings.items) ? item.settings.items : [];
+        for (const menuItem of menuItems) {
+          if (menuItem && typeof menuItem === "object") {
+            recordUrl((menuItem as Record<string, unknown>).url);
+          }
+        }
+        recordUrl(item.settings.cta_url);
+        recordUrl(item.settings.home_url);
+      }
+      visit(item.elements);
+    }
+  };
+  visit(elements);
+  const duplicateAnchors = [...anchorCounts.values()]
+    .reduce((total, count) => total + Math.max(0, count - 1), 0);
+  const missingTargets = targets.filter((target) => !anchorCounts.has(target)).length;
+  return {
+    anchors: anchorCounts.size,
+    duplicateAnchors,
+    navigationLinks: targets.length,
+    missingTargets,
+  };
+}
+
+function nodeDescendants(node: FigmaNode): FigmaNode[] {
+  const result: FigmaNode[] = [];
+  const visit = (current: FigmaNode): void => {
+    for (const child of current.children ?? []) {
+      result.push(child);
+      visit(child);
+    }
+  };
+  visit(node);
   return result;
 }

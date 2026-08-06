@@ -1019,6 +1019,12 @@ test("paired PC and SP frames become device-specific Elementor layouts", async (
     { x: 83.636, y: 22.642, width: 6.364, height: 37.736 },
   );
   assert.ok(mobileElements.some((element) => element.settings._element_id === "policies-mobile"));
+  const mobileAnchorIds = mobileElements
+    .map((element) => element.settings._element_id)
+    .filter((id): id is string => typeof id === "string" && id.length > 0);
+  assert.equal(new Set(mobileAnchorIds).size, mobileAnchorIds.length);
+  assert.equal(mobileAnchorIds.filter((id) => id === "thoughts-mobile").length, 1);
+  assert.equal(result.qualityReport?.metrics.navigationIntegrity.duplicateAnchors, 0);
   assert.deepEqual(mobileHeading?.settings.typography_font_size, { unit: "vw", size: 5.455, sizes: [] });
   assert.match(result.previewHtml, /figmapress-figma-preview--desktop/);
   assert.match(result.previewHtml, /figmapress-figma-preview--mobile/);
@@ -1397,6 +1403,62 @@ test("Figma carousel and prototype actions become editable functional widgets", 
   assert.doesNotMatch(String(plainHeading?.settings.editor), /data-figmapress-functional-link/);
   assert.equal(result.qualityReport?.metrics.functionalWidgets.carousel, 1);
   assert.equal(result.qualityReport?.metrics.functionalWidgets.links, 1);
+  assert.equal(result.qualityReport?.metrics.expectedFunctionalWidgets.carousel, 1);
+  assert.equal(
+    result.qualityReport?.checks.find((check) => check.id === "interactions")?.status,
+    "pass",
+  );
+  assert.equal(result.qualityReport?.metrics.navigationIntegrity.duplicateAnchors, 0);
+});
+
+test("quality gate warns when a Figma carousel loses its functional widget", async () => {
+  const item = (id: string, x: number) => ({
+    id,
+    name: `Comp/Carousel-Item ${id}`,
+    type: "FRAME",
+    absoluteBoundingBox: { x, y: 100, width: 280, height: 180 },
+    children: [{
+      id: `${id}:visual`,
+      name: "Slide visual",
+      type: "RECTANGLE",
+      absoluteBoundingBox: { x, y: 100, width: 280, height: 180 },
+      fills: [{ type: "IMAGE", imageRef: `${id}:missing`, scaleMode: "FILL" }],
+    }],
+  });
+  const file: MockFigmaFile = {
+    document: {
+      id: "0:0",
+      name: "Missing carousel assets",
+      type: "DOCUMENT",
+      children: [{
+        id: "1:0",
+        name: "Page",
+        type: "CANVAS",
+        children: [{
+          id: "2:0",
+          name: "PC-page",
+          type: "FRAME",
+          absoluteBoundingBox: { x: 0, y: 0, width: 1200, height: 600 },
+          children: [{
+            id: "3:0",
+            name: "Comp/Carousel",
+            type: "FRAME",
+            absoluteBoundingBox: { x: 100, y: 100, width: 1000, height: 180 },
+            children: [item("slide-1", 100), item("slide-2", 400), item("slide-3", 700)],
+          }],
+        }],
+      }],
+    },
+  };
+
+  const result = await convertFile(file);
+
+  assert.equal(result.qualityReport?.metrics.expectedFunctionalWidgets.carousel, 1);
+  assert.equal(result.qualityReport?.metrics.functionalWidgets.carousel, 0);
+  assert.equal(
+    result.qualityReport?.checks.find((check) => check.id === "interactions")?.status,
+    "warning",
+  );
 });
 
 test("Figma Auto Layout becomes normal-flow Elementor Flexbox with a quality report", async () => {
