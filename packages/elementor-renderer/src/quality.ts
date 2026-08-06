@@ -21,7 +21,8 @@ export interface FigmaQualityCheck {
     | "effects"
     | "auto-layout"
     | "responsive"
-    | "interactions";
+    | "interactions"
+    | "component-geometry";
   label: string;
   status: QualityCheckStatus;
   detail: string;
@@ -75,6 +76,10 @@ export interface FigmaQualityReport {
       carousel: number;
       contactForm: number;
       accordion: number;
+    };
+    componentGeometry: {
+      contactForms: number;
+      validContactForms: number;
     };
   };
   checks: FigmaQualityCheck[];
@@ -167,12 +172,17 @@ export function createFigmaQualityReport(
     + functionalWidgets.carousel
     + functionalWidgets.contactForm
     + functionalWidgets.accordion;
+  const componentGeometry = inspectComponentGeometry(template.content);
   const boundedRatio = visibleNodes.length > 0 ? boundedNodes.length / visibleNodes.length : 0;
   const gradientRatio = gradients.visible > 0 ? gradients.mapped / gradients.visible : 1;
   const effectRatio = effects.visible > 0 ? effects.mapped / effects.visible : 1;
+  const geometryPenalty = componentGeometry.contactForms - componentGeometry.validContactForms;
   const score = Math.max(
     0,
-    Math.min(100, Math.round(60 + boundedRatio * 25 + gradientRatio * 8 + effectRatio * 7)),
+    Math.min(
+      100,
+      Math.round(60 + boundedRatio * 25 + gradientRatio * 8 + effectRatio * 7) - geometryPenalty * 15,
+    ),
   );
   const checks: FigmaQualityCheck[] = [
     {
@@ -259,6 +269,18 @@ export function createFigmaQualityReport(
         ? `メニュー${functionalWidgets.navigation}・リンク${functionalWidgets.links}・カルーセル${functionalWidgets.carousel}・フォーム${functionalWidgets.contactForm}・アコーディオン${functionalWidgets.accordion}`
         : "自動認識できる実動パーツはありません",
     },
+    {
+      id: "component-geometry",
+      label: "実動パーツの配置",
+      status: componentGeometry.contactForms === 0
+        ? "info"
+        : componentGeometry.validContactForms === componentGeometry.contactForms ? "pass" : "warning",
+      detail: componentGeometry.contactForms === 0
+        ? "フォームの配置検査対象はありません"
+        : componentGeometry.validContactForms === componentGeometry.contactForms
+          ? `${componentGeometry.validContactForms}フォームの入力欄を個別座標へ配置`
+          : `${componentGeometry.contactForms - componentGeometry.validContactForms}フォームで入力欄の配置情報が不足`,
+    },
   ];
 
   return {
@@ -279,9 +301,48 @@ export function createFigmaQualityReport(
       gradients,
       effects,
       functionalWidgets,
+      componentGeometry,
     },
     checks,
   };
+}
+
+function inspectComponentGeometry(elements: ElementorElement[]): {
+  contactForms: number;
+  validContactForms: number;
+} {
+  const result = { contactForms: 0, validContactForms: 0 };
+  const validBox = (box: unknown): boolean => {
+    if (!box || typeof box !== "object") return false;
+    const candidate = box as Record<string, unknown>;
+    return ["x", "y", "width", "height"].every((key) =>
+      typeof candidate[key] === "number" && Number.isFinite(candidate[key])
+    ) && Number(candidate.width) > 0 && Number(candidate.height) > 0;
+  };
+  const visit = (items: ElementorElement[]): void => {
+    for (const item of items) {
+      if (item.widgetType === "figmapress-contact-form") {
+        result.contactForms += 1;
+        try {
+          const rawGeometry = item.settings.design_geometry;
+          const geometry = typeof rawGeometry === "string"
+            ? JSON.parse(rawGeometry) as Record<string, unknown>
+            : rawGeometry as Record<string, unknown> | undefined;
+          const fields = geometry?.fields as Record<string, { control?: unknown }> | undefined;
+          if (["name", "email", "region", "message"].every((name) =>
+            validBox(fields?.[name]?.control)
+          )) {
+            result.validContactForms += 1;
+          }
+        } catch {
+          // Invalid geometry is reported as a warning instead of aborting conversion.
+        }
+      }
+      visit(item.elements);
+    }
+  };
+  visit(elements);
+  return result;
 }
 
 function flatten(root: FigmaNode): Array<{ node: FigmaNode; parent: FigmaNode | null }> {

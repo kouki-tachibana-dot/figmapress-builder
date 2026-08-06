@@ -66,6 +66,7 @@ const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
 const CHUNKED_UPLOAD_CONNECTOR_VERSION = "0.16.17";
+const FIGMA_HEADER_MEDIA_CONNECTOR_VERSION = "0.16.18";
 
 function versionAtLeast(version: string | undefined, minimum: string): boolean {
   if (!version) return false;
@@ -764,6 +765,10 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         wpStatus?.connectorVersion,
         ACTUAL_VISUAL_QA_CONNECTOR_VERSION,
       );
+  const connectorSupportsFigmaHeaderMedia = versionAtLeast(
+    wpStatus?.connectorVersion,
+    FIGMA_HEADER_MEDIA_CONNECTOR_VERSION,
+  );
   const visualQaReferenceCount = output
     ? Number(Boolean(output.visualReferences.desktop)) +
       Number(Boolean(output.visualReferences.mobile))
@@ -1948,7 +1953,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.25.9 live</span>
+          <span className="status-pill"><i /> v0.25.10 live</span>
         </nav>
       </header>
 
@@ -2749,6 +2754,11 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                   メニュー・リンク・カルーセル・フォーム・アコーディオンを動作させるにはConnector v{FUNCTIONAL_WIDGETS_CONNECTOR_VERSION}以上が必要です。<a href="/downloads/figmapress-connector.zip" download>最新版ZIPをダウンロード</a>し、WordPressの「プラグインを追加 → プラグインのアップロード」から一度だけ更新してください。
                 </div>
               )}
+              {wpStatus && wpTarget === "elementor" && wpStatus.connectorInstalled && connectorSupportsInteractions && !connectorSupportsFigmaHeaderMedia && (
+                <div className="alert alert--error" role="alert">
+                  FigmaのヘッダーロゴとCTAアイコンを正確に表示するにはConnector v{FIGMA_HEADER_MEDIA_CONNECTOR_VERSION}以上が必要です。<a href="/downloads/figmapress-connector.zip" download>最新版ZIPをダウンロード</a>して更新してください。
+                </div>
+              )}
               {wpStatus && wpTarget === "elementor" && visualQaReferenceCount > 0 && wpStatus.connectorInstalled && connectorSupportsInteractions && !connectorSupportsActualVisualQa && (
                 <div className="alert alert--error" role="alert">
                   実際のElementor下書きをFigmaと再比較して自動補正するにはConnector v{ACTUAL_VISUAL_QA_CONNECTOR_VERSION}以上が必要です。WordPressのプラグイン更新画面から最新版へ更新し、再診断してください。
@@ -2937,7 +2947,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.25.9</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.25.10</span></div>
       </footer>
     </main>
   );

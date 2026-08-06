@@ -423,6 +423,7 @@ test("mobile containers preserve their Figma width across Elementor breakpoints"
   assert.deepEqual(outlinedContainer?.settings.width, { unit: "%", size: 86.364, sizes: [] });
   assert.deepEqual(outlinedContainer?.settings.width_tablet, outlinedContainer?.settings.width);
   assert.deepEqual(outlinedContainer?.settings.width_mobile, outlinedContainer?.settings.width);
+  assert.equal(outlinedContainer?.settings.z_index, 1);
 });
 
 test("Japanese Figma text records its webfont and deterministic glyph fallback", async () => {
@@ -914,7 +915,28 @@ test("paired PC and SP frames become device-specific Elementor layouts", async (
                 type: "FRAME",
                 absoluteBoundingBox: { x: 2100, y: 0, width: 440, height: 53 },
                 children: [
+                  {
+                    id: "50:logo",
+                    name: "{acf:section_image}",
+                    type: "RECTANGLE",
+                    absoluteBoundingBox: { x: 2130, y: 15, width: 79, height: 28 },
+                    fills: [{ type: "IMAGE", imageRef: "mobile-logo", scaleMode: "FILL" }],
+                  },
+                  {
+                    id: "50:cta-bg",
+                    name: "Comp/Button-HeaderCTA/bg",
+                    type: "RECTANGLE",
+                    absoluteBoundingBox: { x: 2423, y: 8, width: 117, height: 45 },
+                    fills: [{ type: "SOLID", color: { r: 0.82, g: 0.04, b: 0.17 } }],
+                  },
                   text("50:1", "Comp/Button-HeaderCTA/text", "ご相談はこちら", 2423, 20, 100, 20, 10),
+                  {
+                    id: "50:cta-icon",
+                    name: "{acf:section_image}",
+                    type: "RECTANGLE",
+                    absoluteBoundingBox: { x: 2468, y: 12, width: 28, height: 20 },
+                    fills: [{ type: "IMAGE", imageRef: "mobile-envelope", scaleMode: "FIT" }],
+                  },
                 ],
               },
               {
@@ -944,7 +966,10 @@ test("paired PC and SP frames become device-specific Elementor layouts", async (
     },
   };
 
-  const result = await convertFile(file);
+  const result = await convertFile(file, {}, {
+    "mobile-logo": "https://images.example/mobile-logo.png",
+    "mobile-envelope": "https://images.example/mobile-envelope.png",
+  });
   assert.equal(result.elementorTemplate.content.length, 2);
   const [desktopRoot, mobileRoot] = result.elementorTemplate.content;
   assert.equal(desktopRoot?.settings.hide_mobile, "hidden-mobile");
@@ -980,6 +1005,19 @@ test("paired PC and SP frames become device-specific Elementor layouts", async (
   assert.equal((desktopNav?.settings.items as Array<{ url: { url: string } }>)[0]?.url.url, "#thoughts-desktop");
   assert.equal((mobileNav?.settings.items as Array<{ url: { url: string } }>)[0]?.url.url, "#thoughts-mobile");
   assert.equal((mobileNav?.settings.home_url as { url: string }).url, "#top-mobile");
+  assert.equal((mobileNav?.settings.cta_url as { url: string }).url, "#contact-mobile");
+  assert.equal(
+    (mobileNav?.settings.logo as { url: string }).url,
+    "https://images.example/mobile-logo.png",
+  );
+  assert.equal(
+    (mobileNav?.settings.cta_icon as { url: string }).url,
+    "https://images.example/mobile-envelope.png",
+  );
+  assert.deepEqual(
+    JSON.parse(String(mobileNav?.settings.design_geometry)).ctaIcon,
+    { x: 83.636, y: 22.642, width: 6.364, height: 37.736 },
+  );
   assert.ok(mobileElements.some((element) => element.settings._element_id === "policies-mobile"));
   assert.deepEqual(mobileHeading?.settings.typography_font_size, { unit: "vw", size: 5.455, sizes: [] });
   assert.match(result.previewHtml, /figmapress-figma-preview--desktop/);
@@ -1091,8 +1129,121 @@ test("Figma interaction layers become functional Elementor widgets", async () =>
     JSON.parse(String(form?.settings.design_geometry)).root,
     { width: 1920, height: 900 },
   );
+  assert.equal(
+    result.qualityReport?.checks.find((check) => check.id === "component-geometry")?.status,
+    "warning",
+  );
   assert.ok(JSON.parse(String(accordion?.settings.design_geometry)).root.height > 0);
   assert.ok(elements.some((element) => element.settings._element_id === "thoughts"));
+});
+
+test("stacked mobile contact fields preserve each Figma control box", async () => {
+  const fieldText = (
+    id: string,
+    characters: string,
+    x: number,
+    y: number,
+    width: number,
+    height = 19,
+    fontSize = 16,
+  ) => ({
+    id,
+    name: "Label",
+    type: "TEXT",
+    characters,
+    absoluteBoundingBox: { x, y, width, height },
+    style: { fontSize, fontWeight: 600 },
+  });
+  const box = (
+    id: string,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    color = { r: 1, g: 1, b: 1 },
+  ) => ({
+    id,
+    name: "Comp/Button-CTA/bg",
+    type: "RECTANGLE",
+    absoluteBoundingBox: { x, y, width, height },
+    fills: [{ type: "SOLID", color }],
+  });
+  const file: MockFigmaFile = {
+    document: {
+      id: "0:0",
+      name: "Stacked mobile form",
+      type: "DOCUMENT",
+      children: [{
+        id: "1:0",
+        name: "Page",
+        type: "CANVAS",
+        children: [{
+          id: "46:210",
+          name: "SP-page",
+          type: "FRAME",
+          absoluteBoundingBox: { x: 0, y: 0, width: 440, height: 785 },
+          children: [{
+            id: "2027:1064",
+            name: "Comp/Button-CTA",
+            type: "FRAME",
+            absoluteBoundingBox: { x: 0, y: 0, width: 440, height: 785 },
+            children: [
+              box("panel", 30, 119, 380, 588, { r: 1, g: 0.886, b: 0.91 }),
+              fieldText("title", "あなたの声を聞かせてください。", 32, 76, 377, 29, 24),
+              fieldText("name-label", "お名前", 63, 160, 48),
+              box("name-control", 63, 179, 315, 35),
+              fieldText("email-label", "メールアドレス", 63, 236, 112),
+              box("email-control", 63, 261, 315, 35),
+              fieldText("region-label", "お住まいの地域", 63, 312, 112),
+              box("region-control", 63, 337, 315, 35),
+              fieldText("message-label", "ご相談・ご意見の内容", 63, 394, 160),
+              box("message-control", 63, 419, 315, 100),
+              fieldText("reply-label", "返信希望", 63, 546, 64),
+              fieldText("reply-yes", "希望する", 87, 576, 56, 17, 14),
+              fieldText("reply-no", "希望しない", 202, 576, 70, 17, 14),
+              box("button-bg", 63, 621, 315, 46, { r: 0.725, g: 0.039, b: 0.137 }),
+              fieldText("button-text", "相談・意見を送る →", 143, 635, 155, 19, 16),
+            ],
+          }],
+        }],
+      }],
+    },
+  };
+
+  const result = await convertFile(file);
+  const form = result.elementorTemplate.content[0]?.elements.find((element) =>
+    element.widgetType === "figmapress-contact-form"
+  );
+  const geometry = JSON.parse(String(form?.settings.design_geometry));
+
+  assert.deepEqual(geometry.fields.name.control, {
+    x: 14.318,
+    y: 22.803,
+    width: 71.591,
+    height: 4.459,
+  });
+  assert.deepEqual(geometry.fields.email.control, {
+    x: 14.318,
+    y: 33.248,
+    width: 71.591,
+    height: 4.459,
+  });
+  assert.deepEqual(geometry.fields.region.control, {
+    x: 14.318,
+    y: 42.93,
+    width: 71.591,
+    height: 4.459,
+  });
+  assert.deepEqual(geometry.fields.message.control, {
+    x: 14.318,
+    y: 53.376,
+    width: 71.591,
+    height: 12.739,
+  });
+  assert.equal(
+    result.qualityReport?.checks.find((check) => check.id === "component-geometry")?.status,
+    "pass",
+  );
 });
 
 test("Figma carousel and prototype actions become editable functional widgets", async () => {

@@ -858,6 +858,15 @@ html {
     width: 100%;
 }
 
+.figmapress-nav--fidelity .figmapress-nav__cta-icon {
+    display: block;
+    max-width: none;
+    object-fit: contain;
+    pointer-events: none;
+    position: absolute;
+    z-index: 2;
+}
+
 .figmapress-nav--fidelity .figmapress-nav__panel,
 .figmapress-nav--fidelity .figmapress-nav__items {
     display: block;

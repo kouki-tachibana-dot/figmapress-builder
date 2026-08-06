@@ -1355,8 +1355,12 @@ function figmapress_connector_collect_elementor_image_urls( $elements, &$urls, $
             if ( 'image' === $widget_type && isset( $settings['image'] ) ) {
                 $image_slots[] = $settings['image'];
             }
-            if ( 'figmapress-nav' === $widget_type && isset( $settings['logo'] ) ) {
-                $image_slots[] = $settings['logo'];
+            if ( 'figmapress-nav' === $widget_type ) {
+                foreach ( array( 'logo', 'cta_icon' ) as $nav_image_key ) {
+                    if ( isset( $settings[ $nav_image_key ] ) ) {
+                        $image_slots[] = $settings[ $nav_image_key ];
+                    }
+                }
             }
             if ( 'figmapress-carousel' === $widget_type ) {
                 if ( isset( $settings['items'] ) && is_array( $settings['items'] ) ) {
@@ -1500,8 +1504,12 @@ function figmapress_connector_apply_elementor_image_map( &$elements, $localized_
         if ( 'widget' === ( isset( $element['elType'] ) ? $element['elType'] : '' ) && 'image' === ( isset( $element['widgetType'] ) ? $element['widgetType'] : '' ) && isset( $element['settings']['image'] ) ) {
             figmapress_connector_apply_image_map_setting( $element['settings']['image'], $localized_images );
         }
-        if ( 'widget' === ( isset( $element['elType'] ) ? $element['elType'] : '' ) && 'figmapress-nav' === ( isset( $element['widgetType'] ) ? $element['widgetType'] : '' ) && isset( $element['settings']['logo'] ) ) {
-            figmapress_connector_apply_image_map_setting( $element['settings']['logo'], $localized_images );
+        if ( 'widget' === ( isset( $element['elType'] ) ? $element['elType'] : '' ) && 'figmapress-nav' === ( isset( $element['widgetType'] ) ? $element['widgetType'] : '' ) ) {
+            foreach ( array( 'logo', 'cta_icon' ) as $nav_image_key ) {
+                if ( isset( $element['settings'][ $nav_image_key ] ) ) {
+                    figmapress_connector_apply_image_map_setting( $element['settings'][ $nav_image_key ], $localized_images );
+                }
+            }
         }
         if ( 'widget' === ( isset( $element['elType'] ) ? $element['elType'] : '' ) && 'figmapress-carousel' === ( isset( $element['widgetType'] ) ? $element['widgetType'] : '' ) ) {
             if ( isset( $element['settings']['items'] ) && is_array( $element['settings']['items'] ) ) {
@@ -1562,8 +1570,12 @@ function figmapress_connector_localize_elementor_images( &$elements, $post_id, &
         if ( 'widget' === $element['elType'] && 'image' === ( isset( $element['widgetType'] ) ? $element['widgetType'] : '' ) && isset( $element['settings']['image'] ) ) {
             figmapress_connector_localize_image_setting( $element['settings']['image'], $post_id, $warnings, $imported_media, $deadline, $localized_images, $media_failures );
         }
-        if ( 'widget' === $element['elType'] && 'figmapress-nav' === ( isset( $element['widgetType'] ) ? $element['widgetType'] : '' ) && isset( $element['settings']['logo'] ) ) {
-            figmapress_connector_localize_image_setting( $element['settings']['logo'], $post_id, $warnings, $imported_media, $deadline, $localized_images, $media_failures );
+        if ( 'widget' === $element['elType'] && 'figmapress-nav' === ( isset( $element['widgetType'] ) ? $element['widgetType'] : '' ) ) {
+            foreach ( array( 'logo', 'cta_icon' ) as $nav_image_key ) {
+                if ( isset( $element['settings'][ $nav_image_key ] ) ) {
+                    figmapress_connector_localize_image_setting( $element['settings'][ $nav_image_key ], $post_id, $warnings, $imported_media, $deadline, $localized_images, $media_failures );
+                }
+            }
         }
         if ( 'widget' === $element['elType'] && 'figmapress-carousel' === ( isset( $element['widgetType'] ) ? $element['widgetType'] : '' ) ) {
             if ( isset( $element['settings']['items'] ) && is_array( $element['settings']['items'] ) ) {

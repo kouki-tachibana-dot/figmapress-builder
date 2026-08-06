@@ -142,6 +142,20 @@ test("Connector accepts and registers functional Elementor widgets", async () =>
   }
 });
 
+test("Connector renders and localizes the Figma navigation CTA icon", async () => {
+  const [widgets, styles, rest] = await Promise.all([
+    readFile(elementorWidgetsPath, "utf8"),
+    readFile(interactionStylePath, "utf8"),
+    readFile(restApiPath, "utf8"),
+  ]);
+
+  assert.match(widgets, /'cta_icon'/);
+  assert.match(widgets, /figmapress-nav__cta-icon/);
+  assert.match(widgets, /\$geometry\['ctaIcon'\]/);
+  assert.match(styles, /\.figmapress-nav--fidelity \.figmapress-nav__cta-icon/);
+  assert.match(rest, /'logo', 'cta_icon'/);
+});
+
 test("public contact form verifies origin, token, rate limit, and stored widget", async () => {
   const source = await readFile(contactPath, "utf8");
   assert.match(source, /figmapress_connector_contact_same_origin/);
