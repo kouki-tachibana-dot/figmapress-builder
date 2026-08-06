@@ -36,26 +36,31 @@ const elementorWidgetsPath = new URL(
   import.meta.url,
 );
 
-test("Connector stores Elementor content before attempting remote image imports", async () => {
+test("Connector persists each resumable image batch after localization", async () => {
   const source = await readFile(restApiPath, "utf8");
-  const firstStore = source.indexOf("figmapress_connector_store_elementor_document( $post_id");
-  const localize = source.indexOf("figmapress_connector_localize_elementor_images( $content");
-  const secondStore = source.indexOf(
+  const mediaHandler = source.indexOf(
+    "function figmapress_connector_rest_localize_elementor_media",
+  );
+  const localize = source.indexOf(
+    "figmapress_connector_localize_elementor_images(",
+    mediaHandler,
+  );
+  const store = source.indexOf(
     "figmapress_connector_store_elementor_document( $post_id",
-    firstStore + 1,
+    localize,
   );
 
-  assert.ok(firstStore > 0, "initial Elementor document save must exist");
-  assert.ok(localize > firstStore, "image localization must run after the initial save");
-  assert.ok(secondStore > localize, "localized image data must be saved again");
+  assert.ok(mediaHandler > 0, "resumable media handler must exist");
+  assert.ok(localize > mediaHandler, "media handler must localize images");
+  assert.ok(store > localize, "localized image data must be saved after each batch");
 });
 
 test("Connector bounds synchronous media localization", async () => {
   const source = await readFile(restApiPath, "utf8");
   assert.equal(
     source.match(/\$media_deadline\s*=\s*microtime\( true \) \+ 24;/g)?.length,
-    2,
-    "both the initial import and resumable batch must use the bounded slow-host budget",
+    1,
+    "only the resumable media batch may spend the bounded slow-host budget",
   );
   assert.match(source, /min\( 15, \$remaining \)/);
   assert.match(source, /download_url\( \$url, max\( 1, \(int\) \$download_timeout \) \)/);
@@ -196,6 +201,21 @@ test("Connector resumes media localization and preserves it across visual update
     updateHandler,
   );
   assert.ok(applyMap > updateHandler && applyMap < updateStore);
+});
+
+test("Connector returns the durable draft before starting remote image work", async () => {
+  const source = await readFile(restApiPath, "utf8");
+  const createHandler = source.indexOf(
+    "function figmapress_connector_rest_create_elementor_page",
+  );
+  const nextHandler = source.indexOf(
+    "function figmapress_connector_validate_owned_elementor_draft",
+    createHandler,
+  );
+  const createSource = source.slice(createHandler, nextHandler);
+  assert.match(createSource, /figmapress_connector_store_elementor_document/);
+  assert.match(createSource, /figmapress_connector_clear_elementor_cache/);
+  assert.doesNotMatch(createSource, /figmapress_connector_localize_elementor_images/);
 });
 
 test("Connector updates one draft for a stable Figma source", async () => {

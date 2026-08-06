@@ -488,21 +488,11 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
         delete_option( $request_lock_key );
     }
 
+    // Return immediately after the editable document is durable. Remote image
+    // downloads are resumed through the bounded /media endpoint. Keeping them
+    // out of this request prevents shared hosts from terminating a large page
+    // update before Elementor has cleared its CSS cache.
     $imported_media = 0;
-    // Figma render URLs can take several seconds to start transferring on
-    // shared hosting. Keep the request bounded, but leave enough headroom for
-    // one slow image instead of recording a false failure at 3-6 seconds.
-    $media_deadline = microtime( true ) + 24;
-    $media_failures = array();
-    figmapress_connector_localize_elementor_images( $content, $post_id, $warnings, $imported_media, $media_deadline, $localized_images, $media_failures );
-    figmapress_connector_save_media_map( $post_id, $localized_images );
-    figmapress_connector_save_media_failures( $post_id, $media_failures );
-    $localized_store = figmapress_connector_store_elementor_document( $post_id, $content, $page_settings, $page_template );
-    if ( is_wp_error( $localized_store ) ) {
-        $warnings[] = '画像の保存後にElementorデータを更新できなかったため、画像処理前の編集可能データを保持しました。';
-    } else {
-        $stored_elements = $localized_store;
-    }
     figmapress_connector_clear_elementor_cache( $post_id );
     $media_progress = figmapress_connector_elementor_media_progress( $content, $post_id );
 

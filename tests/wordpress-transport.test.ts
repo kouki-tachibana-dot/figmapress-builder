@@ -22,6 +22,15 @@ test("large Elementor drafts use the resilient server transport", () => {
     ),
     false,
   );
+  assert.equal(
+    shouldProxyWordPressDraft(
+      "direct",
+      "elementor",
+      LARGE_ELEMENTOR_PAYLOAD_BYTES,
+      true,
+    ),
+    false,
+  );
 });
 
 test("proxy selection and Gutenberg direct transport keep their intent", () => {

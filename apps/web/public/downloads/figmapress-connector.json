@@ -1,11 +1,11 @@
 {
   "name": "FigmaPress Connector",
   "slug": "figmapress-connector",
-  "version": "0.16.15",
+  "version": "0.16.16",
   "requires": "6.4",
   "requires_php": "7.4",
   "tested": "7.0",
   "homepage": "https://figmapress-builder.vercel.app",
   "download_url": "https://figmapress-builder.vercel.app/downloads/figmapress-connector.zip",
-  "changelog": "<h4>0.16.15</h4><ul><li>赤いスマホCTA上のハンバーガー線を白へ切り替え、視認性を確保しました。</li><li>操作位置、クリック領域、アイコン表示の3層を実ページに合わせて仕上げました。</li></ul><h4>0.16.14</h4><ul><li>スマホのハンバーガー線をCTAより前面へ表示し、操作位置を明確にしました。</li><li>透明な標準チェック領域を最前面、表示アイコンをその直下に固定しました。</li></ul><h4>0.16.13</h4><ul><li>ブラウザー標準のメニューチェック領域をFigmaのアイコン座標へ直接重ねました。</li><li>Elementorに妨げられるラベル経由を避け、ユーザー操作を標準部品へ直接届けます。</li></ul>"
+  "changelog": "<h4>0.16.16</h4><ul><li>大きいElementor文書は編集可能データとCSSキャッシュ更新を先に確定し、共有サーバーのタイムアウトを防止します。</li><li>Figma画像は段階保存APIへ分離し、中断・再開できる状態を維持します。</li></ul><h4>0.16.15</h4><ul><li>赤いスマホCTA上のハンバーガー線を白へ切り替え、視認性を確保しました。</li><li>操作位置、クリック領域、アイコン表示の3層を実ページに合わせて仕上げました。</li></ul><h4>0.16.14</h4><ul><li>スマホのハンバーガー線をCTAより前面へ表示し、操作位置を明確にしました。</li><li>透明な標準チェック領域を最前面、表示アイコンをその直下に固定しました。</li></ul>"
 }
