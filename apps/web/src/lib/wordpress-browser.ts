@@ -464,6 +464,7 @@ function isRetryableChunkUploadError(error: unknown): boolean {
 export async function createWordPressDraftChunkedDirect(
   config: BrowserWordPressConfig,
   input: Extract<BrowserDraftInput, { target: "elementor" }>,
+  options: { chunkBytes?: number; maxChunks?: number; interChunkDelayMs?: number } = {},
 ): Promise<BrowserWordPressResult> {
   const body = JSON.stringify({
     title: input.title,
@@ -475,9 +476,11 @@ export async function createWordPressDraftChunkedDirect(
     template: input.template,
   });
   const bytes = new TextEncoder().encode(body);
-  const chunkBytes = 72_000;
+  const chunkBytes = options.chunkBytes ?? 72_000;
+  const maxChunks = options.maxChunks ?? 32;
+  const interChunkDelayMs = options.interChunkDelayMs ?? 0;
   const total = Math.ceil(bytes.byteLength / chunkBytes);
-  if (total > 32) {
+  if (total > maxChunks) {
     throw new WordPressDirectError(
       "Elementorデータが大きすぎるため、変換対象を分割してください。",
       "request",
@@ -511,6 +514,12 @@ export async function createWordPressDraftChunkedDirect(
             );
             break;
           } catch (error) {
+            console.warn("[wordpress-direct] Elementor chunk attempt failed", {
+              index,
+              total,
+              attempt: attempt + 1,
+              round: round + 1,
+            });
             if (
               !(error instanceof WordPressDirectError)
               || error.kind !== "network"
@@ -547,6 +556,9 @@ export async function createWordPressDraftChunkedDirect(
             "request",
             409,
           );
+        }
+        if (interChunkDelayMs > 0) {
+          await waitForRetry(interChunkDelayMs);
         }
       }
       if (!result || result.status !== "draft") {

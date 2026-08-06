@@ -66,6 +66,7 @@ const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
 const CHUNKED_UPLOAD_CONNECTOR_VERSION = "0.16.17";
+const SMALL_CHUNK_UPLOAD_CONNECTOR_VERSION = "0.16.24";
 const FIGMA_HEADER_MEDIA_CONNECTOR_VERSION = "0.16.18";
 
 function versionAtLeast(version: string | undefined, minimum: string): boolean {
@@ -1458,7 +1459,13 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
               content: output.pageContent,
             };
         const result = wpTarget === "elementor" && supportsChunkedElementorUpload
-          ? await createWordPressDraftChunkedDirect(credentials, directInput as Extract<typeof directInput, { target: "elementor" }>)
+          ? await createWordPressDraftChunkedDirect(
+              credentials,
+              directInput as Extract<typeof directInput, { target: "elementor" }>,
+              versionAtLeast(wpStatus?.connectorVersion, SMALL_CHUNK_UPLOAD_CONNECTOR_VERSION)
+                ? { chunkBytes: 32_000, maxChunks: 128, interChunkDelayMs: 75 }
+                : undefined,
+            )
           : await createWordPressDraftDirect(credentials, directInput);
         setWpResult(result);
         createdResult = result;
@@ -1953,7 +1960,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.25.15 live</span>
+          <span className="status-pill"><i /> v0.25.16 live</span>
         </nav>
       </header>
 
@@ -2947,7 +2954,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.25.15</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.25.16</span></div>
       </footer>
     </main>
   );

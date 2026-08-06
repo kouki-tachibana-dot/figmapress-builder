@@ -342,7 +342,7 @@ function figmapress_connector_rest_upload_elementor_page( WP_REST_Request $reque
     $chunk     = isset( $params['chunk'] ) && is_string( $params['chunk'] ) ? $params['chunk'] : '';
     if (
         ! preg_match( '/^[a-f0-9-]{16,64}$/i', $upload_id ) ||
-        $total < 1 || $total > 32 || $index < 0 || $index >= $total ||
+        $total < 1 || $total > 128 || $index < 0 || $index >= $total ||
         '' === $chunk || strlen( $chunk ) > 128000 ||
         ! preg_match( '/^[A-Za-z0-9+\/=]+$/', $chunk )
     ) {
