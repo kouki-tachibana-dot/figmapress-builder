@@ -320,10 +320,12 @@ export function collectRenderedNodeIds(document: FigmaNode): string[] {
   const collect = (root: FigmaNode, limit: number): string[] => {
     const candidates: RenderCandidate[] = [];
     let order = 0;
-    const visit = (node: FigmaNode): void => {
+    const visit = (node: FigmaNode, functionalVisual = false): void => {
       if (node.visible === false) return;
       const currentOrder = order++;
       const bounds = node.absoluteBoundingBox;
+      const prioritizedVisual = functionalVisual
+        || /(?:carousel|slider|カルーセル|スライダー|header.?logo|cta.?icon)/i.test(node.name);
       const renderGroup = FIGMA_RENDER_GROUP_TYPES.has(node.type)
         && !hasText(node)
         && hasComplexVisual(node);
@@ -332,11 +334,11 @@ export function collectRenderedNodeIds(document: FigmaNode): string[] {
         candidates.push({
           id: node.id,
           order: currentOrder,
-          priority: renderPriority(node),
+          priority: renderPriority(node) + (prioritizedVisual ? 1_000 : 0),
         });
         return;
       }
-      for (const child of node.children ?? []) visit(child);
+      for (const child of node.children ?? []) visit(child, prioritizedVisual);
     };
     visit(root);
     return candidates
