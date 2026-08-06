@@ -307,6 +307,22 @@ test("mobile navigation keeps its CTA and device-specific anchor targets", async
   assert.match(style, /#contact-desktop/);
 });
 
+test("accordion keeps empty Figma states closed instead of opening a blank panel", async () => {
+  const [widget, script, style] = await Promise.all([
+    readFile(elementorWidgetsPath, "utf8"),
+    readFile(interactionScriptPath, "utf8"),
+    readFile(interactionStylePath, "utf8"),
+  ]);
+
+  assert.match(widget, /\$first_open_index\s*=\s*-1/);
+  assert.match(widget, /data-has-content=/);
+  assert.match(widget, /aria-disabled="true" tabindex="-1"/);
+  assert.match(script, /details\.dataset\.hasContent !== "true"/);
+  assert.match(script, /event\.preventDefault\(\)/);
+  assert.match(script, /if \(details\.open\) details\.open = false/);
+  assert.match(style, /details\[data-has-content="false"\] summary/);
+});
+
 test("Connector checks the pinned HTTPS manifest for native WordPress updates", async () => {
   const source = await readFile(updatePath, "utf8");
   assert.match(source, /pre_set_site_transient_update_plugins/);

@@ -56,12 +56,30 @@
     function initAccordions(scope) {
         scope.querySelectorAll(".figmapress-accordion:not([data-figmapress-ready])").forEach(function (accordion) {
             accordion.dataset.figmapressReady = "true";
-            if (accordion.dataset.multiple === "true") return;
             accordion.querySelectorAll("details").forEach(function (details) {
+                var summary = details.querySelector("summary");
+                if (details.dataset.hasContent !== "true") {
+                    details.open = false;
+                    if (summary) {
+                        summary.setAttribute("aria-disabled", "true");
+                        summary.setAttribute("tabindex", "-1");
+                        summary.addEventListener("click", function (event) {
+                            event.preventDefault();
+                        });
+                        summary.addEventListener("keydown", function (event) {
+                            if (event.key === "Enter" || event.key === " ") event.preventDefault();
+                        });
+                    }
+                    details.addEventListener("toggle", function () {
+                        if (details.open) details.open = false;
+                    });
+                    return;
+                }
+                if (accordion.dataset.multiple === "true") return;
                 details.addEventListener("toggle", function () {
                     if (!details.open) return;
                     accordion.querySelectorAll("details[open]").forEach(function (other) {
-                        if (other !== details) other.open = false;
+                        if (other !== details && other.dataset.hasContent === "true") other.open = false;
                     });
                 });
             });
