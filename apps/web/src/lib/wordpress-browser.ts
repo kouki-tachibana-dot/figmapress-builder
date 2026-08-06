@@ -444,6 +444,62 @@ export async function createWordPressDraftDirect(
   };
 }
 
+function base64Bytes(bytes: Uint8Array): string {
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 8_192) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 8_192));
+  }
+  return btoa(binary);
+}
+
+export async function createWordPressDraftChunkedDirect(
+  config: BrowserWordPressConfig,
+  input: Extract<BrowserDraftInput, { target: "elementor" }>,
+): Promise<BrowserWordPressResult> {
+  const body = JSON.stringify({
+    title: input.title,
+    slug: normalizeSlug(input.slug),
+    status: "draft",
+    requestId: input.requestId,
+    sourceKey: input.sourceKey,
+    pageTemplate: input.pageTemplate,
+    template: input.template,
+  });
+  const bytes = new TextEncoder().encode(body);
+  const chunkBytes = 72_000;
+  const total = Math.ceil(bytes.byteLength / chunkBytes);
+  let result: BrowserWordPressResult | null = null;
+  for (let index = 0; index < total; index += 1) {
+    const response = await directFetch(
+      config,
+      `/figmapress/v1/elementor/uploads/${input.requestId}`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          index,
+          total,
+          chunk: base64Bytes(bytes.subarray(index * chunkBytes, (index + 1) * chunkBytes)),
+        }),
+      },
+    );
+    const data = await responseJson<BrowserWordPressResult & { complete?: boolean }>(
+      response,
+      config.connectorToken,
+    );
+    if (index < total - 1) {
+      if (data.complete !== false) {
+        throw new WordPressDirectError("WordPressの分割受信状態を確認できませんでした。", "request");
+      }
+      continue;
+    }
+    result = data;
+  }
+  if (!result || result.status !== "draft") {
+    throw new WordPressDirectError("WordPressが下書き以外の状態を返しました。", "request");
+  }
+  return { ...result, target: "elementor" };
+}
+
 export async function localizeWordPressElementorMediaDirect(
   config: BrowserWordPressConfig,
   postId: number,

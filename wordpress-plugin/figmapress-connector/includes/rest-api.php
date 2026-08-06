@@ -83,6 +83,15 @@ function figmapress_connector_register_rest_routes() {
     );
     register_rest_route(
         'figmapress/v1',
+        '/elementor/uploads/(?P<upload>[a-f0-9-]{16,64})',
+        array(
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => 'figmapress_connector_rest_upload_elementor_page',
+            'permission_callback' => 'figmapress_connector_rest_can_edit_pages',
+        )
+    );
+    register_rest_route(
+        'figmapress/v1',
         '/elementor/pages/(?P<id>\d+)/snapshot',
         array(
             'methods'             => WP_REST_Server::CREATABLE,
@@ -293,6 +302,71 @@ function figmapress_connector_find_page_by_meta( $meta_key, $meta_value ) {
         )
     );
     return isset( $pages[0] ) ? absint( $pages[0] ) : 0;
+}
+
+/**
+ * Receive a large Elementor page in bounded browser requests, then forward the
+ * reconstructed JSON to the normal creation handler. Upload state is scoped to
+ * the authenticated user and expires automatically.
+ */
+function figmapress_connector_rest_upload_elementor_page( WP_REST_Request $request ) {
+    $upload_id = sanitize_text_field( $request->get_param( 'upload' ) );
+    $params    = $request->get_json_params();
+    $index     = isset( $params['index'] ) ? absint( $params['index'] ) : -1;
+    $total     = isset( $params['total'] ) ? absint( $params['total'] ) : 0;
+    $chunk     = isset( $params['chunk'] ) && is_string( $params['chunk'] ) ? $params['chunk'] : '';
+    if (
+        ! preg_match( '/^[a-f0-9-]{16,64}$/i', $upload_id ) ||
+        $total < 1 || $total > 32 || $index < 0 || $index >= $total ||
+        '' === $chunk || strlen( $chunk ) > 128000 ||
+        ! preg_match( '/^[A-Za-z0-9+\/=]+$/', $chunk )
+    ) {
+        return new WP_Error( 'figmapress_invalid_upload_chunk', 'Elementor分割データが無効です。', array( 'status' => 422 ) );
+    }
+
+    $decoded = base64_decode( $chunk, true );
+    if ( false === $decoded || strlen( $decoded ) > 72000 ) {
+        return new WP_Error( 'figmapress_invalid_upload_chunk', 'Elementor分割データが無効です。', array( 'status' => 422 ) );
+    }
+
+    $upload_key = 'figmapress_upload_' . get_current_user_id() . '_' . substr(
+        hash_hmac( 'sha256', $upload_id, wp_salt( 'nonce' ) ),
+        0,
+        24
+    );
+    $state = get_transient( $upload_key );
+    if ( ! is_array( $state ) || ! isset( $state['total'], $state['chunks'] ) || absint( $state['total'] ) !== $total ) {
+        $state = array( 'total' => $total, 'chunks' => array() );
+    }
+    $state['chunks'][ $index ] = $decoded;
+    set_transient( $upload_key, $state, 15 * MINUTE_IN_SECONDS );
+
+    if ( count( $state['chunks'] ) < $total ) {
+        return rest_ensure_response(
+            array(
+                'complete' => false,
+                'received' => count( $state['chunks'] ),
+                'total'    => $total,
+            )
+        );
+    }
+
+    ksort( $state['chunks'], SORT_NUMERIC );
+    for ( $expected = 0; $expected < $total; $expected++ ) {
+        if ( ! array_key_exists( $expected, $state['chunks'] ) ) {
+            return new WP_Error( 'figmapress_incomplete_upload', 'Elementor分割データが不足しています。', array( 'status' => 409 ) );
+        }
+    }
+    $body = implode( '', $state['chunks'] );
+    delete_transient( $upload_key );
+    if ( strlen( $body ) > 4000000 || ! is_array( json_decode( $body, true ) ) ) {
+        return new WP_Error( 'figmapress_invalid_upload', 'Elementorデータを再構成できませんでした。', array( 'status' => 422 ) );
+    }
+
+    $forward = new WP_REST_Request( 'POST', '/figmapress/v1/elementor/pages' );
+    $forward->set_header( 'content-type', 'application/json' );
+    $forward->set_body( $body );
+    return figmapress_connector_rest_create_elementor_page( $forward );
 }
 
 function figmapress_connector_rest_create_elementor_page( WP_REST_Request $request ) {
