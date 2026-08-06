@@ -28,6 +28,7 @@ interface RenderContext {
   anchorSuffix: string;
   fallbackMenuTexts: FigmaNode[];
   anchorTargets: Map<string, SectionAnchor>;
+  emittedAnchorIds: Set<string>;
 }
 
 interface RichRun {
@@ -317,6 +318,7 @@ function createRenderContext(
     anchorSuffix,
     fallbackMenuTexts,
     anchorTargets,
+    emittedAnchorIds: new Set([`top${anchorSuffix}`]),
   };
 }
 
@@ -1126,12 +1128,23 @@ function withSectionAnchor(
   context: RenderContext,
 ): ElementorElement {
   const anchor = sectionAnchorSettings(node, context);
-  if (!anchor._element_id) return element;
+  const existingId = typeof element.settings._element_id === "string"
+    ? element.settings._element_id
+    : "";
+  const desiredId = existingId || (typeof anchor._element_id === "string" ? anchor._element_id : "");
+  if (!desiredId) return element;
+  if (context.emittedAnchorIds.has(desiredId)) {
+    if (!existingId) return element;
+    const { _element_id: _duplicateId, ...settings } = element.settings;
+    return { ...element, settings };
+  }
+  context.emittedAnchorIds.add(desiredId);
+  if (existingId === desiredId) return element;
   return {
     ...element,
     settings: {
       ...element.settings,
-      ...anchor,
+      _element_id: desiredId,
     },
   };
 }
@@ -1247,7 +1260,7 @@ function sectionAnchorFromText(value: string): string | null {
   if (/policy|policies|政策/i.test(value)) return "policies";
   if (/activit|report|活動報告|news|results?|実績/i.test(value)) return "activities";
   if (/profile|プロフィール/i.test(value)) return "profile";
-  if (/contact|相談|問(?:い)?合わせ|問合|声を聞かせて/i.test(value)) return "contact";
+  if (/contact|問(?:い)?合わせ|問合|声を聞かせて|ご相談(?:はこちら|・ご意見|ください|$)/i.test(value)) return "contact";
   return null;
 }
 
@@ -1262,7 +1275,7 @@ function sectionTextMatchesAnchor(value: string, anchor: SectionAnchor): boolean
     case "profile":
       return /profile|プロフィール/i.test(value);
     case "contact":
-      return /contact|相談|問(?:い)?合わせ|問合|声を聞かせて/i.test(value);
+      return /contact|問(?:い)?合わせ|問合|声を聞かせて|ご相談(?:はこちら|・ご意見|ください|$)/i.test(value);
   }
 }
 

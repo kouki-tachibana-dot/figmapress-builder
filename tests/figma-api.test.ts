@@ -349,19 +349,14 @@ test("functional carousel visuals outrank decorative assets in the render budget
           name: "Comp/Carousel",
           type: "FRAME",
           absoluteBoundingBox: { x: 100, y: 350, width: 1000, height: 300 },
-          children: [{
-            id: "carousel:text",
-            name: "Carousel label",
-            type: "TEXT",
-            characters: "活動報告",
-            absoluteBoundingBox: { x: 100, y: 350, width: 160, height: 30 },
-          }, ...slides],
+          children: slides,
         }],
       }],
     }],
   });
 
   assert.equal(ids.length, 120);
+  assert.ok(!ids.includes("carousel:0"));
   assert.ok(slides.every((slide) => ids.includes(slide.id)));
   assert.ok(!ids.includes("decorative:124"));
 });
