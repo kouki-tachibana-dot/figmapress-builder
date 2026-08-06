@@ -21,6 +21,7 @@ import {
 } from "@figmapress/elementor-renderer";
 import {
   WordPressDirectError,
+  createWordPressDraftChunkedDirect,
   createWordPressDraftDirect,
   fetchWordPressElementorSnapshotDirect,
   localizeWordPressElementorMediaDirect,
@@ -64,7 +65,7 @@ const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
-const DEFERRED_MEDIA_CONNECTOR_VERSION = "0.16.16";
+const CHUNKED_UPLOAD_CONNECTOR_VERSION = "0.16.17";
 
 function versionAtLeast(version: string | undefined, minimum: string): boolean {
   if (!version) return false;
@@ -1423,36 +1424,37 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
             content: output.pageContent,
           };
       const serializedPayload = JSON.stringify(payload);
+      const supportsChunkedElementorUpload = versionAtLeast(
+        wpStatus?.connectorVersion,
+        CHUNKED_UPLOAD_CONNECTOR_VERSION,
+      );
       const useWordPressProxy = shouldProxyWordPressDraft(
         wpTransport,
         wpTarget,
         new TextEncoder().encode(serializedPayload).byteLength,
-        versionAtLeast(
-          wpStatus?.connectorVersion,
-          DEFERRED_MEDIA_CONNECTOR_VERSION,
-        ),
+        supportsChunkedElementorUpload,
       );
       let createdResult: WordPressResult;
       if (!useWordPressProxy) {
-        const result = await createWordPressDraftDirect(
-          credentials,
-          wpTarget === "elementor"
-            ? {
-                target: "elementor",
-                title: payload.title,
-                slug: payload.slug,
-                template: output.elementorTemplate,
-                pageTemplate: "elementor_canvas",
-                requestId,
-                sourceKey: conversionSourceKey,
-              }
-            : {
-                target: "gutenberg",
-                title: payload.title,
-                slug: payload.slug,
-                content: output.pageContent,
-              },
-        );
+        const directInput = wpTarget === "elementor"
+          ? {
+              target: "elementor" as const,
+              title: payload.title,
+              slug: payload.slug,
+              template: output.elementorTemplate,
+              pageTemplate: "elementor_canvas" as const,
+              requestId,
+              sourceKey: conversionSourceKey,
+            }
+          : {
+              target: "gutenberg" as const,
+              title: payload.title,
+              slug: payload.slug,
+              content: output.pageContent,
+            };
+        const result = wpTarget === "elementor" && supportsChunkedElementorUpload
+          ? await createWordPressDraftChunkedDirect(credentials, directInput as Extract<typeof directInput, { target: "elementor" }>)
+          : await createWordPressDraftDirect(credentials, directInput);
         setWpResult(result);
         createdResult = result;
       } else {
@@ -1946,7 +1948,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.25.8 live</span>
+          <span className="status-pill"><i /> v0.25.9 live</span>
         </nav>
       </header>
 
@@ -2935,7 +2937,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.25.8</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.25.9</span></div>
       </footer>
     </main>
   );

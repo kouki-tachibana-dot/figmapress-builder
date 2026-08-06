@@ -1,11 +1,11 @@
 {
   "name": "FigmaPress Connector",
   "slug": "figmapress-connector",
-  "version": "0.16.16",
+  "version": "0.16.17",
   "requires": "6.4",
   "requires_php": "7.4",
   "tested": "7.0",
   "homepage": "https://figmapress-builder.vercel.app",
   "download_url": "https://figmapress-builder.vercel.app/downloads/figmapress-connector.zip",
-  "changelog": "<h4>0.16.16</h4><ul><li>大きいElementor文書は編集可能データとCSSキャッシュ更新を先に確定し、共有サーバーのタイムアウトを防止します。</li><li>Figma画像は段階保存APIへ分離し、中断・再開できる状態を維持します。</li></ul><h4>0.16.15</h4><ul><li>赤いスマホCTA上のハンバーガー線を白へ切り替え、視認性を確保しました。</li><li>操作位置、クリック領域、アイコン表示の3層を実ページに合わせて仕上げました。</li></ul><h4>0.16.14</h4><ul><li>スマホのハンバーガー線をCTAより前面へ表示し、操作位置を明確にしました。</li><li>透明な標準チェック領域を最前面、表示アイコンをその直下に固定しました。</li></ul>"
+  "changelog": "<h4>0.16.17</h4><ul><li>大きいElementor文書を認証済みの小さいリクエストへ分割し、共有サーバーの送信サイズ制限を回避します。</li><li>分割データはユーザー単位・15分期限で一時保持し、全件受信後だけ既存下書きを更新します。</li></ul><h4>0.16.16</h4><ul><li>大きいElementor文書は編集可能データとCSSキャッシュ更新を先に確定し、共有サーバーのタイムアウトを防止します。</li><li>Figma画像は段階保存APIへ分離し、中断・再開できる状態を維持します。</li></ul><h4>0.16.15</h4><ul><li>赤いスマホCTA上のハンバーガー線を白へ切り替え、視認性を確保しました。</li><li>操作位置、クリック領域、アイコン表示の3層を実ページに合わせて仕上げました。</li></ul>"
 }

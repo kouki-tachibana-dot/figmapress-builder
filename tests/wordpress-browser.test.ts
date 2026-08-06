@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   WordPressDirectError,
+  createWordPressDraftChunkedDirect,
   createWordPressDraftDirect,
   fetchWordPressElementorSnapshotDirect,
   localizeWordPressElementorMediaDirect,
@@ -281,6 +282,47 @@ test("browser Elementor creation sends one draft request without a status prefli
   assert.match(requests[0]?.body ?? "", /"status":"draft"/);
   assert.match(requests[0]?.body ?? "", /"requestId":"22222222-2222-4222-8222-222222222222"/);
   assert.match(requests[0]?.body ?? "", /"sourceKey":"figma:Abcdef123:46:12"/);
+});
+
+test("browser splits large Elementor creation into bounded authenticated uploads", async (context) => {
+  const requests: Array<{ url: string; body: string }> = [];
+  context.mock.method(globalThis, "fetch", async (input, init) => {
+    const body = typeof init?.body === "string" ? init.body : "";
+    requests.push({ url: String(input), body });
+    const chunk = JSON.parse(body) as { index: number; total: number };
+    return chunk.index === chunk.total - 1
+      ? Response.json({ id: 42, slug: "home", status: "draft", remainingMedia: 0 })
+      : Response.json({ complete: false, received: chunk.index + 1, total: chunk.total });
+  });
+
+  const result = await createWordPressDraftChunkedDirect(config, {
+    target: "elementor",
+    requestId: "22222222-2222-4222-8222-222222222222",
+    sourceKey: "figma:Abcdef123:46:12",
+    title: "ホーム",
+    slug: "/",
+    pageTemplate: "elementor_canvas",
+    template: {
+      title: "ホーム",
+      type: "page",
+      version: "0.4",
+      page_settings: {},
+      content: [{ id: "1234abcd", settings: { text: "明石".repeat(60_000) } }],
+    },
+  });
+
+  assert.equal(result.status, "draft");
+  assert.ok(requests.length > 2);
+  assert.ok(requests.every((request) => request.body.length < 130_000));
+  assert.ok(requests.every((request) => /elementor\/uploads\/22222222/.test(request.url)));
+  const reconstructed = requests
+    .map((request) => JSON.parse(request.body) as { index: number; chunk: string })
+    .sort((left, right) => left.index - right.index)
+    .map((part) => Buffer.from(part.chunk, "base64"))
+    .reduce((joined, part) => Buffer.concat([joined, part]), Buffer.alloc(0))
+    .toString("utf8");
+  assert.match(reconstructed, /"status":"draft"/);
+  assert.match(reconstructed, /明石明石明石/);
 });
 
 test("browser resumes Elementor media without recreating the draft", async (context) => {
