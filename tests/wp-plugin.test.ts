@@ -188,7 +188,10 @@ test("Connector reuses an existing Elementor draft for the same request identifi
   assert.ok(record > insert, "request identifier must be recorded immediately after insertion");
   assert.match(source, /add_option\( \$request_lock_key, \$lock_value, '', false \)/);
   assert.match(source, /figmapress_request_in_progress/);
-  assert.match(source, /10 \* MINUTE_IN_SECONDS/);
+  assert.match(source, /2 \* MINUTE_IN_SECONDS/);
+  assert.match(source, /register_shutdown_function/);
+  assert.match(source, /'token'\s*=>\s*\$lock_token/);
+  assert.match(source, /hash_equals\( \$lock_token, \$current\['token'\] \)/);
   assert.match(source, /'idempotent'\s*=>\s*true/);
   assert.match(source, /重複ページは作成していません/);
 });
