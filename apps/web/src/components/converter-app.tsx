@@ -1463,7 +1463,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
               credentials,
               directInput as Extract<typeof directInput, { target: "elementor" }>,
               versionAtLeast(wpStatus?.connectorVersion, SMALL_CHUNK_UPLOAD_CONNECTOR_VERSION)
-                ? { chunkBytes: 32_000, maxChunks: 128, interChunkDelayMs: 75 }
+                ? { chunkBytes: 8_000, maxChunks: 128, interChunkDelayMs: 75 }
                 : undefined,
             )
           : await createWordPressDraftDirect(credentials, directInput);
@@ -1960,7 +1960,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.25.18 live</span>
+          <span className="status-pill"><i /> v0.25.19 live</span>
         </nav>
       </header>
 
@@ -2954,7 +2954,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.25.18</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.25.19</span></div>
       </footer>
     </main>
   );

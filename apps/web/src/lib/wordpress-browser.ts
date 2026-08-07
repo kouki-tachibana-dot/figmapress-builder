@@ -529,12 +529,9 @@ export async function createWordPressDraftChunkedDirect(
             );
             break;
           } catch (error) {
-            console.warn("[wordpress-direct] Elementor chunk attempt failed", {
-              index,
-              total,
-              attempt: attempt + 1,
-              round: round + 1,
-            });
+            console.warn(
+              `[wordpress-direct] Elementor chunk attempt failed index=${index + 1}/${total} attempt=${attempt + 1} round=${round + 1}`,
+            );
             if (
               !(error instanceof WordPressDirectError)
               || error.kind !== "network"
