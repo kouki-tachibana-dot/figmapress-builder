@@ -149,21 +149,33 @@ async function directFetch(
   config: BrowserWordPressConfig,
   path: string,
   init: RequestInit = {},
+  pairingBody?: Record<string, string | number>,
 ): Promise<Response> {
   const method = (init.method ?? "GET").toUpperCase();
   const timeoutMs = method === "GET" || method === "HEAD" ? 20_000 : 120_000;
   const headers = new Headers(init.headers);
   headers.set("Accept", "application/json");
   const connectorToken = config.connectorToken?.trim();
+  const usePairingBody = Boolean(connectorToken && pairingBody);
   const authorization = connectorToken
     ? ""
     : basicAuthorization(config.username, config.applicationPassword);
-  if (connectorToken) {
+  if (connectorToken && !usePairingBody) {
     headers.set("X-FigmaPress-Token", connectorToken);
   } else {
-    headers.set("Authorization", authorization);
+    if (!connectorToken) headers.set("Authorization", authorization);
   }
-  if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  let effectiveBody = init.body;
+  if (usePairingBody && connectorToken && pairingBody) {
+    const form = new URLSearchParams();
+    form.set("figmapress_token", connectorToken);
+    for (const [key, value] of Object.entries(pairingBody)) {
+      form.set(key, String(value));
+    }
+    effectiveBody = form;
+  } else if (effectiveBody && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
 
   try {
     // `cache: "no-store"` makes Chrome add Cache-Control and Pragma to the
@@ -171,6 +183,7 @@ async function directFetch(
     const url = `${normalizedBaseUrl(config.baseUrl)}/wp-json${path}`;
     const requestInit: RequestInit = {
       ...init,
+      body: effectiveBody,
       credentials: "omit",
       headers,
       mode: "cors",
@@ -498,11 +511,12 @@ export async function createWordPressDraftChunkedDirect(
     try {
       let result: BrowserWordPressResult | null = null;
       for (let index = 0; index < total; index += 1) {
-        const chunkBody = JSON.stringify({
+        const chunkPayload = {
           index,
           total,
           chunk: base64Bytes(bytes.subarray(index * chunkBytes, (index + 1) * chunkBytes)),
-        });
+        };
+        const chunkBody = JSON.stringify(chunkPayload);
         let response: Response | null = null;
         const chunkAttempts = index === total - 1 ? 1 : 3;
         for (let attempt = 0; attempt < chunkAttempts; attempt += 1) {
@@ -511,6 +525,7 @@ export async function createWordPressDraftChunkedDirect(
               config,
               `/figmapress/v1/elementor/uploads/${input.requestId}`,
               { method: "POST", body: chunkBody },
+              chunkPayload,
             );
             break;
           } catch (error) {

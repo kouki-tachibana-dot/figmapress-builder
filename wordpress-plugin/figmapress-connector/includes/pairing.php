@@ -59,9 +59,13 @@ function figmapress_connector_authenticate_pairing_token( $user_id ) {
         return $user_id;
     }
 
-    $token = isset( $_SERVER['HTTP_X_FIGMAPRESS_TOKEN'] )
+    $header_token = isset( $_SERVER['HTTP_X_FIGMAPRESS_TOKEN'] )
         ? trim( wp_unslash( $_SERVER['HTTP_X_FIGMAPRESS_TOKEN'] ) )
         : '';
+    $body_token   = isset( $_POST['figmapress_token'] )
+        ? trim( wp_unslash( $_POST['figmapress_token'] ) )
+        : '';
+    $token        = '' !== $header_token ? $header_token : $body_token;
     if (
         ! preg_match(
             '/^fp1\.([1-9][0-9]{0,19})\.([A-Za-z0-9_-]{32,128})$/',

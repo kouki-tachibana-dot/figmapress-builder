@@ -237,11 +237,14 @@ test("Connector returns the durable draft before starting remote image work", as
 
 test("Connector reconstructs bounded user-scoped Elementor uploads", async () => {
   const source = await readFile(restApiPath, "utf8");
+  const pairing = await readFile(pairingPath, "utf8");
   assert.match(source, /elementor\/uploads\/\(\?P<upload>/);
   assert.match(source, /figmapress_connector_rest_upload_elementor_page/);
   assert.match(source, /get_current_user_id\(\)/);
   assert.match(source, /set_transient\( \$upload_key, \$state, 15 \* MINUTE_IN_SECONDS \)/);
   assert.match(source, /base64_decode\( \$chunk, true \)/);
+  assert.match(source, /\$request->get_body_params\(\)/);
+  assert.match(pairing, /\$_POST\['figmapress_token'\]/);
   assert.match(source, /\$total > 128/);
   assert.match(source, /strlen\( \$chunk \) > 128000/);
   assert.match(source, /strlen\( \$decoded \) > 72000/);

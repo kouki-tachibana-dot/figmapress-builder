@@ -329,6 +329,47 @@ test("browser splits large Elementor creation into bounded authenticated uploads
   assert.match(reconstructed, /明石明石明石/);
 });
 
+test("browser pairing sends chunked uploads as preflight-free form posts", async (context) => {
+  const connectorToken = `fp1.7.${"c".repeat(43)}`;
+  const requests: Array<{ headers: Headers; params: URLSearchParams }> = [];
+  context.mock.method(globalThis, "fetch", async (_input, init) => {
+    const params = new URLSearchParams(String(init?.body));
+    requests.push({ headers: new Headers(init?.headers), params });
+    const index = Number(params.get("index"));
+    const total = Number(params.get("total"));
+    return index === total - 1
+      ? Response.json({ id: 42, slug: "home", status: "draft", remainingMedia: 0 })
+      : Response.json({ complete: false, received: index + 1, total });
+  });
+
+  const result = await createWordPressDraftChunkedDirect(
+    { ...config, applicationPassword: "", connectorToken },
+    {
+      target: "elementor",
+      requestId: "55555555-5555-4555-8555-555555555555",
+      sourceKey: "figma:Abcdef123:46:12",
+      title: "ホーム",
+      slug: "/",
+      pageTemplate: "elementor_canvas",
+      template: {
+        title: "ホーム",
+        type: "page",
+        version: "0.4",
+        page_settings: {},
+        content: [{ id: "1234abcd", settings: { text: "接続".repeat(40_000) } }],
+      },
+    },
+    { chunkBytes: 16_000, maxChunks: 128 },
+  );
+
+  assert.equal(result.status, "draft");
+  assert.ok(requests.length > 4);
+  assert.ok(requests.every(({ headers }) => headers.get("X-FigmaPress-Token") === null));
+  assert.ok(requests.every(({ headers }) => headers.get("Authorization") === null));
+  assert.ok(requests.every(({ params }) => params.get("figmapress_token") === connectorToken));
+  assert.ok(requests.every(({ params }) => Boolean(params.get("chunk"))));
+});
+
 test("browser retries a transient non-final Elementor chunk", async (context) => {
   const receivedIndexes: number[] = [];
   let interrupted = false;
