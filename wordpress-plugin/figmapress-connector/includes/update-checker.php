@@ -21,8 +21,15 @@ function figmapress_connector_update_manifest() {
     if ( is_array( $cached ) ) {
         return $cached;
     }
+    $request_url = add_query_arg(
+        array(
+            'installed' => FIGMAPRESS_CONNECTOR_VERSION,
+            'check'     => gmdate( 'YmdHi' ),
+        ),
+        FIGMAPRESS_CONNECTOR_MANIFEST_URL
+    );
     $response = wp_safe_remote_get(
-        FIGMAPRESS_CONNECTOR_MANIFEST_URL,
+        $request_url,
         array(
             'timeout'    => 5,
             'user-agent' => 'FigmaPress Connector/' . FIGMAPRESS_CONNECTOR_VERSION,
@@ -47,11 +54,14 @@ function figmapress_connector_offer_update( $transient ) {
     if ( ! is_object( $transient ) ) {
         return $transient;
     }
+    $plugin   = plugin_basename( FIGMAPRESS_CONNECTOR_DIR . 'figmapress-connector.php' );
     $manifest = figmapress_connector_update_manifest();
     if ( ! $manifest || ! version_compare( $manifest['version'], FIGMAPRESS_CONNECTOR_VERSION, '>' ) ) {
+        if ( isset( $transient->response[ $plugin ] ) ) {
+            unset( $transient->response[ $plugin ] );
+        }
         return $transient;
     }
-    $plugin = plugin_basename( FIGMAPRESS_CONNECTOR_DIR . 'figmapress-connector.php' );
     $transient->response[ $plugin ] = (object) array(
         'id'           => 'figmapress-connector',
         'slug'         => 'figmapress-connector',

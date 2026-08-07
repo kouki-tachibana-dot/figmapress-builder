@@ -343,6 +343,9 @@ test("Connector checks the pinned HTTPS manifest for native WordPress updates", 
   assert.match(source, /'plugins_api'/);
   assert.match(source, /delete_site_transient_update_plugins/);
   assert.match(source, /figmapress_connector_clear_update_manifest_cache/);
+  assert.match(source, /add_query_arg/);
+  assert.match(source, /'installed'\s*=>\s*FIGMAPRESS_CONNECTOR_VERSION/);
+  assert.match(source, /unset\( \$transient->response\[ \$plugin \] \)/);
 });
 
 test("Connector pairing is revocable, hashed, expiring, and namespace scoped", async () => {
