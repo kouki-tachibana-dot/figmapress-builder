@@ -337,6 +337,9 @@ function figmapress_connector_request_lock_is_stale( $started ) {
 function figmapress_connector_rest_upload_elementor_page( WP_REST_Request $request ) {
     $upload_id = sanitize_text_field( $request->get_param( 'upload' ) );
     $params    = $request->get_json_params();
+    if ( ! is_array( $params ) ) {
+        $params = $request->get_body_params();
+    }
     $index     = isset( $params['index'] ) ? absint( $params['index'] ) : -1;
     $total     = isset( $params['total'] ) ? absint( $params['total'] ) : 0;
     $chunk     = isset( $params['chunk'] ) && is_string( $params['chunk'] ) ? $params['chunk'] : '';
