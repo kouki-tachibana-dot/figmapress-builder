@@ -83,6 +83,15 @@ function figmapress_connector_register_rest_routes() {
     );
     register_rest_route(
         'figmapress/v1',
+        '/elementor/site-prepare',
+        array(
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => 'figmapress_connector_rest_prepare_site',
+            'permission_callback' => 'figmapress_connector_rest_can_build_site',
+        )
+    );
+    register_rest_route(
+        'figmapress/v1',
         '/elementor/pages',
         array(
             'methods'             => WP_REST_Server::CREATABLE,

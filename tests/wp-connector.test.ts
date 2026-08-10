@@ -227,7 +227,7 @@ test("server transport prepares stable multi-page drafts and an unassigned menu"
   assert.equal(result.pages.every((page) => page.status === "draft"), true);
   assert.equal(result.menu?.assigned, false);
   assert.equal(requests.length, 1);
-  assert.match(requests[0]?.url ?? "", /figmapress\/v1\/sites\/prepare$/);
+  assert.match(requests[0]?.url ?? "", /figmapress\/v1\/elementor\/site-prepare$/);
   assert.match(requests[0]?.body ?? "", /"slug":"home"/);
   assert.doesNotMatch(requests[0]?.body ?? "", /"status":"publish"/);
 });
