@@ -1520,6 +1520,9 @@ function figmapress_connector_read_elementor_data( $post_id ) {
 }
 
 function figmapress_connector_count_elementor_elements( $elements ) {
+    if ( ! is_array( $elements ) ) {
+        return 0;
+    }
     $count = 0;
     foreach ( $elements as $element ) {
         if ( ! is_array( $element ) ) {

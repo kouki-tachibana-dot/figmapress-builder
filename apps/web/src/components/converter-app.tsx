@@ -76,7 +76,7 @@ const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
 const CHUNKED_UPLOAD_CONNECTOR_VERSION = "0.16.17";
 const SMALL_CHUNK_UPLOAD_CONNECTOR_VERSION = "0.16.24";
 const FIGMA_HEADER_MEDIA_CONNECTOR_VERSION = "0.16.18";
-const MULTI_PAGE_CONNECTOR_VERSION = "0.17.1";
+const MULTI_PAGE_CONNECTOR_VERSION = "0.17.2";
 
 function versionAtLeast(version: string | undefined, minimum: string): boolean {
   if (!version) return false;
@@ -2193,7 +2193,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.26.2 live</span>
+          <span className="status-pill"><i /> v0.26.3 live</span>
         </nav>
       </header>
 
@@ -3280,7 +3280,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.26.2</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.26.3</span></div>
       </footer>
     </main>
   );
