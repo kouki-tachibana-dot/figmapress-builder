@@ -280,6 +280,44 @@ test("server paired transport uses the scoped admin-post fallback", async (conte
   assert.match(form.get("payload") ?? "", /"slug":"home"/);
 });
 
+test("server paired transport retries blocked admin-post through admin-ajax", async (context) => {
+  const connectorToken = `fp1.42.${"e".repeat(48)}`;
+  const requests: string[] = [];
+  context.mock.method(globalThis, "fetch", async (input) => {
+    requests.push(String(input));
+    if (requests.length === 1) {
+      return new Response("blocked by shared-host security", { status: 403 });
+    }
+    return Response.json({
+      siteKey: "figma:Abcdef123:46:12",
+      title: "竹内きよ子様",
+      status: "draft",
+      pages: [
+        { id: 91, key: "home", title: "竹内きよ子様", slug: "home", status: "draft", sourceKey: "figma:Abcdef123:46:12", created: false, updated: true },
+        { id: 92, key: "profile", title: "プロフィール", slug: "profile", status: "draft", sourceKey: "figma:Abcdef123:46:12:page:profile", created: false, updated: true },
+      ],
+      menu: null,
+      warnings: [],
+    });
+  });
+
+  const result = await prepareWordPressSite({ ...config, connectorToken }, {
+    siteKey: "figma:Abcdef123:46:12",
+    title: "竹内きよ子様",
+    menuName: "竹内きよ子様｜FigmaPress",
+    pages: [
+      { key: "home", title: "竹内きよ子様", slug: "/", sourceKey: "figma:Abcdef123:46:12" },
+      { key: "profile", title: "プロフィール", slug: "profile", sourceKey: "figma:Abcdef123:46:12:page:profile" },
+    ],
+  });
+
+  assert.equal(result.status, "draft");
+  assert.deepEqual(requests, [
+    "https://wordpress.example/wp-admin/admin-post.php",
+    "https://wordpress.example/wp-admin/admin-ajax.php",
+  ]);
+});
+
 test("server transport rejects any non-draft page in a prepared site", async (context) => {
   context.mock.method(globalThis, "fetch", async () => Response.json({
     siteKey: "figma:Abcdef123:46:12",

@@ -291,16 +291,28 @@ async function wpAdminPost(
   form.set("action", action);
   form.set("figmapress_token_hex", hexEncodePairingToken(connectorToken));
   for (const [key, value] of Object.entries(fields)) form.set(key, value);
-  const response = await fetch(
-    `${cfg.baseUrl.replace(/\/+$/, "")}/wp-admin/admin-post.php`,
-    {
-      method: "POST",
-      body: form,
-      headers: { Accept: "application/json" },
-      redirect: "error",
-      signal: AbortSignal.timeout(120_000),
-    },
+  const baseUrl = cfg.baseUrl.replace(/\/+$/, "");
+  const requestInit: RequestInit = {
+    method: "POST",
+    body: form,
+    headers: { Accept: "application/json" },
+    redirect: "error",
+    signal: AbortSignal.timeout(120_000),
+  };
+  let response = await fetch(
+    `${baseUrl}/wp-admin/admin-post.php`,
+    requestInit,
   );
+  // Some shared-host security plugins reject authenticated admin-post actions
+  // while allowing WordPress' standard AJAX dispatcher. Both handlers execute
+  // the same Connector callback and therefore retain identical token, role,
+  // draft-only, and unassigned-menu protections.
+  if (response.status === 403) {
+    response = await fetch(
+      `${baseUrl}/wp-admin/admin-ajax.php`,
+      requestInit,
+    );
+  }
   if (response.status === 401) {
     const body = await response.text();
     throw new WpAuthError(

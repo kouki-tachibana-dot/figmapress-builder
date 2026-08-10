@@ -247,6 +247,8 @@ test("Connector reconstructs bounded user-scoped Elementor uploads", async () =>
   assert.match(pairing, /\$_POST\['figmapress_token'\]/);
   assert.match(pairing, /\$_POST\['figmapress_token_hex'\]/);
   assert.match(pairing, /hex2bin/);
+  assert.match(pairing, /wp_ajax_nopriv_figmapress_site_prepare/);
+  assert.match(pairing, /wp_ajax_figmapress_site_prepare/);
   assert.match(source, /\$total > 128/);
   assert.match(source, /strlen\( \$chunk \) > 128000/);
   assert.match(source, /strlen\( \$decoded \) > 72000/);
