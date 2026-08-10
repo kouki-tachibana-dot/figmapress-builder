@@ -232,7 +232,7 @@ test("server transport prepares stable multi-page drafts and an unassigned menu"
   assert.doesNotMatch(requests[0]?.body ?? "", /"status":"publish"/);
 });
 
-test("server paired transport keeps the scoped token in its header and sends JSON", async (context) => {
+test("server paired transport hex-encodes the scoped token in the HTTPS body", async (context) => {
   const connectorToken = `fp1.42.${"d".repeat(48)}`;
   const requests: Array<{ body: string; tokenHeader: string | null; contentType: string | null }> = [];
   context.mock.method(globalThis, "fetch", async (_input, init) => {
@@ -266,10 +266,15 @@ test("server paired transport keeps the scoped token in its header and sends JSO
   });
 
   assert.equal(requests.length, 1);
-  assert.equal(requests[0]?.tokenHeader, connectorToken);
-  assert.equal(requests[0]?.contentType, "application/json");
-  assert.match(requests[0]?.body ?? "", /"slug":"home"/);
-  assert.doesNotMatch(requests[0]?.body ?? "", /figmapress_token/);
+  assert.equal(requests[0]?.tokenHeader, null);
+  assert.equal(requests[0]?.contentType, null);
+  const form = new URLSearchParams(requests[0]?.body);
+  assert.equal(form.get("figmapress_token"), null);
+  assert.equal(
+    form.get("figmapress_token_hex"),
+    Buffer.from(connectorToken, "utf8").toString("hex"),
+  );
+  assert.match(form.get("payload") ?? "", /"slug":"home"/);
 });
 
 test("server transport rejects any non-draft page in a prepared site", async (context) => {

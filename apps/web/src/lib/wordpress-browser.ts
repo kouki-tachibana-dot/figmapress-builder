@@ -193,11 +193,19 @@ function basicAuthorization(username: string, applicationPassword: string): stri
   return `Basic ${btoa(binary)}`;
 }
 
+function hexEncodePairingToken(value: string): string {
+  return Array.from(
+    new TextEncoder().encode(value),
+    (byte) => byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
 async function directFetch(
   config: BrowserWordPressConfig,
   path: string,
   init: RequestInit = {},
   pairingBody?: Record<string, string | number>,
+  pairingTokenTransport: "plain" | "hex" = "plain",
 ): Promise<Response> {
   const method = (init.method ?? "GET").toUpperCase();
   const timeoutMs = method === "GET" || method === "HEAD" ? 20_000 : 120_000;
@@ -216,7 +224,14 @@ async function directFetch(
   let effectiveBody = init.body;
   if (usePairingBody && connectorToken && pairingBody) {
     const form = new URLSearchParams();
-    form.set("figmapress_token", connectorToken);
+    form.set(
+      pairingTokenTransport === "hex"
+        ? "figmapress_token_hex"
+        : "figmapress_token",
+      pairingTokenTransport === "hex"
+        ? hexEncodePairingToken(connectorToken)
+        : connectorToken,
+    );
     for (const [key, value] of Object.entries(pairingBody)) {
       form.set(key, String(value));
     }
@@ -444,7 +459,7 @@ export async function prepareWordPressSiteDirect(
     await directFetch(config, "/figmapress/v1/elementor/site-prepare", {
       method: "POST",
       body: config.connectorToken ? undefined : payload,
-    }, config.connectorToken ? { payload } : undefined),
+    }, config.connectorToken ? { payload } : undefined, "hex"),
     config.connectorToken,
   );
   if (result.status !== "draft" || result.pages.some((page) => page.status !== "draft")) {

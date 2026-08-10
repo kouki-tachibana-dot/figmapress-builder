@@ -218,7 +218,11 @@ test("browser paired transport prepares multi-page drafts without a custom auth 
   assert.equal(requests[0]?.tokenHeader, null);
   assert.equal(requests[0]?.contentType, null);
   const form = new URLSearchParams(requests[0]?.body);
-  assert.equal(form.get("figmapress_token"), connectorToken);
+  assert.equal(form.get("figmapress_token"), null);
+  assert.equal(
+    form.get("figmapress_token_hex"),
+    Buffer.from(connectorToken, "utf8").toString("hex"),
+  );
   assert.match(form.get("payload") ?? "", /"slug":"home"/);
 });
 

@@ -209,11 +209,19 @@ function authHeader(cfg: WpConfig): string {
   return `Basic ${Buffer.from(raw, "utf-8").toString("base64")}`;
 }
 
+function hexEncodePairingToken(value: string): string {
+  return Array.from(
+    new TextEncoder().encode(value),
+    (byte) => byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
 async function wpFetch(
   cfg: WpConfig,
   path: string,
   init: RequestInit = {},
   pairingBody?: Record<string, string | number>,
+  pairingTokenTransport: "plain" | "hex" = "plain",
 ): Promise<Response> {
   const method = (init.method ?? "GET").toUpperCase();
   const timeoutMs = method === "GET" || method === "HEAD" ? 20_000 : 120_000;
@@ -231,7 +239,14 @@ async function wpFetch(
   let effectiveBody = init.body;
   if (usePairingBody && connectorToken && pairingBody) {
     const form = new URLSearchParams();
-    form.set("figmapress_token", connectorToken);
+    form.set(
+      pairingTokenTransport === "hex"
+        ? "figmapress_token_hex"
+        : "figmapress_token",
+      pairingTokenTransport === "hex"
+        ? hexEncodePairingToken(connectorToken)
+        : connectorToken,
+    );
     for (const [key, value] of Object.entries(pairingBody)) {
       form.set(key, String(value));
     }
@@ -390,14 +405,13 @@ export async function prepareWordPressSite(
       slug: normalizeSlug(page.slug),
     })),
   });
-  // The server-side proxy is not subject to browser CORS preflights, so keep
-  // the scoped Connector token in its dedicated header and send the site plan
-  // as JSON. Some shared-host WAFs reject the otherwise-valid combination of
-  // a long random token and a JSON document inside one form-encoded body.
+  // A few shared-host WAFs reject the random token characters only on this
+  // multi-page POST. Hex keeps the scoped token in the HTTPS body without
+  // changing its value after Connector-side decoding.
   const res = await wpFetch(cfg, "/figmapress/v1/elementor/site-prepare", {
     method: "POST",
-    body: payload,
-  });
+    body: cfg.connectorToken ? undefined : payload,
+  }, cfg.connectorToken ? { payload } : undefined, "hex");
   const text = await res.text();
   if (!res.ok) {
     throw new WpRequestError(

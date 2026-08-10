@@ -65,6 +65,21 @@ function figmapress_connector_authenticate_pairing_token( $user_id ) {
     $body_token   = isset( $_POST['figmapress_token'] )
         ? trim( wp_unslash( $_POST['figmapress_token'] ) )
         : '';
+    $hex_token    = isset( $_POST['figmapress_token_hex'] )
+        ? trim( wp_unslash( $_POST['figmapress_token_hex'] ) )
+        : '';
+    if (
+        '' === $body_token &&
+        strlen( $hex_token ) >= 80 &&
+        strlen( $hex_token ) <= 400 &&
+        0 === strlen( $hex_token ) % 2 &&
+        ctype_xdigit( $hex_token )
+    ) {
+        $decoded_token = hex2bin( $hex_token );
+        if ( false !== $decoded_token ) {
+            $body_token = $decoded_token;
+        }
+    }
     $token        = '' !== $header_token ? $header_token : $body_token;
     if (
         ! preg_match(
