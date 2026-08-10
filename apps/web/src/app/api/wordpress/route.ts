@@ -88,6 +88,15 @@ function wordpressMessage(body: string, status: number): string {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  const startedAt = Date.now();
+  const requestId = request.headers.get("x-vercel-id") ?? "local";
+  let target = "unknown";
+  console.log(JSON.stringify({
+    level: "info",
+    msg: "start",
+    route: "/api/wordpress",
+    requestId,
+  }));
   try {
     enforceSameOrigin(request);
     enforceRateLimit("wordpress", clientIp(request), 20, 10 * 60 * 1_000);
@@ -95,6 +104,7 @@ export async function POST(request: Request): Promise<Response> {
     if (!parsed.success) {
       throw new RequestError("WordPress接続情報を確認してください。", 422);
     }
+    target = parsed.data.target;
     if (
       !parsed.data.connectorToken
       && (!parsed.data.username || parsed.data.applicationPassword.length < 8)
@@ -131,6 +141,14 @@ export async function POST(request: Request): Promise<Response> {
               slug: parsed.data.slug,
               content: parsed.data.content,
             });
+      console.log(JSON.stringify({
+        level: "info",
+        msg: "done",
+        route: "/api/wordpress",
+        requestId,
+        target,
+        ms: Date.now() - startedAt,
+      }));
       return jsonResponse({ ok: true, result });
     } catch (error) {
       if (error instanceof WpAuthError) {
@@ -151,6 +169,15 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
   } catch (error) {
+    console.error(JSON.stringify({
+      level: "error",
+      msg: "failed",
+      route: "/api/wordpress",
+      requestId,
+      target,
+      error: error instanceof Error ? error.message : String(error),
+      ms: Date.now() - startedAt,
+    }));
     return errorResponse(error);
   }
 }

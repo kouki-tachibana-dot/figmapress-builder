@@ -390,10 +390,14 @@ export async function prepareWordPressSite(
       slug: normalizeSlug(page.slug),
     })),
   });
+  // The server-side proxy is not subject to browser CORS preflights, so keep
+  // the scoped Connector token in its dedicated header and send the site plan
+  // as JSON. Some shared-host WAFs reject the otherwise-valid combination of
+  // a long random token and a JSON document inside one form-encoded body.
   const res = await wpFetch(cfg, "/figmapress/v1/elementor/site-prepare", {
     method: "POST",
-    body: cfg.connectorToken ? undefined : payload,
-  }, cfg.connectorToken ? { payload } : undefined);
+    body: payload,
+  });
   const text = await res.text();
   if (!res.ok) {
     throw new WpRequestError(
