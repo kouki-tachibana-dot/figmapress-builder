@@ -176,8 +176,7 @@ function figmapress_connector_admin_post_prepare_site() {
             401
         );
     }
-    wp_set_current_user( $paired_user_id );
-    if ( ! current_user_can( 'edit_pages' ) || ! current_user_can( 'edit_theme_options' ) ) {
+    if ( ! user_can( $paired_user_id, 'edit_pages' ) || ! user_can( $paired_user_id, 'edit_theme_options' ) ) {
         wp_send_json(
             array(
                 'code'    => 'figmapress_site_permission_required',
@@ -196,7 +195,14 @@ function figmapress_connector_admin_post_prepare_site() {
         '/figmapress/v1/elementor/site-prepare'
     );
     $request->set_param( 'payload', $payload );
-    $result = figmapress_connector_rest_prepare_site( $request );
+    // Keep the paired user explicit instead of creating a cookie-less admin
+    // session. Security plugins commonly block that session switch even after
+    // the Connector token has been verified. The site handler performs every
+    // capability check against this verified user ID.
+    $result = figmapress_connector_rest_prepare_site(
+        $request,
+        $paired_user_id
+    );
     if ( is_wp_error( $result ) ) {
         $error_data = $result->get_error_data();
         $status = is_array( $error_data ) && isset( $error_data['status'] )
