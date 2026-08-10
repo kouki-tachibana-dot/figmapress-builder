@@ -311,6 +311,144 @@ function figmapress_connector_builder_url() {
     return 'https://figmapress-builder.vercel.app';
 }
 
+/**
+ * Browser-origin bridge for hosts that reject Vercel or cross-origin writes.
+ * The bridge is a popup, never an iframe, and accepts messages only from the
+ * pinned production Builder origin and its own opener window.
+ */
+function figmapress_connector_render_browser_bridge() {
+    if ( ! isset( $_GET['figmapress_bridge'] ) || '1' !== wp_unslash( $_GET['figmapress_bridge'] ) ) {
+        return;
+    }
+    nocache_headers();
+    status_header( 200 );
+    header( 'Content-Type: text/html; charset=UTF-8' );
+    header( 'Referrer-Policy: no-referrer' );
+    header( 'X-Frame-Options: DENY' );
+    header( "Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'" );
+    $builder_origin = wp_json_encode( figmapress_connector_builder_url() );
+    $prepare_url    = wp_json_encode(
+        rest_url( 'figmapress/v1/paired/site-prepare' )
+    );
+    ?>
+<!doctype html>
+<html lang="ja">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>FigmaPress WordPress安全接続</title>
+    <style>
+        body{margin:0;background:#f5f7fb;color:#172033;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+        main{max-width:520px;margin:12vh auto;padding:32px;background:#fff;border:1px solid #dfe5ef;border-radius:18px;box-shadow:0 12px 35px rgba(23,32,51,.1)}
+        h1{font-size:22px;margin:0 0 12px}p{line-height:1.7;margin:0 0 12px}.status{font-weight:700;color:#176b47}
+        button{border:0;border-radius:999px;padding:10px 18px;background:#172033;color:#fff;cursor:pointer}
+    </style>
+</head>
+<body>
+<main>
+    <h1>WordPress安全接続</h1>
+    <p id="status" class="status">FigmaPressからの下書き準備を待っています…</p>
+    <p>この画面は対象WordPress内で通信し、認証情報をサーバーへ保存しません。</p>
+    <button id="close" type="button">閉じる</button>
+</main>
+<script>
+(() => {
+    'use strict';
+    const allowedOrigin = <?php echo $builder_origin; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>;
+    const prepareUrl = <?php echo $prepare_url; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>;
+    const status = document.getElementById('status');
+    const closeButton = document.getElementById('close');
+    let busy = false;
+    const tokenPattern = /^fp1\.[1-9][0-9]{0,19}\.[A-Za-z0-9_-]{32,128}$/;
+    const requestPattern = /^[a-f0-9-]{16,64}$/i;
+    const post = (message) => {
+        if (window.opener && !window.opener.closed) {
+            window.opener.postMessage(message, allowedOrigin);
+        }
+    };
+    const readyTimer = window.setInterval(() => {
+        if (!busy) post({ type: 'figmapress:bridge-ready' });
+    }, 500);
+    post({ type: 'figmapress:bridge-ready' });
+    closeButton.addEventListener('click', () => window.close());
+    window.addEventListener('message', async (event) => {
+        if (
+            busy || event.origin !== allowedOrigin || event.source !== window.opener ||
+            !event.data || event.data.type !== 'figmapress:prepare-site'
+        ) return;
+        const { requestId, connectorToken, payload } = event.data;
+        if (
+            typeof requestId !== 'string' || !requestPattern.test(requestId) ||
+            typeof connectorToken !== 'string' || !tokenPattern.test(connectorToken) ||
+            !payload || typeof payload !== 'object'
+        ) return;
+        const serialized = JSON.stringify(payload);
+        if (serialized.length < 20 || serialized.length > 100000) return;
+        busy = true;
+        window.clearInterval(readyTimer);
+        status.textContent = '下書きページとメニューを準備しています…';
+        try {
+            const bytes = new TextEncoder().encode(connectorToken);
+            const tokenHex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+            const form = new URLSearchParams();
+            form.set('figmapress_token_hex', tokenHex);
+            form.set('payload', serialized);
+            const response = await fetch(prepareUrl, {
+                method: 'POST',
+                headers: { Accept: 'application/json' },
+                body: form,
+                credentials: 'same-origin',
+                redirect: 'error',
+            });
+            const text = await response.text();
+            let parsed = null;
+            try { parsed = JSON.parse(text); } catch (_) { parsed = null; }
+            if (!response.ok) {
+                throw Object.assign(new Error(
+                    parsed && typeof parsed.message === 'string'
+                        ? parsed.message
+                        : 'WordPressが下書き準備を受け付けませんでした。'
+                ), { status: response.status });
+            }
+            status.textContent = '下書き準備が完了しました。FigmaPressへ戻ります…';
+            post({
+                type: 'figmapress:site-prepared',
+                requestId,
+                ok: true,
+                status: response.status,
+                result: parsed,
+            });
+        } catch (error) {
+            const message = error instanceof Error
+                ? error.message
+                : 'WordPress安全接続でエラーが発生しました。';
+            const responseStatus = error && typeof error.status === 'number'
+                ? error.status
+                : 0;
+            status.textContent = message;
+            post({
+                type: 'figmapress:site-prepared',
+                requestId,
+                ok: false,
+                status: responseStatus,
+                error: message,
+            });
+            busy = false;
+        }
+    });
+})();
+</script>
+</body>
+</html>
+    <?php
+    exit;
+}
+add_action(
+    'template_redirect',
+    'figmapress_connector_render_browser_bridge',
+    0
+);
+
 function figmapress_connector_base64url_encode( $value ) {
     return rtrim(
         strtr( base64_encode( $value ), '+/', '-_' ),
