@@ -59,7 +59,10 @@ import {
 } from "@/lib/visual-qa";
 import { readApi } from "@/lib/api-client";
 import { resolveFigmaRequestAuthentication } from "@/lib/figma-client-auth";
-import { shouldProxyWordPressDraft } from "@/lib/wordpress-transport";
+import {
+  runWordPressWriteWithNetworkFallback,
+  shouldProxyWordPressDraft,
+} from "@/lib/wordpress-transport";
 
 type SourceMode = "figma" | "json";
 type OutputTarget = "gutenberg" | "elementor";
@@ -1508,17 +1511,24 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     setWpSiteProgress("Figmaから各ページの編集データを準備しています…");
     const sectionTemplates = await fetchMultiPageTemplates(sectionPageKeys);
     setWpSiteProgress("下書きページと未割り当てメニューを準備しています…");
-    const prepared = wpTransport === "direct"
-      ? await prepareWordPressSiteDirect(credentials, siteInput)
-      : await (async () => {
-          const response = await fetch("/api/wordpress", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ target: "site", ...credentials, ...siteInput }),
-          });
-          const data = await readApi<{ ok: true; result: BrowserPreparedSiteResult }>(response);
-          return data.result;
-        })();
+    const prepareThroughProxy = async (): Promise<BrowserPreparedSiteResult> => {
+      if (wpTransport === "direct") {
+        setWpSiteProgress("ブラウザ直結が遮断されたため、安全なサーバー経由で再試行しています…");
+      }
+      const response = await fetch("/api/wordpress", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target: "site", ...credentials, ...siteInput }),
+      });
+      const data = await readApi<{ ok: true; result: BrowserPreparedSiteResult }>(response);
+      return data.result;
+    };
+    const prepared = await runWordPressWriteWithNetworkFallback(
+      wpTransport,
+      () => prepareWordPressSiteDirect(credentials, siteInput),
+      prepareThroughProxy,
+      (error) => error instanceof WordPressDirectError && error.kind === "network",
+    );
     setWpSiteResult(prepared);
 
     const pageLinks = prepared.pages.map((page) => {
@@ -2183,7 +2193,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.26.0 live</span>
+          <span className="status-pill"><i /> v0.26.1 live</span>
         </nav>
       </header>
 
@@ -3270,7 +3280,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.26.0</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.26.1</span></div>
       </footer>
     </main>
   );

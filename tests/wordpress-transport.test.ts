@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   LARGE_ELEMENTOR_PAYLOAD_BYTES,
+  runWordPressWriteWithNetworkFallback,
   shouldProxyWordPressDraft,
 } from "../apps/web/src/lib/wordpress-transport.ts";
 
@@ -40,4 +41,61 @@ test("proxy selection and Gutenberg direct transport keep their intent", () => {
     shouldProxyWordPressDraft("direct", "gutenberg", LARGE_ELEMENTOR_PAYLOAD_BYTES),
     false,
   );
+});
+
+test("site writes retry through the server only after a direct network failure", async () => {
+  const calls: string[] = [];
+  const result = await runWordPressWriteWithNetworkFallback(
+    "direct",
+    async () => {
+      calls.push("direct");
+      throw new Error("network");
+    },
+    async () => {
+      calls.push("proxy");
+      return "prepared";
+    },
+    (error) => error instanceof Error && error.message === "network",
+  );
+
+  assert.equal(result, "prepared");
+  assert.deepEqual(calls, ["direct", "proxy"]);
+});
+
+test("site writes never hide authentication or validation failures", async () => {
+  const calls: string[] = [];
+  await assert.rejects(
+    runWordPressWriteWithNetworkFallback(
+      "direct",
+      async () => {
+        calls.push("direct");
+        throw new Error("auth");
+      },
+      async () => {
+        calls.push("proxy");
+        return "unexpected";
+      },
+      (error) => error instanceof Error && error.message === "network",
+    ),
+    /auth/,
+  );
+  assert.deepEqual(calls, ["direct"]);
+});
+
+test("known proxy transport skips the browser-direct write", async () => {
+  const calls: string[] = [];
+  const result = await runWordPressWriteWithNetworkFallback(
+    "proxy",
+    async () => {
+      calls.push("direct");
+      return "unexpected";
+    },
+    async () => {
+      calls.push("proxy");
+      return "prepared";
+    },
+    () => true,
+  );
+  assert.equal(result, "prepared");
+  assert.deepEqual(calls, ["proxy"]);
 });
