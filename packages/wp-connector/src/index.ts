@@ -213,24 +213,35 @@ async function wpFetch(
   cfg: WpConfig,
   path: string,
   init: RequestInit = {},
+  pairingBody?: Record<string, string | number>,
 ): Promise<Response> {
   const method = (init.method ?? "GET").toUpperCase();
   const timeoutMs = method === "GET" || method === "HEAD" ? 20_000 : 120_000;
   const url = `${cfg.baseUrl}/wp-json${path}`;
   const headers = new Headers(init.headers);
   const connectorToken = cfg.connectorToken?.trim();
+  const usePairingBody = Boolean(connectorToken && pairingBody);
   const authorization = connectorToken ? "" : authHeader(cfg);
-  if (connectorToken) {
+  if (connectorToken && !usePairingBody) {
     headers.set("X-FigmaPress-Token", connectorToken);
   } else {
-    headers.set("Authorization", authorization);
+    if (!connectorToken) headers.set("Authorization", authorization);
   }
   headers.set("Accept", "application/json");
-  if (init.body && !headers.has("Content-Type")) {
+  let effectiveBody = init.body;
+  if (usePairingBody && connectorToken && pairingBody) {
+    const form = new URLSearchParams();
+    form.set("figmapress_token", connectorToken);
+    for (const [key, value] of Object.entries(pairingBody)) {
+      form.set(key, String(value));
+    }
+    effectiveBody = form;
+  } else if (effectiveBody && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
   const requestInit: RequestInit = {
     ...init,
+    body: effectiveBody,
     headers,
     redirect: "error",
     signal: init.signal ?? AbortSignal.timeout(timeoutMs),
@@ -372,16 +383,17 @@ export async function prepareWordPressSite(
   cfg: WpConfig,
   input: PrepareWordPressSiteInput,
 ): Promise<PrepareWordPressSiteResult> {
+  const payload = JSON.stringify({
+    ...input,
+    pages: input.pages.map((page) => ({
+      ...page,
+      slug: normalizeSlug(page.slug),
+    })),
+  });
   const res = await wpFetch(cfg, "/figmapress/v1/sites/prepare", {
     method: "POST",
-    body: JSON.stringify({
-      ...input,
-      pages: input.pages.map((page) => ({
-        ...page,
-        slug: normalizeSlug(page.slug),
-      })),
-    }),
-  });
+    body: cfg.connectorToken ? undefined : payload,
+  }, cfg.connectorToken ? { payload } : undefined);
   const text = await res.text();
   if (!res.ok) {
     throw new WpRequestError(

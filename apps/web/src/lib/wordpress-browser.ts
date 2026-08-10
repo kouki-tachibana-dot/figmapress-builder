@@ -433,17 +433,18 @@ export async function prepareWordPressSiteDirect(
   config: BrowserWordPressConfig,
   input: BrowserSitePrepareInput,
 ): Promise<BrowserPreparedSiteResult> {
+  const payload = JSON.stringify({
+    ...input,
+    pages: input.pages.map((page) => ({
+      ...page,
+      slug: normalizeSlug(page.slug),
+    })),
+  });
   const result = await responseJson<BrowserPreparedSiteResult>(
     await directFetch(config, "/figmapress/v1/sites/prepare", {
       method: "POST",
-      body: JSON.stringify({
-        ...input,
-        pages: input.pages.map((page) => ({
-          ...page,
-          slug: normalizeSlug(page.slug),
-        })),
-      }),
-    }),
+      body: config.connectorToken ? undefined : payload,
+    }, config.connectorToken ? { payload } : undefined),
     config.connectorToken,
   );
   if (result.status !== "draft" || result.pages.some((page) => page.status !== "draft")) {

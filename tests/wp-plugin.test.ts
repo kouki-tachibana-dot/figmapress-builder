@@ -497,6 +497,8 @@ test("Connector prepares idempotent draft pages and a plugin-owned unassigned me
   assert.match(rest, /'permission_callback'\s*=>\s*'figmapress_connector_rest_can_build_site'/);
   assert.match(rest, /current_user_can\( 'edit_pages' \) && current_user_can\( 'edit_theme_options' \)/);
   assert.match(rest, /function figmapress_connector_rest_prepare_site/);
+  assert.match(rest, /\$request->get_param\( 'payload' \)/);
+  assert.match(rest, /json_decode\( wp_unslash\( \$payload \), true \)/);
   assert.match(rest, /'post_status'\s*=>\s*'draft'/);
   assert.match(rest, /figmapress_connector_find_page_by_meta\( '_figmapress_source_key', \$source_key \)/);
   assert.match(rest, /'_figmapress_site_key'/);

@@ -232,6 +232,47 @@ test("server transport prepares stable multi-page drafts and an unassigned menu"
   assert.doesNotMatch(requests[0]?.body ?? "", /"status":"publish"/);
 });
 
+test("server paired transport prepares multi-page drafts without a custom auth header", async (context) => {
+  const connectorToken = `fp1.42.${"d".repeat(48)}`;
+  const requests: Array<{ body: string; tokenHeader: string | null; contentType: string | null }> = [];
+  context.mock.method(globalThis, "fetch", async (_input, init) => {
+    const headers = new Headers(init?.headers);
+    requests.push({
+      body: String(init?.body ?? ""),
+      tokenHeader: headers.get("X-FigmaPress-Token"),
+      contentType: headers.get("Content-Type"),
+    });
+    return Response.json({
+      siteKey: "figma:Abcdef123:46:12",
+      title: "竹内きよ子様",
+      status: "draft",
+      pages: [
+        { id: 91, key: "home", title: "竹内きよ子様", slug: "home", status: "draft", sourceKey: "figma:Abcdef123:46:12", created: false, updated: true },
+        { id: 92, key: "profile", title: "プロフィール", slug: "profile", status: "draft", sourceKey: "figma:Abcdef123:46:12:page:profile", created: false, updated: true },
+      ],
+      menu: null,
+      warnings: [],
+    });
+  });
+
+  await prepareWordPressSite({ ...config, connectorToken }, {
+    siteKey: "figma:Abcdef123:46:12",
+    title: "竹内きよ子様",
+    menuName: "竹内きよ子様｜FigmaPress",
+    pages: [
+      { key: "home", title: "竹内きよ子様", slug: "/", sourceKey: "figma:Abcdef123:46:12" },
+      { key: "profile", title: "プロフィール", slug: "profile", sourceKey: "figma:Abcdef123:46:12:page:profile" },
+    ],
+  });
+
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0]?.tokenHeader, null);
+  assert.equal(requests[0]?.contentType, null);
+  const form = new URLSearchParams(requests[0]?.body);
+  assert.equal(form.get("figmapress_token"), connectorToken);
+  assert.match(form.get("payload") ?? "", /"slug":"home"/);
+});
+
 test("server transport rejects any non-draft page in a prepared site", async (context) => {
   context.mock.method(globalThis, "fetch", async () => Response.json({
     siteKey: "figma:Abcdef123:46:12",
