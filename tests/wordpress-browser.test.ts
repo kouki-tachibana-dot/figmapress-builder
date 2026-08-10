@@ -6,6 +6,7 @@ import {
   createWordPressDraftDirect,
   fetchWordPressElementorSnapshotDirect,
   localizeWordPressElementorMediaDirect,
+  prepareWordPressSiteDirect,
   probeWordPressDirect,
   updateWordPressElementorDocumentDirect,
 } from "../apps/web/src/lib/wordpress-browser.ts";
@@ -141,6 +142,39 @@ test("browser pairing creates Gutenberg drafts through the Connector namespace",
   assert.equal(requests.length, 1);
   assert.match(requests[0]?.url ?? "", /figmapress\/v1\/gutenberg\/pages$/);
   assert.equal(requests[0]?.pairing, connectorToken);
+});
+
+test("browser transport prepares multi-page drafts with normalized slugs", async (context) => {
+  const requests: Array<{ url: string; body: string }> = [];
+  context.mock.method(globalThis, "fetch", async (input, init) => {
+    requests.push({ url: String(input), body: String(init?.body ?? "") });
+    return Response.json({
+      siteKey: "figma:Abcdef123:46:12",
+      title: "竹内きよ子様",
+      status: "draft",
+      pages: [
+        { id: 91, key: "home", title: "竹内きよ子様", slug: "home", status: "draft", sourceKey: "figma:Abcdef123:46:12", created: true, updated: false },
+        { id: 92, key: "contact", title: "お問い合わせ", slug: "contact", status: "draft", sourceKey: "figma:Abcdef123:46:12:page:contact", created: true, updated: false },
+      ],
+      menu: { id: 7, name: "竹内きよ子様｜FigmaPress", editLink: "https://wordpress.example/wp-admin/nav-menus.php?action=edit&menu=7", assigned: false, assignedLocations: [], items: [] },
+      warnings: [],
+    });
+  });
+
+  const result = await prepareWordPressSiteDirect(config, {
+    siteKey: "figma:Abcdef123:46:12",
+    title: "竹内きよ子様",
+    menuName: "竹内きよ子様｜FigmaPress",
+    pages: [
+      { key: "home", title: "竹内きよ子様", slug: "/", sourceKey: "figma:Abcdef123:46:12" },
+      { key: "contact", title: "お問い合わせ", slug: "contact", sourceKey: "figma:Abcdef123:46:12:page:contact" },
+    ],
+  });
+
+  assert.equal(result.pages.every((page) => page.status === "draft"), true);
+  assert.equal(result.menu?.assigned, false);
+  assert.match(requests[0]?.url ?? "", /figmapress\/v1\/sites\/prepare$/);
+  assert.match(requests[0]?.body ?? "", /"slug":"home"/);
 });
 
 test("browser connection keeps authentication failures out of the server fallback", async (context) => {

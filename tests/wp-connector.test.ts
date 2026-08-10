@@ -4,6 +4,7 @@ import {
   createElementorDraftPage,
   fetchElementorSnapshot,
   localizeElementorDraftMedia,
+  prepareWordPressSite,
   probeWordPressConnection,
   updateElementorDraftPage,
   WpRequestError,
@@ -186,6 +187,72 @@ test("Elementor draft creation uses one Connector request and remains draft", as
   assert.match(requests[0]?.url ?? "", /figmapress\/v1\/elementor\/pages/);
   assert.match(requests[0]?.body ?? "", /"status":"draft"/);
   assert.match(requests[0]?.body ?? "", /"sourceKey":"figma:Abcdef123:46:12"/);
+});
+
+test("server transport prepares stable multi-page drafts and an unassigned menu", async (context) => {
+  const requests: Array<{ url: string; body: string }> = [];
+  context.mock.method(globalThis, "fetch", async (input, init) => {
+    requests.push({ url: String(input), body: String(init?.body ?? "") });
+    return Response.json({
+      siteKey: "figma:Abcdef123:46:12",
+      title: "竹内きよ子様",
+      status: "draft",
+      pages: [
+        { id: 91, key: "home", title: "竹内きよ子様", slug: "home", status: "draft", sourceKey: "figma:Abcdef123:46:12", created: false, updated: true, rawLink: "https://wordpress.example/home/" },
+        { id: 92, key: "profile", title: "プロフィール", slug: "profile", status: "draft", sourceKey: "figma:Abcdef123:46:12:page:profile", created: true, updated: false, rawLink: "https://wordpress.example/profile/" },
+      ],
+      menu: {
+        id: 7,
+        name: "竹内きよ子様｜FigmaPress",
+        editLink: "https://wordpress.example/wp-admin/nav-menus.php?action=edit&menu=7",
+        assigned: false,
+        assignedLocations: [],
+        items: [],
+      },
+      warnings: [],
+    });
+  });
+
+  const result = await prepareWordPressSite(config, {
+    siteKey: "figma:Abcdef123:46:12",
+    title: "竹内きよ子様",
+    menuName: "竹内きよ子様｜FigmaPress",
+    pages: [
+      { key: "home", title: "竹内きよ子様", slug: "/", sourceKey: "figma:Abcdef123:46:12" },
+      { key: "profile", title: "プロフィール", slug: "profile", sourceKey: "figma:Abcdef123:46:12:page:profile" },
+    ],
+  });
+
+  assert.equal(result.status, "draft");
+  assert.equal(result.pages.every((page) => page.status === "draft"), true);
+  assert.equal(result.menu?.assigned, false);
+  assert.equal(requests.length, 1);
+  assert.match(requests[0]?.url ?? "", /figmapress\/v1\/sites\/prepare$/);
+  assert.match(requests[0]?.body ?? "", /"slug":"home"/);
+  assert.doesNotMatch(requests[0]?.body ?? "", /"status":"publish"/);
+});
+
+test("server transport rejects any non-draft page in a prepared site", async (context) => {
+  context.mock.method(globalThis, "fetch", async () => Response.json({
+    siteKey: "figma:Abcdef123:46:12",
+    title: "Unsafe",
+    status: "draft",
+    pages: [{ id: 91, key: "home", title: "Unsafe", slug: "home", status: "publish", sourceKey: "figma:Abcdef123:46:12", created: false, updated: true }],
+    menu: null,
+    warnings: [],
+  }));
+  await assert.rejects(
+    prepareWordPressSite(config, {
+      siteKey: "figma:Abcdef123:46:12",
+      title: "Unsafe",
+      menuName: "Unsafe｜FigmaPress",
+      pages: [
+        { key: "home", title: "Unsafe", slug: "home", sourceKey: "figma:Abcdef123:46:12" },
+        { key: "profile", title: "Profile", slug: "profile", sourceKey: "figma:Abcdef123:46:12:page:profile" },
+      ],
+    }),
+    (error: unknown) => error instanceof WpRequestError && error.status === 502,
+  );
 });
 
 test("server transport resumes Elementor media in a bounded request", async (context) => {

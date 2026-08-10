@@ -29,6 +29,10 @@ export interface BrowserWordPressStatus {
     imageTransforms?: boolean;
     mediaPersistence?: boolean;
   };
+  siteBuild?: {
+    pages: boolean;
+    menus: boolean;
+  };
   canEditPages: boolean;
   pairing?: {
     supported: boolean;
@@ -93,6 +97,50 @@ export interface BrowserElementorDocumentResult {
   status: "draft";
   storedElements: number;
   revisionId?: number | null;
+}
+
+export type BrowserSitePageKey = "home" | "thoughts" | "policies" | "activities" | "profile" | "contact";
+
+export interface BrowserSitePrepareInput {
+  siteKey: string;
+  title: string;
+  menuName: string;
+  pages: Array<{
+    key: BrowserSitePageKey;
+    title: string;
+    slug: string;
+    sourceKey: string;
+  }>;
+}
+
+export interface BrowserPreparedSitePage extends BrowserWordPressResult {
+  key: BrowserSitePageKey;
+  title: string;
+  sourceKey: string;
+  created: boolean;
+  updated: boolean;
+}
+
+export interface BrowserPreparedSiteResult {
+  siteKey: string;
+  title: string;
+  status: "draft";
+  pages: BrowserPreparedSitePage[];
+  menu: null | {
+    id: number;
+    name: string;
+    editLink: string;
+    assigned: boolean;
+    assignedLocations: string[];
+    items: Array<{
+      id: number;
+      pageId: number;
+      key: BrowserSitePageKey;
+      title: string;
+      rawLink: string;
+    }>;
+  };
+  warnings: string[];
 }
 
 export type BrowserDraftInput =
@@ -329,6 +377,7 @@ export async function probeWordPressDirect(
       imageTransforms?: unknown;
       mediaPersistence?: unknown;
     };
+    siteBuild?: { pages?: unknown; menus?: unknown };
   }>(response, config.connectorToken);
   return {
     authenticated: true,
@@ -368,12 +417,39 @@ export async function probeWordPressDirect(
         ? { mediaPersistence: status.visualQa.mediaPersistence === true }
         : {}),
     } : undefined,
+    siteBuild: status.siteBuild ? {
+      pages: status.siteBuild.pages === true,
+      menus: status.siteBuild.menus === true,
+    } : undefined,
     canEditPages: status.canEditPages === true,
     pairing: status.pairing ? {
       supported: status.pairing.supported === true,
       active: status.pairing.active === true,
     } : undefined,
   };
+}
+
+export async function prepareWordPressSiteDirect(
+  config: BrowserWordPressConfig,
+  input: BrowserSitePrepareInput,
+): Promise<BrowserPreparedSiteResult> {
+  const result = await responseJson<BrowserPreparedSiteResult>(
+    await directFetch(config, "/figmapress/v1/sites/prepare", {
+      method: "POST",
+      body: JSON.stringify({
+        ...input,
+        pages: input.pages.map((page) => ({
+          ...page,
+          slug: normalizeSlug(page.slug),
+        })),
+      }),
+    }),
+    config.connectorToken,
+  );
+  if (result.status !== "draft" || result.pages.some((page) => page.status !== "draft")) {
+    throw new WordPressDirectError("WordPressが下書き以外のページ状態を返しました。", "request");
+  }
+  return result;
 }
 
 function normalizeSlug(value: string): string {

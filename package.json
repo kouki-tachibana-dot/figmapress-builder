@@ -1,6 +1,6 @@
 {
   "name": "figmapress-builder",
-  "version": "0.25.19",
+  "version": "0.26.0",
   "private": true,
   "packageManager": "npm@10.9.4",
   "engines": {
@@ -39,6 +39,8 @@
     "zod": "^3.22.4"
   },
   "overrides": {
+    "js-yaml": "4.3.1",
+    "nanoid": "3.3.18",
     "next": {
       "postcss": "$postcss",
       "sharp": "$sharp"

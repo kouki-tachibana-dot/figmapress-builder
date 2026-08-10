@@ -16,12 +16,14 @@ import {
   ElementorExporter,
   FigmaElementorExporter,
   createFigmaQualityReport,
+  createFigmaMultiPagePlan,
   figmaLayoutSectionNames,
   hasFigmaLayout,
   hasFigmaResponsiveLayout,
   renderFigmaPreview,
   type ElementorTemplate,
   type FigmaQualityReport,
+  type FigmaMultiPagePlan,
 } from "@figmapress/elementor-renderer";
 import { tokensToThemeJson } from "@figmapress/token-pipeline";
 
@@ -31,6 +33,7 @@ export interface ConversionOutput {
   elementorTemplate: ElementorTemplate;
   previewHtml: string;
   qualityReport: FigmaQualityReport | null;
+  multiPagePlan: FigmaMultiPagePlan | null;
   themeJson: ReturnType<typeof tokensToThemeJson>;
   warnings: string[];
   summary: {
@@ -111,6 +114,13 @@ export async function convertFile(
     elementorTemplate,
     previewHtml: fidelityPreview ?? (page ? renderPreviewPage(page) : ""),
     qualityReport,
+    multiPagePlan: fidelityLayout
+      ? createFigmaMultiPagePlan(
+          file,
+          page?.title ?? blueprint.site.name,
+          page?.slug ?? "/",
+        )
+      : null,
     themeJson: tokensToThemeJson(blueprint.tokens),
     warnings,
     summary: {

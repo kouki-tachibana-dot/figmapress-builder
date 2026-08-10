@@ -490,3 +490,26 @@ test("Connector revisions and verifies a matching draft before visual QA updates
   assert.match(plugin, /wp_post_revision_meta_keys/);
   assert.match(plugin, /'_elementor_data'/);
 });
+
+test("Connector prepares idempotent draft pages and a plugin-owned unassigned menu", async () => {
+  const rest = await readFile(restApiPath, "utf8");
+  assert.match(rest, /'\/sites\/prepare'/);
+  assert.match(rest, /'permission_callback'\s*=>\s*'figmapress_connector_rest_can_build_site'/);
+  assert.match(rest, /current_user_can\( 'edit_pages' \) && current_user_can\( 'edit_theme_options' \)/);
+  assert.match(rest, /function figmapress_connector_rest_prepare_site/);
+  assert.match(rest, /'post_status'\s*=>\s*'draft'/);
+  assert.match(rest, /figmapress_connector_find_page_by_meta\( '_figmapress_source_key', \$source_key \)/);
+  assert.match(rest, /'_figmapress_site_key'/);
+  assert.match(rest, /'_figmapress_page_key'/);
+  assert.match(rest, /'_figmapress_prepared'/);
+  assert.match(rest, /wp_create_nav_menu\( \$menu_name \)/);
+  assert.match(rest, /wp_update_nav_menu_item\(/);
+  assert.match(rest, /'menu-item-object'\s*=>\s*'page'/);
+  assert.match(rest, /get_nav_menu_locations\(\)/);
+  assert.match(rest, /'assigned'\s*=>\s*! empty\( \$assigned \)/);
+  assert.doesNotMatch(rest, /set_theme_mod\(\s*'nav_menu_locations'/);
+  assert.match(rest, /if \( empty\( \$seen\['home'\] \) \)/);
+  assert.match(rest, /foreach \( \$validated_pages as \$requested \)/);
+  assert.match(rest, /\$validated_pages\[ \$index \]\['existingId'\] = \$existing_id/);
+  assert.match(rest, /'draft' !== get_post_status\( \$existing_id \)/);
+});
