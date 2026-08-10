@@ -224,6 +224,14 @@ add_action(
     'admin_post_figmapress_site_prepare',
     'figmapress_connector_admin_post_prepare_site'
 );
+add_action(
+    'wp_ajax_nopriv_figmapress_site_prepare',
+    'figmapress_connector_admin_post_prepare_site'
+);
+add_action(
+    'wp_ajax_figmapress_site_prepare',
+    'figmapress_connector_admin_post_prepare_site'
+);
 
 function figmapress_connector_builder_url() {
     return 'https://figmapress-builder.vercel.app';
