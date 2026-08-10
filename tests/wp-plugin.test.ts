@@ -514,4 +514,8 @@ test("Connector prepares idempotent draft pages and a plugin-owned unassigned me
   assert.match(rest, /foreach \( \$validated_pages as \$requested \)/);
   assert.match(rest, /\$validated_pages\[ \$index \]\['existingId'\] = \$existing_id/);
   assert.match(rest, /'draft' !== get_post_status\( \$existing_id \)/);
+  assert.match(
+    rest,
+    /function figmapress_connector_count_elementor_elements\( \$elements \) \{\s+if \( ! is_array\( \$elements \) \) \{\s+return 0;/,
+  );
 });

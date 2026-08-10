@@ -1,11 +1,11 @@
 {
   "name": "FigmaPress Connector",
   "slug": "figmapress-connector",
-  "version": "0.17.1",
+  "version": "0.17.2",
   "requires": "6.4",
   "requires_php": "7.4",
   "tested": "7.0",
   "homepage": "https://figmapress-builder.vercel.app",
   "download_url": "https://figmapress-builder.vercel.app/downloads/figmapress-connector.zip",
-  "changelog": "<h4>0.17.1</h4><ul><li>複数ページ準備の接続トークンをHTTPS本文で送信し、XServerなど共有サーバーの認証ヘッダー遮断を回避します。</li><li>ブラウザ直結と安全なサーバー経由の両方で同じ互換経路を利用し、下書き限定の保護を維持します。</li></ul><h4>0.17.0</h4><ul><li>Figmaの意味セクションから複数のElementor下書きページを重複なく作成・更新できるようにしました。</li><li>各ページURLをヘッダー、CTA、本文リンクへ接続し、FigmaPress管理メニューを安全な未割り当て状態で作成します。</li><li>公開済みページは自動更新せず、既存下書きのURLと公開中サイトのメニュー割り当てを保持します。</li></ul><h4>0.16.26</h4><ul><li>Connector専用の分割送信を事前確認不要のHTTPSフォームへ変更し、共有サーバーの遅いCORS確認による切断を防止します。</li><li>接続トークンはURLに含めず、FigmaPress専用REST経路の暗号化された本文だけで受け取ります。</li></ul>"
+  "changelog": "<h4>0.17.2</h4><ul><li>新規下書きにElementorデータがまだない場合も0件として安全に扱い、共有サーバーのPHP警告による応答破損を防止します。</li><li>複数ページ準備のエラーでHTTP番号を表示し、ホスティング側の拒否とWordPress内部エラーを区別しやすくしました。</li></ul><h4>0.17.1</h4><ul><li>複数ページ準備の接続トークンをHTTPS本文で送信し、XServerなど共有サーバーの認証ヘッダー遮断を回避します。</li><li>ブラウザ直結と安全なサーバー経由の両方で同じ互換経路を利用し、下書き限定の保護を維持します。</li></ul><h4>0.17.0</h4><ul><li>Figmaの意味セクションから複数のElementor下書きページを重複なく作成・更新できるようにしました。</li><li>各ページURLをヘッダー、CTA、本文リンクへ接続し、FigmaPress管理メニューを安全な未割り当て状態で作成します。</li><li>公開済みページは自動更新せず、既存下書きのURLと公開中サイトのメニュー割り当てを保持します。</li></ul>"
 }

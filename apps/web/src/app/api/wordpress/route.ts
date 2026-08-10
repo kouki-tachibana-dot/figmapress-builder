@@ -77,14 +77,14 @@ const RequestSchema = z.discriminatedUnion("target", [
   }).strict(),
 ]);
 
-function wordpressMessage(body: string): string {
+function wordpressMessage(body: string, status: number): string {
   try {
     const parsed = JSON.parse(body) as { message?: unknown };
     if (typeof parsed.message === "string") return parsed.message.slice(0, 300);
   } catch {
     // WordPress or its proxy returned a non-JSON error page.
   }
-  return "WordPressがリクエストを受け付けませんでした。";
+  return `WordPressがリクエストを受け付けませんでした。（HTTP ${status}）`;
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -143,7 +143,7 @@ export async function POST(request: Request): Promise<Response> {
       }
       if (error instanceof WpRequestError) {
         const status = error.status >= 400 && error.status < 500 ? error.status : 502;
-        throw new RequestError(wordpressMessage(error.body), status);
+        throw new RequestError(wordpressMessage(error.body, error.status), status);
       }
       throw new RequestError(
         "WordPressへ接続できませんでした。URLとREST APIの公開状態を確認してください。",
