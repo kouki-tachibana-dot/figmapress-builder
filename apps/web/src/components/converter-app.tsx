@@ -63,7 +63,10 @@ import {
   runWordPressWriteWithNetworkFallback,
   shouldProxyWordPressDraft,
 } from "@/lib/wordpress-transport";
-import { openWordPressSiteBridge } from "@/lib/wordpress-site-bridge";
+import {
+  buildWordPressSiteBridgeUrl,
+  openWordPressSiteBridge,
+} from "@/lib/wordpress-site-bridge";
 
 type SourceMode = "figma" | "json";
 type OutputTarget = "gutenberg" | "elementor";
@@ -78,6 +81,14 @@ const CHUNKED_UPLOAD_CONNECTOR_VERSION = "0.16.17";
 const SMALL_CHUNK_UPLOAD_CONNECTOR_VERSION = "0.16.24";
 const FIGMA_HEADER_MEDIA_CONNECTOR_VERSION = "0.16.18";
 const MULTI_PAGE_CONNECTOR_VERSION = "0.17.9";
+
+function safeWordPressSiteBridgeUrl(baseUrl: string): string {
+  try {
+    return buildWordPressSiteBridgeUrl(baseUrl);
+  } catch {
+    return "";
+  }
+}
 
 function versionAtLeast(version: string | undefined, minimum: string): boolean {
   if (!version) return false;
@@ -821,6 +832,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     && Boolean(multiPagePlan && multiPagePlan.pages.length > 1);
   const multiPageBlocked = wpBuildMode === "site"
     && (!multiPageAvailable || !connectorSupportsMultiPage);
+  const wordpressSiteBridgeUrl = connectorToken
+    ? safeWordPressSiteBridgeUrl(baseUrl)
+    : "";
   const visualQaReferenceCount = output
     ? Number(Boolean(output.visualReferences.desktop)) +
       Number(Boolean(output.visualReferences.mobile))
@@ -2216,7 +2230,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.26.11 live</span>
+          <span className="status-pill"><i /> v0.26.12 live</span>
         </nav>
       </header>
 
@@ -3079,6 +3093,19 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                   複数ページとWordPressメニューの自動構築にはConnector v{MULTI_PAGE_CONNECTOR_VERSION}以上が必要です。<a href="/downloads/figmapress-connector.zip" download>最新版ZIPをダウンロード</a>して更新し、再診断してください。
                 </div>
               )}
+              {wpBuildMode === "site" && wpStatus && connectorToken && wordpressSiteBridgeUrl && (
+                <div className="paired-connection paired-connection--setup">
+                  <strong>WordPress安全接続を準備</strong>
+                  <span>先に接続画面を開いたまま、この画面へ戻って下書き構築を実行してください。</span>
+                  <a
+                    href={wordpressSiteBridgeUrl}
+                    rel="opener"
+                    target="figmapress-site-bridge"
+                  >
+                    WordPress安全接続を先に開く ↗
+                  </a>
+                </div>
+              )}
               {visualQaGateRequired && !visualQaComplete && (
                 <div className="visual-qa-gate is-pending" role="status">
                   <div>
@@ -3303,7 +3330,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.26.11</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.26.12</span></div>
       </footer>
     </main>
   );
