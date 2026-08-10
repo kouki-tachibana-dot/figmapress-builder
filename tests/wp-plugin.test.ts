@@ -271,6 +271,10 @@ test("shared-host site preparation keeps the paired user explicit", async () => 
   assert.match(handler, /user_can\( \$paired_user_id, 'edit_theme_options' \)/);
   assert.match(handler, /figmapress_connector_rest_prepare_site\([\s\S]*?\$paired_user_id/);
   assert.doesNotMatch(handler, /wp_set_current_user/);
+  assert.match(pairing, /\/paired\/site-prepare/);
+  assert.match(pairing, /figmapress_connector_is_manual_pairing_request/);
+  assert.match(pairing, /'permission_callback' => '__return_true'/);
+  assert.match(pairing, /function figmapress_connector_rest_prepare_site_paired/);
   assert.match(rest, /function figmapress_connector_rest_prepare_site\( WP_REST_Request \$request, \$actor_user_id = 0 \)/);
   assert.match(rest, /user_can\( \$actor_user_id, 'edit_post', \$existing_id \)/);
   assert.match(rest, /user_can\( \$actor_user_id, 'edit_theme_options' \)/);

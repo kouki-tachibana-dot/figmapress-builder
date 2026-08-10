@@ -134,8 +134,36 @@ function figmapress_connector_verify_pairing_token( $token ) {
     return $paired_user_id;
 }
 
+function figmapress_connector_is_manual_pairing_request() {
+    $rest_route = isset( $_GET['rest_route'] )
+        ? wp_unslash( $_GET['rest_route'] )
+        : '';
+    if ( '/figmapress/v1/paired/site-prepare' === rtrim( $rest_route, '/' ) ) {
+        return true;
+    }
+
+    $request_uri = isset( $_SERVER['REQUEST_URI'] )
+        ? wp_unslash( $_SERVER['REQUEST_URI'] )
+        : '';
+    $request_path = wp_parse_url( $request_uri, PHP_URL_PATH );
+    if ( ! is_string( $request_path ) ) {
+        return false;
+    }
+    $manual_path = '/'
+        . trim( rest_get_url_prefix(), '/' )
+        . '/figmapress/v1/paired/site-prepare';
+    return 1 === preg_match(
+        '#' . preg_quote( $manual_path, '#' ) . '/?$#',
+        $request_path
+    );
+}
+
 function figmapress_connector_authenticate_pairing_token( $user_id ) {
-    if ( $user_id || ! figmapress_connector_is_scoped_rest_request() ) {
+    if (
+        $user_id ||
+        figmapress_connector_is_manual_pairing_request() ||
+        ! figmapress_connector_is_scoped_rest_request()
+    ) {
         return $user_id;
     }
     $paired_user_id = figmapress_connector_verify_pairing_token(
@@ -148,6 +176,46 @@ add_filter(
     'figmapress_connector_authenticate_pairing_token',
     18
 );
+
+function figmapress_connector_register_manual_pairing_route() {
+    register_rest_route(
+        'figmapress/v1',
+        '/paired/site-prepare',
+        array(
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => 'figmapress_connector_rest_prepare_site_paired',
+            'permission_callback' => '__return_true',
+        )
+    );
+}
+add_action(
+    'rest_api_init',
+    'figmapress_connector_register_manual_pairing_route'
+);
+
+function figmapress_connector_rest_prepare_site_paired( WP_REST_Request $request ) {
+    $paired_user_id = figmapress_connector_verify_pairing_token(
+        figmapress_connector_pairing_token_from_request()
+    );
+    if ( ! $paired_user_id ) {
+        return new WP_Error(
+            'figmapress_auth_required',
+            'Authentication is required.',
+            array( 'status' => 401 )
+        );
+    }
+    if ( ! user_can( $paired_user_id, 'edit_pages' ) || ! user_can( $paired_user_id, 'edit_theme_options' ) ) {
+        return new WP_Error(
+            'figmapress_site_permission_required',
+            '複数ページとメニューを作成する権限がありません。',
+            array( 'status' => 403 )
+        );
+    }
+    return figmapress_connector_rest_prepare_site(
+        $request,
+        $paired_user_id
+    );
+}
 
 function figmapress_connector_allow_pairing_cors_header( $headers ) {
     $headers[] = 'X-FigmaPress-Token';
