@@ -313,6 +313,15 @@ async function wpAdminPost(
       requestInit,
     );
   }
+  // A stricter security plugin can reject every external wp-admin write. The
+  // final paired route remains an unauthenticated WordPress request until its
+  // callback verifies the token and checks the exact user capabilities.
+  if (response.status === 403) {
+    response = await fetch(
+      `${baseUrl}/wp-json/figmapress/v1/paired/site-prepare`,
+      requestInit,
+    );
+  }
   if (response.status === 401) {
     const body = await response.text();
     throw new WpAuthError(

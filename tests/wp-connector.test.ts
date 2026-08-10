@@ -318,6 +318,53 @@ test("server paired transport retries blocked admin-post through admin-ajax", as
   ]);
 });
 
+test("server paired transport retries blocked wp-admin through manual pairing REST", async (context) => {
+  const connectorToken = `fp1.42.${"f".repeat(48)}`;
+  const requests: Array<{ url: string; body: string }> = [];
+  context.mock.method(globalThis, "fetch", async (input, init) => {
+    requests.push({ url: String(input), body: String(init?.body ?? "") });
+    if (requests.length < 3) {
+      return new Response("blocked by wp-admin security", { status: 403 });
+    }
+    return Response.json({
+      siteKey: "figma:Abcdef123:46:12",
+      title: "竹内きよ子様",
+      status: "draft",
+      pages: [
+        { id: 91, key: "home", title: "竹内きよ子様", slug: "home", status: "draft", sourceKey: "figma:Abcdef123:46:12", created: true, updated: false },
+        { id: 92, key: "profile", title: "プロフィール", slug: "profile", status: "draft", sourceKey: "figma:Abcdef123:46:12:page:profile", created: true, updated: false },
+      ],
+      menu: null,
+      warnings: [],
+    });
+  });
+
+  const result = await prepareWordPressSite({ ...config, connectorToken }, {
+    siteKey: "figma:Abcdef123:46:12",
+    title: "竹内きよ子様",
+    menuName: "竹内きよ子様｜FigmaPress",
+    pages: [
+      { key: "home", title: "竹内きよ子様", slug: "/", sourceKey: "figma:Abcdef123:46:12" },
+      { key: "profile", title: "プロフィール", slug: "profile", sourceKey: "figma:Abcdef123:46:12:page:profile" },
+    ],
+  });
+
+  assert.equal(result.status, "draft");
+  assert.deepEqual(requests.map(({ url }) => url), [
+    "https://wordpress.example/wp-admin/admin-post.php",
+    "https://wordpress.example/wp-admin/admin-ajax.php",
+    "https://wordpress.example/wp-json/figmapress/v1/paired/site-prepare",
+  ]);
+  for (const request of requests) {
+    const form = new URLSearchParams(request.body);
+    assert.equal(form.get("action"), "figmapress_site_prepare");
+    assert.equal(
+      form.get("figmapress_token_hex"),
+      Buffer.from(connectorToken, "utf8").toString("hex"),
+    );
+  }
+});
+
 test("server transport rejects any non-draft page in a prepared site", async (context) => {
   context.mock.method(globalThis, "fetch", async () => Response.json({
     siteKey: "figma:Abcdef123:46:12",
