@@ -384,6 +384,34 @@ a { color: inherit; }
 .target-picker label > span { display: flex; flex-direction: column; }
 .target-picker strong { font-size: 13px; }
 .target-picker small { color: #718087; font-size: 9px; }
+.site-build-picker { border: 0; display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: -6px 0 24px; padding: 0; }
+.site-build-picker legend { font-size: 12px; font-weight: 800; margin-bottom: 9px; }
+.site-build-picker > label { align-items: center; background: #f7f8f6; border: 1px solid #d7ddda; border-radius: 14px; cursor: pointer; display: flex; gap: 11px; min-height: 66px; padding: 13px 15px; }
+.site-build-picker > label.is-active { background: #edf7ff; border-color: #73afd0; box-shadow: 0 0 0 3px rgba(67,157,207,.11); }
+.site-build-picker input { accent-color: #307ca6; }
+.site-build-picker label > span { display: flex; flex-direction: column; }
+.site-build-picker strong { font-size: 13px; }
+.site-build-picker small { color: #718087; font-size: 9px; }
+.site-build-plan { background: #f4f9fc; border: 1px solid #d4e5ef; border-radius: 14px; grid-column: 1 / -1; padding: 16px; }
+.site-build-plan > strong { display: block; margin-bottom: 10px; }
+.site-build-plan ol { display: grid; gap: 7px; list-style: none; margin: 0; padding: 0; }
+.site-build-plan li { align-items: center; background: #fff; border-radius: 8px; display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr) minmax(110px, auto) auto; padding: 8px 10px; }
+.site-build-plan li span { font-size: 11px; font-weight: 750; }
+.site-build-plan code { color: #315f77; font-size: 9px; overflow: hidden; text-overflow: ellipsis; }
+.site-build-plan p { color: #62747d; font-size: 9px; line-height: 1.7; margin: 11px 0 0; }
+.site-build-progress { align-items: center; background: #edf7ff; border: 1px solid #c5e0ef; border-radius: 12px; color: #315f77; display: flex; font-size: 11px; gap: 8px; margin-top: 16px; padding: 13px 15px; }
+.site-build-result { background: #f3faed; border: 1px solid #bad99d; border-radius: 16px; display: grid; gap: 14px; margin-top: 16px; padding: 17px; }
+.site-build-result > div:first-child { display: flex; flex-direction: column; gap: 3px; }
+.site-build-result > div:first-child > span { color: #59705e; font-size: 9px; }
+.site-build-result ul { display: grid; gap: 7px; list-style: none; margin: 0; padding: 0; }
+.site-build-result li, .site-menu-status { align-items: center; background: #fff; border-radius: 9px; display: flex; gap: 12px; justify-content: space-between; padding: 10px 12px; }
+.site-build-result li > span:first-child, .site-menu-status > span { display: flex; flex-direction: column; }
+.site-build-result li strong, .site-menu-status strong { font-size: 11px; }
+.site-build-result li small, .site-menu-status small, .site-build-result > small { color: #68766b; font-size: 8px; }
+.site-build-result__actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.site-build-result a { color: #286f93; font-size: 9px; font-weight: 800; }
+.site-menu-status { border: 1px solid #d2dfca; }
+.site-menu-status.is-assigned { border-color: #e3b95f; }
 .connection-row { align-items: center; display: flex; gap: 14px; margin-top: 17px; }
 .wp-profile-row { align-items: flex-end; background: #f3f6f4; border: 1px solid #dce3df; border-radius: 13px; display: flex; gap: 12px; justify-content: space-between; margin-bottom: 15px; padding: 12px 14px; }
 .wp-profile-row label { display: flex; flex: 1 1 auto; flex-direction: column; gap: 4px; }
@@ -494,7 +522,11 @@ footer > div:last-child a, footer > div:last-child span { color: #83969d; font-s
   .source-tabs button { font-size: 11px; padding: 0 6px; }
   .source-form { padding: 25px 18px; }
   .form-grid, .form-grid--three { grid-template-columns: 1fr; }
-  .target-picker { grid-template-columns: 1fr; }
+  .target-picker, .site-build-picker { grid-template-columns: 1fr; }
+  .site-build-plan { grid-column: 1; }
+  .site-build-plan li { align-items: flex-start; grid-template-columns: 1fr; }
+  .site-build-result li, .site-menu-status { align-items: flex-start; flex-direction: column; }
+  .site-build-result__actions { justify-content: flex-start; }
   .connection-row { align-items: flex-start; flex-direction: column; }
   .form-grid--three .field:first-child { grid-column: auto; }
   .form-footer, .wp-footer { align-items: stretch; flex-direction: column; gap: 17px; }

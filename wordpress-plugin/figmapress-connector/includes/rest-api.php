@@ -74,6 +74,15 @@ function figmapress_connector_register_rest_routes() {
     );
     register_rest_route(
         'figmapress/v1',
+        '/sites/prepare',
+        array(
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => 'figmapress_connector_rest_prepare_site',
+            'permission_callback' => 'figmapress_connector_rest_can_build_site',
+        )
+    );
+    register_rest_route(
+        'figmapress/v1',
         '/elementor/pages',
         array(
             'methods'             => WP_REST_Server::CREATABLE,
@@ -180,6 +189,10 @@ function figmapress_connector_rest_can_edit_pages() {
     return current_user_can( 'edit_pages' );
 }
 
+function figmapress_connector_rest_can_build_site() {
+    return current_user_can( 'edit_pages' ) && current_user_can( 'edit_theme_options' );
+}
+
 function figmapress_connector_rest_can_edit_requested_page( WP_REST_Request $request ) {
     $post_id = absint( $request->get_param( 'id' ) );
     return $post_id > 0 && current_user_can( 'edit_post', $post_id );
@@ -232,6 +245,261 @@ function figmapress_connector_rest_status() {
                 'imageTransforms' => true,
                 'mediaPersistence' => true,
             ),
+            'siteBuild'         => array(
+                'pages' => true,
+                'menus' => current_user_can( 'edit_theme_options' ),
+            ),
+        )
+    );
+}
+
+function figmapress_connector_site_source_key_pattern() {
+    return '/^figma:[A-Za-z0-9_-]{6,160}:(?:root|[0-9]+:[0-9]+)(?::page:[a-z0-9-]{1,80})?$/';
+}
+
+function figmapress_connector_site_base_key_pattern() {
+    return '/^figma:[A-Za-z0-9_-]{6,160}:(?:root|[0-9]+:[0-9]+)$/';
+}
+
+function figmapress_connector_find_site_menu( $site_key ) {
+    $menus = get_terms(
+        array(
+            'taxonomy'   => 'nav_menu',
+            'hide_empty' => false,
+            'number'     => 1,
+            'meta_key'   => '_figmapress_site_key',
+            'meta_value' => $site_key,
+        )
+    );
+    if ( is_wp_error( $menus ) || empty( $menus ) ) {
+        return 0;
+    }
+    return absint( $menus[0]->term_id );
+}
+
+function figmapress_connector_sync_site_menu( $site_key, $menu_name, $pages ) {
+    if ( ! current_user_can( 'edit_theme_options' ) ) {
+        return new WP_Error(
+            'figmapress_menu_permission_required',
+            'ページは下書き保存しましたが、メニューを管理する権限がありません。',
+            array( 'status' => 403 )
+        );
+    }
+
+    $menu_id = figmapress_connector_find_site_menu( $site_key );
+    if ( $menu_id ) {
+        $updated = wp_update_nav_menu_object(
+            $menu_id,
+            array( 'menu-name' => $menu_name )
+        );
+        if ( is_wp_error( $updated ) ) {
+            return $updated;
+        }
+    } else {
+        $menu_id = wp_create_nav_menu( $menu_name );
+        if ( is_wp_error( $menu_id ) ) {
+            return $menu_id;
+        }
+        update_term_meta( $menu_id, '_figmapress_site_key', $site_key );
+    }
+
+    $existing_items = wp_get_nav_menu_items(
+        $menu_id,
+        array( 'post_status' => array( 'publish', 'draft' ) )
+    );
+    if ( ! is_array( $existing_items ) ) {
+        $existing_items = array();
+    }
+    $managed = array();
+    foreach ( $existing_items as $existing_item ) {
+        if ( $site_key !== (string) get_post_meta( $existing_item->ID, '_figmapress_site_key', true ) ) {
+            continue;
+        }
+        $page_key = (string) get_post_meta( $existing_item->ID, '_figmapress_page_key', true );
+        if ( '' !== $page_key ) {
+            $managed[ $page_key ] = absint( $existing_item->ID );
+        }
+    }
+
+    $kept = array();
+    $result_items = array();
+    foreach ( $pages as $position => $page ) {
+        $page_key = $page['key'];
+        $item_id = isset( $managed[ $page_key ] ) ? $managed[ $page_key ] : 0;
+        $saved = wp_update_nav_menu_item(
+            $menu_id,
+            $item_id,
+            array(
+                'menu-item-title'     => wp_slash( $page['title'] ),
+                'menu-item-object-id' => $page['id'],
+                'menu-item-object'    => 'page',
+                'menu-item-status'    => 'publish',
+                'menu-item-type'      => 'post_type',
+                'menu-item-position'  => $position + 1,
+            )
+        );
+        if ( is_wp_error( $saved ) ) {
+            return $saved;
+        }
+        update_post_meta( $saved, '_figmapress_site_key', $site_key );
+        update_post_meta( $saved, '_figmapress_page_key', $page_key );
+        $kept[] = absint( $saved );
+        $result_items[] = array(
+            'id'      => absint( $saved ),
+            'pageId'  => $page['id'],
+            'key'     => $page_key,
+            'title'   => $page['title'],
+            'rawLink' => $page['rawLink'],
+        );
+    }
+    foreach ( $managed as $managed_id ) {
+        if ( ! in_array( $managed_id, $kept, true ) ) {
+            wp_delete_post( $managed_id, true );
+        }
+    }
+
+    $assigned = array();
+    foreach ( get_nav_menu_locations() as $location => $location_menu_id ) {
+        if ( absint( $location_menu_id ) === absint( $menu_id ) ) {
+            $assigned[] = sanitize_key( $location );
+        }
+    }
+    return array(
+        'id'                => absint( $menu_id ),
+        'name'              => $menu_name,
+        'editLink'          => admin_url( 'nav-menus.php?action=edit&menu=' . absint( $menu_id ) ),
+        'assigned'          => ! empty( $assigned ),
+        'assignedLocations' => $assigned,
+        'items'             => $result_items,
+    );
+}
+
+function figmapress_connector_rest_prepare_site( WP_REST_Request $request ) {
+    $params = $request->get_json_params();
+    if ( ! is_array( $params ) ) {
+        return new WP_Error( 'figmapress_invalid_site', '複数ページの入力内容が無効です。', array( 'status' => 422 ) );
+    }
+    $site_key = isset( $params['siteKey'] ) ? sanitize_text_field( $params['siteKey'] ) : '';
+    $title = isset( $params['title'] ) ? sanitize_text_field( $params['title'] ) : '';
+    $menu_name = isset( $params['menuName'] ) ? sanitize_text_field( $params['menuName'] ) : '';
+    $requested_pages = isset( $params['pages'] ) && is_array( $params['pages'] ) ? $params['pages'] : array();
+    if (
+        ! preg_match( figmapress_connector_site_base_key_pattern(), $site_key ) ||
+        '' === $title || '' === $menu_name ||
+        count( $requested_pages ) < 2 || count( $requested_pages ) > 8
+    ) {
+        return new WP_Error( 'figmapress_invalid_site', '複数ページの入力内容が無効です。', array( 'status' => 422 ) );
+    }
+
+    $seen = array();
+    $validated_pages = array();
+    foreach ( $requested_pages as $requested ) {
+        if ( ! is_array( $requested ) ) {
+            return new WP_Error( 'figmapress_invalid_site_page', 'ページ情報が無効です。', array( 'status' => 422 ) );
+        }
+        $key = isset( $requested['key'] ) ? sanitize_key( $requested['key'] ) : '';
+        $page_title = isset( $requested['title'] ) ? sanitize_text_field( $requested['title'] ) : '';
+        $slug = isset( $requested['slug'] ) ? sanitize_title( $requested['slug'] ) : '';
+        $source_key = isset( $requested['sourceKey'] ) ? sanitize_text_field( $requested['sourceKey'] ) : '';
+        $expected_source = 'home' === $key ? $site_key : $site_key . ':page:' . $key;
+        if (
+            ! preg_match( '/^(?:home|thoughts|policies|activities|profile|contact)$/', $key ) ||
+            isset( $seen[ $key ] ) || '' === $page_title || '' === $slug ||
+            ! preg_match( figmapress_connector_site_source_key_pattern(), $source_key ) ||
+            $source_key !== $expected_source
+        ) {
+            return new WP_Error( 'figmapress_invalid_site_page', 'ページ情報が無効です。', array( 'status' => 422 ) );
+        }
+        $seen[ $key ] = true;
+        $validated_pages[] = array(
+            'key'       => $key,
+            'title'     => $page_title,
+            'slug'      => $slug,
+            'sourceKey' => $source_key,
+        );
+    }
+    if ( empty( $seen['home'] ) ) {
+        return new WP_Error( 'figmapress_home_required', 'ホームページの指定が必要です。', array( 'status' => 422 ) );
+    }
+
+    foreach ( $validated_pages as $index => $requested ) {
+        $existing_id = figmapress_connector_find_page_by_meta( '_figmapress_source_key', $requested['sourceKey'] );
+        if ( $existing_id && ( ! current_user_can( 'edit_post', $existing_id ) || 'draft' !== get_post_status( $existing_id ) ) ) {
+            return new WP_Error(
+                'figmapress_site_page_not_editable',
+                'FigmaPress管理ページが下書き以外の状態です。公開済みページは自動更新しません。',
+                array( 'status' => 409, 'postId' => $existing_id )
+            );
+        }
+        $validated_pages[ $index ]['existingId'] = $existing_id;
+    }
+
+    $pages = array();
+    foreach ( $validated_pages as $requested ) {
+        $key = $requested['key'];
+        $page_title = $requested['title'];
+        $slug = $requested['slug'];
+        $source_key = $requested['sourceKey'];
+        $existing_id = absint( $requested['existingId'] );
+        $created = false;
+        if ( $existing_id ) {
+            $post_id = wp_update_post(
+                array(
+                    'ID'         => $existing_id,
+                    'post_title' => $page_title,
+                ),
+                true
+            );
+        } else {
+            $post_id = wp_insert_post(
+                array(
+                    'post_type'    => 'page',
+                    'post_status'  => 'draft',
+                    'post_title'   => $page_title,
+                    'post_name'    => $slug,
+                    'post_content' => '',
+                ),
+                true
+            );
+            $created = ! is_wp_error( $post_id );
+        }
+        if ( is_wp_error( $post_id ) ) {
+            return $post_id;
+        }
+        update_post_meta( $post_id, '_figmapress_source_key', $source_key );
+        update_post_meta( $post_id, '_figmapress_site_key', $site_key );
+        update_post_meta( $post_id, '_figmapress_page_key', $key );
+        if ( 0 === figmapress_connector_count_elementor_elements( figmapress_connector_read_elementor_data( $post_id ) ) ) {
+            update_post_meta( $post_id, '_figmapress_prepared', '1' );
+        }
+        $pages[] = array(
+            'id'          => absint( $post_id ),
+            'key'         => $key,
+            'title'       => $page_title,
+            'slug'        => get_post_field( 'post_name', $post_id ),
+            'status'      => 'draft',
+            'sourceKey'   => $source_key,
+            'created'     => $created,
+            'updated'     => ! $created,
+            'editLink'    => admin_url( 'post.php?post=' . absint( $post_id ) . '&action=elementor' ),
+            'previewLink' => get_preview_post_link( $post_id ),
+            'rawLink'     => get_permalink( $post_id ),
+        );
+    }
+    $warnings = array();
+    $menu = figmapress_connector_sync_site_menu( $site_key, $menu_name, $pages );
+    if ( is_wp_error( $menu ) ) {
+        $warnings[] = $menu->get_error_message();
+        $menu = null;
+    }
+    return rest_ensure_response(
+        array(
+            'siteKey'  => $site_key,
+            'title'    => $title,
+            'status'   => 'draft',
+            'pages'    => $pages,
+            'menu'     => $menu,
+            'warnings' => $warnings,
         )
     );
 }
@@ -424,7 +692,7 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
     if ( '' !== $request_id && ! preg_match( '/^[a-f0-9-]{16,64}$/i', $request_id ) ) {
         return new WP_Error( 'figmapress_invalid_request_id', '作成リクエストの識別情報が無効です。', array( 'status' => 422 ) );
     }
-    if ( '' !== $source_key && ! preg_match( '/^figma:[A-Za-z0-9_-]{6,160}:(?:root|[0-9]+:[0-9]+)$/', $source_key ) ) {
+    if ( '' !== $source_key && ! preg_match( figmapress_connector_site_source_key_pattern(), $source_key ) ) {
         return new WP_Error( 'figmapress_invalid_source_key', 'Figma変換元の識別情報が無効です。', array( 'status' => 422 ) );
     }
 
@@ -462,9 +730,13 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
                 );
             }
             if ( 0 === $stored_elements ) {
-                wp_delete_post( $existing_id, true );
-                delete_option( $request_lock_key );
-                $existing_id = 0;
+                if ( '1' === (string) get_post_meta( $existing_id, '_figmapress_prepared', true ) && '' !== $source_key ) {
+                    $reuse_existing = true;
+                } else {
+                    wp_delete_post( $existing_id, true );
+                    delete_option( $request_lock_key );
+                    $existing_id = 0;
+                }
             } elseif ( '' === $source_key ) {
                 return rest_ensure_response(
                     array(
@@ -589,6 +861,7 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
         }
         return $stored_elements;
     }
+    delete_post_meta( $post_id, '_figmapress_prepared' );
     if ( $request_lock_key ) {
         delete_option( $request_lock_key );
     }

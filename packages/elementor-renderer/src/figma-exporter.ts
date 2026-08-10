@@ -17,7 +17,7 @@ export interface FigmaRenderAssets {
   renderedNodeUrls?: Record<string, string>;
 }
 
-type SectionAnchor = "thoughts" | "policies" | "activities" | "profile" | "contact";
+export type SectionAnchor = "thoughts" | "policies" | "activities" | "profile" | "contact";
 
 interface RenderContext {
   ids: ElementIdFactory;
@@ -1254,7 +1254,7 @@ function sectionAnchor(node: FigmaNode): string | null {
   return sectionAnchorFromText(copy);
 }
 
-function sectionAnchorFromText(value: string): string | null {
+export function sectionAnchorFromText(value: string): string | null {
   if (/トップ|page.?top|\btop\b/i.test(value)) return "top";
   if (/thought|message|想い|voice|現場の声/i.test(value)) return "thoughts";
   if (/policy|policies|政策/i.test(value)) return "policies";
@@ -1285,7 +1285,7 @@ function sectionTextMatchesAnchor(value: string, anchor: SectionAnchor): boolean
  * words, while still allowing a nested policy/activity heading to be a target
  * inside a broader visual section.
  */
-function discoverSectionAnchorTargets(root: FigmaNode): Map<string, SectionAnchor> {
+export function discoverSectionAnchorTargets(root: FigmaNode): Map<string, SectionAnchor> {
   const anchors: SectionAnchor[] = ["thoughts", "policies", "activities", "profile", "contact"];
   const candidates = new Map<SectionAnchor, Array<{
     id: string;

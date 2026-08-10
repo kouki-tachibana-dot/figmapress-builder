@@ -12,12 +12,15 @@ import {
   applyPreviewSectionVisualCorrections,
   applyPreviewTextGeometryCorrections,
   applyPreviewVisualCorrections,
+  rewriteElementorTemplatePageLinks,
   type ElementorDecorationGeometryCorrection,
   type ElementorMediaGeometryCorrection,
   type ElementorSectionVisualCorrection,
   type ElementorTemplate,
   type ElementorTextGeometryCorrection,
   type ElementorVisualCorrection,
+  type FigmaMultiPagePlan,
+  type FigmaSitePageKey,
 } from "@figmapress/elementor-renderer";
 import {
   WordPressDirectError,
@@ -25,11 +28,13 @@ import {
   createWordPressDraftDirect,
   fetchWordPressElementorSnapshotDirect,
   localizeWordPressElementorMediaDirect,
+  prepareWordPressSiteDirect,
   probeWordPressDirect,
   updateWordPressElementorDocumentDirect,
   type BrowserElementorSnapshot,
   type BrowserElementorMediaProgress,
   type BrowserWordPressConfig,
+  type BrowserPreparedSiteResult,
 } from "@/lib/wordpress-browser";
 import { readWordPressCredentials } from "@/lib/wordpress-form";
 import {
@@ -68,6 +73,7 @@ const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
 const CHUNKED_UPLOAD_CONNECTOR_VERSION = "0.16.17";
 const SMALL_CHUNK_UPLOAD_CONNECTOR_VERSION = "0.16.24";
 const FIGMA_HEADER_MEDIA_CONNECTOR_VERSION = "0.16.18";
+const MULTI_PAGE_CONNECTOR_VERSION = "0.17.0";
 
 function versionAtLeast(version: string | undefined, minimum: string): boolean {
   if (!version) return false;
@@ -90,6 +96,29 @@ function wordpressPairingAdminUrl(baseUrl: string): string | null {
     return url.toString();
   } catch {
     return null;
+  }
+}
+
+function sameOriginWordPressLink(
+  baseUrl: string,
+  value: string | undefined,
+): string | undefined {
+  if (!value) return undefined;
+  try {
+    const base = new URL(baseUrl);
+    const link = new URL(value, base);
+    if (
+      base.protocol !== "https:"
+      || link.protocol !== "https:"
+      || link.origin !== base.origin
+      || link.username
+      || link.password
+    ) {
+      return undefined;
+    }
+    return link.toString();
+  } catch {
+    return undefined;
   }
 }
 
@@ -251,6 +280,7 @@ interface ConversionResult {
       detail: string;
     }>;
   } | null;
+  multiPagePlan: FigmaMultiPagePlan | null;
   themeJson: unknown;
   warnings: string[];
   summary: {
@@ -270,6 +300,7 @@ interface WordPressResult {
   status: string;
   editLink?: string;
   previewLink?: string;
+  rawLink?: string;
   target?: OutputTarget;
   importedMedia?: number;
   savedMedia?: number;
@@ -305,6 +336,10 @@ interface WordPressStatus {
     effects?: boolean;
     imageTransforms?: boolean;
     mediaPersistence?: boolean;
+  };
+  siteBuild?: {
+    pages: boolean;
+    menus: boolean;
   };
   canEditPages: boolean;
   pairing?: {
@@ -630,6 +665,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const [wpStatus, setWpStatus] = useState<WordPressStatus | null>(null);
   const [wpTransport, setWpTransport] = useState<"direct" | "proxy" | null>(null);
   const [wpTarget, setWpTarget] = useState<OutputTarget>("elementor");
+  const [wpBuildMode, setWpBuildMode] = useState<"single" | "site">("single");
+  const [wpSiteResult, setWpSiteResult] = useState<BrowserPreparedSiteResult | null>(null);
+  const [wpSiteProgress, setWpSiteProgress] = useState("");
   const [wpVisualQaBusy, setWpVisualQaBusy] = useState(false);
   const [wpMediaBusy, setWpMediaBusy] = useState(false);
   const [wpVisualQaError, setWpVisualQaError] = useState("");
@@ -770,6 +808,15 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     wpStatus?.connectorVersion,
     FIGMA_HEADER_MEDIA_CONNECTOR_VERSION,
   );
+  const connectorSupportsMultiPage = wpStatus?.siteBuild
+    ? wpStatus.siteBuild.pages && wpStatus.siteBuild.menus
+    : versionAtLeast(wpStatus?.connectorVersion, MULTI_PAGE_CONNECTOR_VERSION);
+  const multiPagePlan = output?.multiPagePlan;
+  const multiPageAvailable = wpTarget === "elementor"
+    && Boolean(conversionSourceKey)
+    && Boolean(multiPagePlan && multiPagePlan.pages.length > 1);
+  const multiPageBlocked = wpBuildMode === "site"
+    && (!multiPageAvailable || !connectorSupportsMultiPage);
   const visualQaReferenceCount = output
     ? Number(Boolean(output.visualReferences.desktop)) +
       Number(Boolean(output.visualReferences.mobile))
@@ -872,6 +919,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     setOutput(null);
     setConversionSourceKey(undefined);
     setWpResult(null);
+    setWpSiteResult(null);
+    setWpSiteProgress("");
+    setWpBuildMode("single");
     setWpVisualQaBusy(false);
     setWpMediaBusy(false);
     setWpVisualQaError("");
@@ -1376,6 +1426,172 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     }
   }
 
+  async function fetchMultiPageTemplates(
+    pageKeys: Array<Exclude<FigmaSitePageKey, "home">>,
+  ): Promise<Map<Exclude<FigmaSitePageKey, "home">, ElementorTemplate>> {
+    let baseBody: Record<string, unknown>;
+    if (mode === "figma") {
+      const authentication = resolveFigmaRequestAuthentication(
+        figmaToken,
+        figmaOAuthStatus?.connected === true,
+      );
+      baseBody = {
+        mode,
+        fileKeyOrUrl,
+        ...authentication.credentials,
+      };
+    } else {
+      let data: unknown;
+      try {
+        data = JSON.parse(jsonText) as unknown;
+      } catch {
+        throw new Error("貼り付けたJSONの形式を確認してください。");
+      }
+      baseBody = {
+        mode,
+        data,
+        pageTitle: output?.summary.pageTitle,
+      };
+    }
+    type PageTemplateEntry = {
+        page: { key: Exclude<FigmaSitePageKey, "home"> };
+        elementorTemplate: ElementorTemplate;
+    };
+    const requestBatch = async (
+      keys: Array<Exclude<FigmaSitePageKey, "home">>,
+    ): Promise<PageTemplateEntry[]> => {
+      const response = await fetch("/api/convert/page", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...baseBody, pageKeys: keys }),
+      });
+      if (response.status === 413 && keys.length > 1) {
+        const middle = Math.ceil(keys.length / 2);
+        return [
+          ...await requestBatch(keys.slice(0, middle)),
+          ...await requestBatch(keys.slice(middle)),
+        ];
+      }
+      const data = await readApi<{ ok: true; pages: PageTemplateEntry[] }>(response);
+      return data.pages;
+    };
+    const entries = await requestBatch(pageKeys);
+    return new Map(entries.map((entry) => [entry.page.key, entry.elementorTemplate]));
+  }
+
+  async function createWordPressSiteDraft(
+    credentials: BrowserWordPressConfig,
+  ): Promise<void> {
+    const plan = output?.multiPagePlan;
+    if (!output || !plan || plan.pages.length < 2 || !conversionSourceKey) {
+      throw new Error("複数ページ化できるFigma URLとセクションを確認してください。");
+    }
+    if (!connectorSupportsMultiPage) {
+      throw new Error(`複数ページ自動構築にはConnector v${MULTI_PAGE_CONNECTOR_VERSION}以上が必要です。`);
+    }
+    const siteInput = {
+      siteKey: conversionSourceKey,
+      title: plan.title,
+      menuName: plan.menuName,
+      pages: plan.pages.map((page) => ({
+        key: page.key,
+        title: page.title,
+        slug: page.slug,
+        sourceKey: page.key === "home"
+          ? conversionSourceKey
+          : `${conversionSourceKey}:page:${page.key}`,
+      })),
+    };
+    const sectionPageKeys = plan.pages
+      .map((page) => page.key)
+      .filter((key): key is Exclude<FigmaSitePageKey, "home"> => key !== "home");
+    setWpSiteProgress("Figmaから各ページの編集データを準備しています…");
+    const sectionTemplates = await fetchMultiPageTemplates(sectionPageKeys);
+    setWpSiteProgress("下書きページと未割り当てメニューを準備しています…");
+    const prepared = wpTransport === "direct"
+      ? await prepareWordPressSiteDirect(credentials, siteInput)
+      : await (async () => {
+          const response = await fetch("/api/wordpress", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ target: "site", ...credentials, ...siteInput }),
+          });
+          const data = await readApi<{ ok: true; result: BrowserPreparedSiteResult }>(response);
+          return data.result;
+        })();
+    setWpSiteResult(prepared);
+
+    const pageLinks = prepared.pages.map((page) => {
+      const rawLink = sameOriginWordPressLink(credentials.baseUrl, page.rawLink);
+      if (!rawLink) {
+        throw new Error(`${page.title}のWordPress URLを取得できませんでした。`);
+      }
+      return { key: page.key, rawLink };
+    });
+    let currentResult = prepared;
+    for (let index = 0; index < plan.pages.length; index += 1) {
+      const page = plan.pages[index];
+      const target = prepared.pages.find((candidate) => candidate.key === page.key);
+      if (!target) throw new Error(`${page.title}の下書き準備結果がありません。`);
+      setWpSiteProgress(`${index + 1}/${plan.pages.length}「${page.title}」をElementorへ保存しています…`);
+      const template = page.key === "home"
+        ? output.elementorTemplate
+        : sectionTemplates.get(page.key);
+      if (!template) throw new Error(`「${page.title}」のElementorデータを準備できませんでした。`);
+      const linkedTemplate = rewriteElementorTemplatePageLinks(template, pageLinks);
+      const requestId = createRequestId();
+      const input = {
+        target: "elementor" as const,
+        title: page.title,
+        slug: target.slug,
+        template: linkedTemplate,
+        pageTemplate: "elementor_canvas" as const,
+        requestId,
+        sourceKey: target.sourceKey,
+      };
+      const serializedPayload = JSON.stringify({ ...credentials, ...input });
+      const supportsChunked = versionAtLeast(
+        wpStatus?.connectorVersion,
+        CHUNKED_UPLOAD_CONNECTOR_VERSION,
+      );
+      const useProxy = shouldProxyWordPressDraft(
+        wpTransport,
+        "elementor",
+        new TextEncoder().encode(serializedPayload).byteLength,
+        supportsChunked,
+      );
+      let saved = !useProxy
+        ? supportsChunked
+          ? await createWordPressDraftChunkedDirect(
+              credentials,
+              input,
+              versionAtLeast(wpStatus?.connectorVersion, SMALL_CHUNK_UPLOAD_CONNECTOR_VERSION)
+                ? { chunkBytes: 8_000, maxChunks: 128, interChunkDelayMs: 75 }
+                : undefined,
+            )
+          : await createWordPressDraftDirect(credentials, input)
+        : await (async () => {
+            const response = await fetch("/api/wordpress", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: serializedPayload,
+            });
+            const data = await readApi<{ ok: true; result: WordPressResult }>(response);
+            return data.result;
+          })();
+      saved = await persistWordPressMedia(credentials, saved, requestId);
+      currentResult = {
+        ...currentResult,
+        pages: currentResult.pages.map((candidate) =>
+          candidate.key === page.key ? { ...candidate, ...saved } : candidate
+        ),
+      };
+      setWpSiteResult(currentResult);
+    }
+    setWpResult(null);
+    setWpSiteProgress("複数ページとメニューの下書き構築が完了しました。");
+  }
+
   async function createWordPressDraft(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!output || !confirmed) return;
@@ -1396,6 +1612,8 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     setWpBusy(true);
     setWpError("");
     setWpResult(null);
+    setWpSiteResult(null);
+    setWpSiteProgress("");
     setWpVisualQaError("");
     setWpVisualQaResults([]);
     setWpVisualCorrections({
@@ -1408,6 +1626,11 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     });
 
     try {
+      if (wpBuildMode === "site") {
+        await createWordPressSiteDraft(credentials);
+        setApplicationPassword("");
+        return;
+      }
       const page = output.blueprint.pages[0];
       const requestId = draftRequestId || createRequestId();
       if (!draftRequestId) setDraftRequestId(requestId);
@@ -1960,7 +2183,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.25.19 live</span>
+          <span className="status-pill"><i /> v0.26.0 live</span>
         </nav>
       </header>
 
@@ -2652,7 +2875,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
               <fieldset className="target-picker">
                 <legend>編集方式</legend>
                 <label className={wpTarget === "gutenberg" ? "is-active" : ""}>
-                  <input checked={wpTarget === "gutenberg"} name="target" onChange={() => setWpTarget("gutenberg")} type="radio" />
+                  <input checked={wpTarget === "gutenberg"} name="target" onChange={() => { setWpTarget("gutenberg"); setWpBuildMode("single"); }} type="radio" />
                   <span><strong>Gutenberg</strong><small>6種の意味ブロックへ簡易変換</small></span>
                 </label>
                 <label className={wpTarget === "elementor" ? "is-active" : ""}>
@@ -2660,6 +2883,50 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                   <span><strong>Elementor（推奨）</strong><small>Figmaレイアウト・文字・画像を保持</small></span>
                 </label>
               </fieldset>
+              {multiPageAvailable && multiPagePlan && (
+                <fieldset className="site-build-picker">
+                  <legend>ページ構成</legend>
+                  <label className={wpBuildMode === "single" ? "is-active" : ""}>
+                    <input
+                      checked={wpBuildMode === "single"}
+                      name="buildMode"
+                      onChange={() => setWpBuildMode("single")}
+                      type="radio"
+                    />
+                    <span>
+                      <strong>1ページとして作成</strong>
+                      <small>現在のFigma全体を1つのElementor下書きへ保存</small>
+                    </span>
+                  </label>
+                  <label className={wpBuildMode === "site" ? "is-active" : ""}>
+                    <input
+                      checked={wpBuildMode === "site"}
+                      name="buildMode"
+                      onChange={() => setWpBuildMode("site")}
+                      type="radio"
+                    />
+                    <span>
+                      <strong>サイト一式を自動構築（推奨）</strong>
+                      <small>{multiPagePlan.pages.length}ページ＋FigmaPress管理メニュー</small>
+                    </span>
+                  </label>
+                  {wpBuildMode === "site" && (
+                    <div className="site-build-plan">
+                      <strong>作成予定</strong>
+                      <ol>
+                        {multiPagePlan.pages.map((page) => (
+                          <li key={page.key}>
+                            <span>{page.title}</span>
+                            <code>/{page.slug.replace(/^\/+|\/+$/g, "")}/</code>
+                            <small>{page.hasDesktop ? "PC" : ""}{page.hasDesktop && page.hasMobile ? "＋" : ""}{page.hasMobile ? "スマホ" : ""}</small>
+                          </li>
+                        ))}
+                      </ol>
+                      <p>すべて下書きで作成します。メニューは未割り当てのため、公開中サイトには表示されません。再実行時は同じ下書きを更新します。</p>
+                    </div>
+                  )}
+                </fieldset>
+              )}
               {wordpressProfiles.length > 0 && (
                 <div className="wp-profile-row">
                   <label>
@@ -2732,6 +2999,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                     {wpTarget === "elementor" && (
                       <span>実ページQA {connectorSupportsActualVisualQa ? "対応" : "更新必要"}</span>
                     )}
+                    {multiPageAvailable && (
+                      <span>複数ページ {connectorSupportsMultiPage ? "対応" : "更新必要"}</span>
+                    )}
                     <span>{connectorToken ? "Connector専用接続" : wpTransport === "direct" ? "ブラウザ直結" : "サーバー経由"}</span>
                   </div>
                 )}
@@ -2769,6 +3039,11 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
               {wpStatus && wpTarget === "elementor" && visualQaReferenceCount > 0 && wpStatus.connectorInstalled && connectorSupportsInteractions && !connectorSupportsActualVisualQa && (
                 <div className="alert alert--error" role="alert">
                   実際のElementor下書きをFigmaと再比較して自動補正するにはConnector v{ACTUAL_VISUAL_QA_CONNECTOR_VERSION}以上が必要です。WordPressのプラグイン更新画面から最新版へ更新し、再診断してください。
+                </div>
+              )}
+              {wpStatus && wpTarget === "elementor" && wpBuildMode === "site" && wpStatus.connectorInstalled && !connectorSupportsMultiPage && (
+                <div className="alert alert--error" role="alert">
+                  複数ページとWordPressメニューの自動構築にはConnector v{MULTI_PAGE_CONNECTOR_VERSION}以上が必要です。<a href="/downloads/figmapress-connector.zip" download>最新版ZIPをダウンロード</a>して更新し、再診断してください。
                 </div>
               )}
               {visualQaGateRequired && !visualQaComplete && (
@@ -2827,6 +3102,45 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                     </button>
                   )}
                   {wpResult.warnings?.map((warning) => <span key={warning}> {warning}</span>)}
+                </div>
+              )}
+              {wpSiteProgress && (
+                <div className="site-build-progress" role="status">
+                  {wpBusy && <span className="spinner" />} {wpSiteProgress}
+                </div>
+              )}
+              {wpSiteResult && (
+                <div className="site-build-result" role="status">
+                  <div>
+                    <strong>{wpSiteResult.pages.length}ページを下書きで準備しました</strong>
+                    <span>同じFigma URLで再実行すると、重複を作らず同じページを更新します。</span>
+                  </div>
+                  <ul>
+                    {wpSiteResult.pages.map((page) => (
+                      <li key={page.key}>
+                        <span>
+                          <strong>{page.title}</strong>
+                          <small>下書き #{page.id}・{page.updated ? "更新" : "新規"}</small>
+                        </span>
+                        <span className="site-build-result__actions">
+                          {sameOriginWordPressLink(baseUrl, page.previewLink) && <a href={sameOriginWordPressLink(baseUrl, page.previewLink)} rel="noreferrer" target="_blank">確認 ↗</a>}
+                          {sameOriginWordPressLink(baseUrl, page.editLink) && <a href={sameOriginWordPressLink(baseUrl, page.editLink)} rel="noreferrer" target="_blank">Elementorで編集 ↗</a>}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  {wpSiteResult.menu ? (
+                    <div className={wpSiteResult.menu.assigned ? "site-menu-status is-assigned" : "site-menu-status"}>
+                      <span>
+                        <strong>メニュー「{wpSiteResult.menu.name}」</strong>
+                        <small>{wpSiteResult.menu.assigned ? "テーマに割り当て済み" : "安全のため未割り当て"}・{wpSiteResult.menu.items.length}リンク</small>
+                      </span>
+                      {sameOriginWordPressLink(baseUrl, wpSiteResult.menu.editLink) && <a href={sameOriginWordPressLink(baseUrl, wpSiteResult.menu.editLink)} rel="noreferrer" target="_blank">WordPressで確認 ↗</a>}
+                    </div>
+                  ) : (
+                    <div className="alert alert--error">ページは下書き保存済みですが、メニューは作成できませんでした。</div>
+                  )}
+                  {wpSiteResult.warnings.map((warning) => <small key={warning}>{warning}</small>)}
                 </div>
               )}
               {wpVisualQaBusy && (
@@ -2898,7 +3212,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                 <span>常に <code>status: draft</code></span>
                 <button
                   className="button button--dark"
-                  disabled={!confirmed || wpBusy || visualQaBlocksDraft || !wpStatus || !wpStatus.connectorInstalled || !wpStatus.canEditPages || (wpTarget === "elementor" && (!wpStatus.elementor.active || !connectorSupportsInteractions || (visualQaReferenceCount > 0 && !connectorSupportsActualVisualQa)))}
+                  disabled={!confirmed || wpBusy || visualQaBlocksDraft || multiPageBlocked || !wpStatus || !wpStatus.connectorInstalled || !wpStatus.canEditPages || (wpTarget === "elementor" && (!wpStatus.elementor.active || !connectorSupportsInteractions || (visualQaReferenceCount > 0 && !connectorSupportsActualVisualQa)))}
                   type="submit"
                 >
                   {wpBusy
@@ -2907,7 +3221,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                       : wpVisualQaBusy
                       ? "実ページ検証中…"
                       : "作成中…"
-                    : `${wpTarget === "elementor" ? "Elementor" : "Gutenberg"}下書きを作成 →`}
+                    : wpBuildMode === "site"
+                      ? `${multiPagePlan?.pages.length ?? 0}ページ＋メニューを下書き構築 →`
+                      : `${wpTarget === "elementor" ? "Elementor" : "Gutenberg"}下書きを作成 →`}
                 </button>
               </div>
             </form>
@@ -2954,7 +3270,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.25.19</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.26.0</span></div>
       </footer>
     </main>
   );

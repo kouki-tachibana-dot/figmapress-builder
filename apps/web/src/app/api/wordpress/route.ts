@@ -4,6 +4,7 @@ import {
   WpRequestError,
   createDraftPage,
   createElementorDraftPage,
+  prepareWordPressSite,
 } from "@figmapress/wp-connector";
 import {
   RequestError,
@@ -19,16 +20,31 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
-const CommonSchema = z.object({
+const CredentialsSchema = z.object({
     baseUrl: z.string().trim().min(8).max(500),
     username: z.string().trim().max(160).default(""),
     applicationPassword: z.string().trim().max(500).default(""),
     connectorToken: z.string().trim()
       .regex(/^fp1\.[1-9][0-9]{0,19}\.[A-Za-z0-9_-]{32,128}$/)
       .optional(),
+});
+
+const CommonSchema = CredentialsSchema.extend({
     title: z.string().trim().min(1).max(200),
     slug: z.string().trim().max(200),
 });
+
+const SiteKeySchema = z.string().trim()
+  .regex(/^figma:[A-Za-z0-9_-]{6,160}:(?:root|[0-9]+:[0-9]+)$/);
+const SitePageKeySchema = z.enum(["home", "thoughts", "policies", "activities", "profile", "contact"]);
+const SitePageSchema = z.object({
+  key: SitePageKeySchema,
+  title: z.string().trim().min(1).max(200),
+  slug: z.string().trim().min(1).max(200),
+  sourceKey: z.string().trim().regex(
+    /^figma:[A-Za-z0-9_-]{6,160}:(?:root|[0-9]+:[0-9]+)(?::page:[a-z0-9-]{1,80})?$/,
+  ),
+}).strict();
 
 const ElementorTemplateSchema = z.object({
   title: z.string().max(200),
@@ -47,10 +63,17 @@ const RequestSchema = z.discriminatedUnion("target", [
     target: z.literal("elementor"),
     requestId: z.string().trim().regex(/^[a-f0-9-]{16,64}$/i),
     sourceKey: z.string().trim()
-      .regex(/^figma:[A-Za-z0-9_-]{6,160}:(?:root|[0-9]+:[0-9]+)$/)
+      .regex(/^figma:[A-Za-z0-9_-]{6,160}:(?:root|[0-9]+:[0-9]+)(?::page:[a-z0-9-]{1,80})?$/)
       .optional(),
     template: ElementorTemplateSchema,
     pageTemplate: z.enum(["elementor_canvas", "elementor_header_footer", "default"]).default("elementor_canvas"),
+  }).strict(),
+  CredentialsSchema.extend({
+    target: z.literal("site"),
+    siteKey: SiteKeySchema,
+    title: z.string().trim().min(1).max(200),
+    menuName: z.string().trim().min(1).max(200),
+    pages: z.array(SitePageSchema).min(2).max(8),
   }).strict(),
 ]);
 
@@ -67,7 +90,7 @@ function wordpressMessage(body: string): string {
 export async function POST(request: Request): Promise<Response> {
   try {
     enforceSameOrigin(request);
-    enforceRateLimit("wordpress", clientIp(request), 6, 10 * 60 * 1_000);
+    enforceRateLimit("wordpress", clientIp(request), 20, 10 * 60 * 1_000);
     const parsed = RequestSchema.safeParse(await readJsonBody(request, 4_000_000));
     if (!parsed.success) {
       throw new RequestError("WordPress接続情報を確認してください。", 422);
@@ -87,8 +110,15 @@ export async function POST(request: Request): Promise<Response> {
         applicationPassword: parsed.data.applicationPassword,
         connectorToken: parsed.data.connectorToken,
       };
-      const result = parsed.data.target === "elementor"
-        ? await createElementorDraftPage(config, {
+      const result = parsed.data.target === "site"
+        ? await prepareWordPressSite(config, {
+            siteKey: parsed.data.siteKey,
+            title: parsed.data.title,
+            menuName: parsed.data.menuName,
+            pages: parsed.data.pages,
+          })
+        : parsed.data.target === "elementor"
+          ? await createElementorDraftPage(config, {
             title: parsed.data.title,
             slug: parsed.data.slug,
             requestId: parsed.data.requestId,
@@ -96,11 +126,11 @@ export async function POST(request: Request): Promise<Response> {
             template: parsed.data.template,
             pageTemplate: parsed.data.pageTemplate,
           })
-        : await createDraftPage(config, {
-            title: parsed.data.title,
-            slug: parsed.data.slug,
-            content: parsed.data.content,
-          });
+          : await createDraftPage(config, {
+              title: parsed.data.title,
+              slug: parsed.data.slug,
+              content: parsed.data.content,
+            });
       return jsonResponse({ ok: true, result });
     } catch (error) {
       if (error instanceof WpAuthError) {
