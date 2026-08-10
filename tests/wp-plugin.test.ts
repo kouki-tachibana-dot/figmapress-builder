@@ -255,6 +255,28 @@ test("Connector reconstructs bounded user-scoped Elementor uploads", async () =>
   assert.match(source, /figmapress_connector_rest_create_elementor_page\( \$forward \)/);
 });
 
+test("shared-host site preparation keeps the paired user explicit", async () => {
+  const [pairing, rest] = await Promise.all([
+    readFile(pairingPath, "utf8"),
+    readFile(restApiPath, "utf8"),
+  ]);
+  const handlerStart = pairing.indexOf(
+    "function figmapress_connector_admin_post_prepare_site",
+  );
+  const handlerEnd = pairing.indexOf("add_action(", handlerStart);
+  const handler = pairing.slice(handlerStart, handlerEnd);
+
+  assert.ok(handlerStart > 0 && handlerEnd > handlerStart);
+  assert.match(handler, /user_can\( \$paired_user_id, 'edit_pages' \)/);
+  assert.match(handler, /user_can\( \$paired_user_id, 'edit_theme_options' \)/);
+  assert.match(handler, /figmapress_connector_rest_prepare_site\([\s\S]*?\$paired_user_id/);
+  assert.doesNotMatch(handler, /wp_set_current_user/);
+  assert.match(rest, /function figmapress_connector_rest_prepare_site\( WP_REST_Request \$request, \$actor_user_id = 0 \)/);
+  assert.match(rest, /user_can\( \$actor_user_id, 'edit_post', \$existing_id \)/);
+  assert.match(rest, /user_can\( \$actor_user_id, 'edit_theme_options' \)/);
+  assert.match(rest, /\$post_data\['post_author'\] = absint\( \$actor_user_id \)/);
+});
+
 test("Connector updates one draft for a stable Figma source", async () => {
   const source = await readFile(restApiPath, "utf8");
   assert.match(source, /\^figma:/);
