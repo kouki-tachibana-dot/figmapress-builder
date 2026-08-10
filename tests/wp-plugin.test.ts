@@ -245,6 +245,8 @@ test("Connector reconstructs bounded user-scoped Elementor uploads", async () =>
   assert.match(source, /base64_decode\( \$chunk, true \)/);
   assert.match(source, /\$request->get_body_params\(\)/);
   assert.match(pairing, /\$_POST\['figmapress_token'\]/);
+  assert.match(pairing, /\$_POST\['figmapress_token_hex'\]/);
+  assert.match(pairing, /hex2bin/);
   assert.match(source, /\$total > 128/);
   assert.match(source, /strlen\( \$chunk \) > 128000/);
   assert.match(source, /strlen\( \$decoded \) > 72000/);
