@@ -63,6 +63,7 @@ import {
   runWordPressWriteWithNetworkFallback,
   shouldProxyWordPressDraft,
 } from "@/lib/wordpress-transport";
+import { openWordPressSiteBridge } from "@/lib/wordpress-site-bridge";
 
 type SourceMode = "figma" | "json";
 type OutputTarget = "gutenberg" | "elementor";
@@ -76,7 +77,7 @@ const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
 const CHUNKED_UPLOAD_CONNECTOR_VERSION = "0.16.17";
 const SMALL_CHUNK_UPLOAD_CONNECTOR_VERSION = "0.16.24";
 const FIGMA_HEADER_MEDIA_CONNECTOR_VERSION = "0.16.18";
-const MULTI_PAGE_CONNECTOR_VERSION = "0.17.8";
+const MULTI_PAGE_CONNECTOR_VERSION = "0.17.9";
 
 function versionAtLeast(version: string | undefined, minimum: string): boolean {
   if (!version) return false;
@@ -1508,27 +1509,49 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     const sectionPageKeys = plan.pages
       .map((page) => page.key)
       .filter((key): key is Exclude<FigmaSitePageKey, "home"> => key !== "home");
-    setWpSiteProgress("Figmaから各ページの編集データを準備しています…");
-    const sectionTemplates = await fetchMultiPageTemplates(sectionPageKeys);
-    setWpSiteProgress("下書きページと未割り当てメニューを準備しています…");
-    const prepareThroughProxy = async (): Promise<BrowserPreparedSiteResult> => {
-      if (wpTransport === "direct") {
-        setWpSiteProgress("ブラウザ直結が遮断されたため、安全なサーバー経由で再試行しています…");
+    // Open during the submit gesture so popup blockers do not prevent the
+    // target-origin fallback if both cross-origin and Vercel writes are denied.
+    const siteBridge = credentials.connectorToken
+      ? openWordPressSiteBridge(credentials.baseUrl)
+      : null;
+    let sectionTemplates: Map<Exclude<FigmaSitePageKey, "home">, ElementorTemplate>;
+    let prepared: BrowserPreparedSiteResult;
+    try {
+      setWpSiteProgress("Figmaから各ページの編集データを準備しています…");
+      sectionTemplates = await fetchMultiPageTemplates(sectionPageKeys);
+      setWpSiteProgress("下書きページと未割り当てメニューを準備しています…");
+      const prepareThroughProxy = async (): Promise<BrowserPreparedSiteResult> => {
+        if (wpTransport === "direct") {
+          setWpSiteProgress("ブラウザ直結が遮断されたため、安全なサーバー経由で再試行しています…");
+        }
+        const response = await fetch("/api/wordpress", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ target: "site", ...credentials, ...siteInput }),
+        });
+        const data = await readApi<{ ok: true; result: BrowserPreparedSiteResult }>(response);
+        return data.result;
+      };
+      try {
+        prepared = await runWordPressWriteWithNetworkFallback(
+          wpTransport,
+          () => prepareWordPressSiteDirect(credentials, siteInput),
+          prepareThroughProxy,
+          (error) => error instanceof WordPressDirectError && error.kind === "network",
+        );
+      } catch (error) {
+        if (!credentials.connectorToken || !siteBridge) throw error;
+        setWpSiteProgress("対象WordPress内の安全な接続で下書きを準備しています…");
+        prepared = await siteBridge.prepare<BrowserPreparedSiteResult>(
+          credentials.connectorToken,
+          siteInput,
+        );
       }
-      const response = await fetch("/api/wordpress", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ target: "site", ...credentials, ...siteInput }),
-      });
-      const data = await readApi<{ ok: true; result: BrowserPreparedSiteResult }>(response);
-      return data.result;
-    };
-    const prepared = await runWordPressWriteWithNetworkFallback(
-      wpTransport,
-      () => prepareWordPressSiteDirect(credentials, siteInput),
-      prepareThroughProxy,
-      (error) => error instanceof WordPressDirectError && error.kind === "network",
-    );
+    } catch (error) {
+      siteBridge?.close();
+      throw error;
+    }
+    siteBridge?.close();
     setWpSiteResult(prepared);
 
     const pageLinks = prepared.pages.map((page) => {
@@ -2193,7 +2216,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.26.10 live</span>
+          <span className="status-pill"><i /> v0.26.11 live</span>
         </nav>
       </header>
 
@@ -3280,7 +3303,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.26.10</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.26.11</span></div>
       </footer>
     </main>
   );

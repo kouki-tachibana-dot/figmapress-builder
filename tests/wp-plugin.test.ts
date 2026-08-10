@@ -281,6 +281,20 @@ test("shared-host site preparation keeps the paired user explicit", async () => 
   assert.match(rest, /\$post_data\['post_author'\] = absint\( \$actor_user_id \)/);
 });
 
+test("Connector browser bridge is origin pinned and token scoped", async () => {
+  const pairing = await readFile(pairingPath, "utf8");
+  assert.match(pairing, /figmapress_connector_render_browser_bridge/);
+  assert.match(pairing, /template_redirect/);
+  assert.match(pairing, /figmapress_connector_builder_url\(\)/);
+  assert.match(pairing, /event\.origin !== allowedOrigin/);
+  assert.match(pairing, /event\.source !== window\.opener/);
+  assert.match(pairing, /tokenPattern = \/\^fp1/);
+  assert.match(pairing, /figmapress_token_hex/);
+  assert.match(pairing, /credentials: 'same-origin'/);
+  assert.match(pairing, /frame-ancestors 'none'/);
+  assert.match(pairing, /\/paired\/site-prepare/);
+});
+
 test("Connector updates one draft for a stable Figma source", async () => {
   const source = await readFile(restApiPath, "utf8");
   assert.match(source, /\^figma:/);
