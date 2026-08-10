@@ -494,6 +494,7 @@ test("Connector revisions and verifies a matching draft before visual QA updates
 test("Connector prepares idempotent draft pages and a plugin-owned unassigned menu", async () => {
   const rest = await readFile(restApiPath, "utf8");
   assert.match(rest, /'\/sites\/prepare'/);
+  assert.match(rest, /'\/elementor\/site-prepare'/);
   assert.match(rest, /'permission_callback'\s*=>\s*'figmapress_connector_rest_can_build_site'/);
   assert.match(rest, /current_user_can\( 'edit_pages' \) && current_user_can\( 'edit_theme_options' \)/);
   assert.match(rest, /function figmapress_connector_rest_prepare_site/);

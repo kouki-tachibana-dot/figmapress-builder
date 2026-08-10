@@ -390,7 +390,7 @@ export async function prepareWordPressSite(
       slug: normalizeSlug(page.slug),
     })),
   });
-  const res = await wpFetch(cfg, "/figmapress/v1/sites/prepare", {
+  const res = await wpFetch(cfg, "/figmapress/v1/elementor/site-prepare", {
     method: "POST",
     body: cfg.connectorToken ? undefined : payload,
   }, cfg.connectorToken ? { payload } : undefined);

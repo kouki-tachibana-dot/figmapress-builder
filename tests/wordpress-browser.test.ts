@@ -173,7 +173,7 @@ test("browser transport prepares multi-page drafts with normalized slugs", async
 
   assert.equal(result.pages.every((page) => page.status === "draft"), true);
   assert.equal(result.menu?.assigned, false);
-  assert.match(requests[0]?.url ?? "", /figmapress\/v1\/sites\/prepare$/);
+  assert.match(requests[0]?.url ?? "", /figmapress\/v1\/elementor\/site-prepare$/);
   assert.match(requests[0]?.body ?? "", /"slug":"home"/);
 });
 

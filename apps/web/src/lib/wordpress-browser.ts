@@ -441,7 +441,7 @@ export async function prepareWordPressSiteDirect(
     })),
   });
   const result = await responseJson<BrowserPreparedSiteResult>(
-    await directFetch(config, "/figmapress/v1/sites/prepare", {
+    await directFetch(config, "/figmapress/v1/elementor/site-prepare", {
       method: "POST",
       body: config.connectorToken ? undefined : payload,
     }, config.connectorToken ? { payload } : undefined),
