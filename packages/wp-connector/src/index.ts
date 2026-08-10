@@ -278,6 +278,38 @@ async function wpFetch(
   return res;
 }
 
+async function wpAdminPost(
+  cfg: WpConfig,
+  action: string,
+  fields: Record<string, string>,
+): Promise<Response> {
+  const connectorToken = cfg.connectorToken?.trim();
+  if (!connectorToken) {
+    throw new WpAuthError("FigmaPress Connector pairing is required.");
+  }
+  const form = new URLSearchParams();
+  form.set("action", action);
+  form.set("figmapress_token_hex", hexEncodePairingToken(connectorToken));
+  for (const [key, value] of Object.entries(fields)) form.set(key, value);
+  const response = await fetch(
+    `${cfg.baseUrl.replace(/\/+$/, "")}/wp-admin/admin-post.php`,
+    {
+      method: "POST",
+      body: form,
+      headers: { Accept: "application/json" },
+      redirect: "error",
+      signal: AbortSignal.timeout(120_000),
+    },
+  );
+  if (response.status === 401) {
+    const body = await response.text();
+    throw new WpAuthError(
+      `FigmaPress Connector pairing expired or was revoked (${response.status}).\n${body}`,
+    );
+  }
+  return response;
+}
+
 export async function probeWordPressConnection(
   cfg: WpConfig,
 ): Promise<WordPressConnectionStatus> {
@@ -405,13 +437,16 @@ export async function prepareWordPressSite(
       slug: normalizeSlug(page.slug),
     })),
   });
-  // A few shared-host WAFs reject the random token characters only on this
-  // multi-page POST. Hex keeps the scoped token in the HTTPS body without
-  // changing its value after Connector-side decoding.
-  const res = await wpFetch(cfg, "/figmapress/v1/elementor/site-prepare", {
-    method: "POST",
-    body: cfg.connectorToken ? undefined : payload,
-  }, cfg.connectorToken ? { payload } : undefined, "hex");
+  // Shared hosts can block authenticated multi-page REST writes even though
+  // the Connector status and single-page routes remain available. The paired
+  // server proxy therefore uses WordPress' standard admin-post dispatcher;
+  // non-paired Application Password clients retain the REST route.
+  const res = cfg.connectorToken
+    ? await wpAdminPost(cfg, "figmapress_site_prepare", { payload })
+    : await wpFetch(cfg, "/figmapress/v1/elementor/site-prepare", {
+      method: "POST",
+      body: payload,
+    });
   const text = await res.text();
   if (!res.ok) {
     throw new WpRequestError(

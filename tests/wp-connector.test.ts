@@ -232,12 +232,13 @@ test("server transport prepares stable multi-page drafts and an unassigned menu"
   assert.doesNotMatch(requests[0]?.body ?? "", /"status":"publish"/);
 });
 
-test("server paired transport hex-encodes the scoped token in the HTTPS body", async (context) => {
+test("server paired transport uses the scoped admin-post fallback", async (context) => {
   const connectorToken = `fp1.42.${"d".repeat(48)}`;
-  const requests: Array<{ body: string; tokenHeader: string | null; contentType: string | null }> = [];
-  context.mock.method(globalThis, "fetch", async (_input, init) => {
+  const requests: Array<{ url: string; body: string; tokenHeader: string | null; contentType: string | null }> = [];
+  context.mock.method(globalThis, "fetch", async (input, init) => {
     const headers = new Headers(init?.headers);
     requests.push({
+      url: String(input),
       body: String(init?.body ?? ""),
       tokenHeader: headers.get("X-FigmaPress-Token"),
       contentType: headers.get("Content-Type"),
@@ -266,9 +267,11 @@ test("server paired transport hex-encodes the scoped token in the HTTPS body", a
   });
 
   assert.equal(requests.length, 1);
+  assert.match(requests[0]?.url ?? "", /wp-admin\/admin-post\.php$/);
   assert.equal(requests[0]?.tokenHeader, null);
   assert.equal(requests[0]?.contentType, null);
   const form = new URLSearchParams(requests[0]?.body);
+  assert.equal(form.get("action"), "figmapress_site_prepare");
   assert.equal(form.get("figmapress_token"), null);
   assert.equal(
     form.get("figmapress_token_hex"),

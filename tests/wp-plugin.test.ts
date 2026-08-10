@@ -369,6 +369,10 @@ test("Connector pairing is revocable, hashed, expiring, and namespace scoped", a
   assert.match(pairing, /#\^\/\?figmapress\/v1/);
   assert.doesNotMatch(pairing, /strpos\( \$request_uri/);
   assert.match(pairing, /#figmapress-connect=/);
+  assert.match(pairing, /admin_post_nopriv_figmapress_site_prepare/);
+  assert.match(pairing, /figmapress_connector_admin_post_prepare_site/);
+  assert.match(pairing, /figmapress_connector_verify_pairing_token/);
+  assert.match(pairing, /figmapress_connector_rest_prepare_site/);
   assert.match(pairing, /delete_user_meta\( \$user_id, '_figmapress_pairing_token_hash'/);
   assert.match(rest, /'\/gutenberg\/pages'/);
   assert.match(rest, /'post_status'\s*=>\s*'draft'/);

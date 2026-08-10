@@ -1,11 +1,11 @@
 {
   "name": "FigmaPress Connector",
   "slug": "figmapress-connector",
-  "version": "0.17.4",
+  "version": "0.17.5",
   "requires": "6.4",
   "requires_php": "7.4",
   "tested": "7.0",
   "homepage": "https://figmapress-builder.vercel.app",
   "download_url": "https://figmapress-builder.vercel.app/downloads/figmapress-connector.zip",
-  "changelog": "<h4>0.17.4</h4><ul><li>共有サーバーが長いConnectorトークンを含む複数ページPOSTだけ拒否する場合に、HTTPS本文の16進互換形式へ自動切り替えます。</li><li>Connector側で元のトークンへ復元して既存のハッシュ照合を行い、権限・有効期限・失効機能を維持します。</li></ul><h4>0.17.3</h4><ul><li>複数ページ準備を既存のElementor書き込み系REST配下へ移し、共有サーバーが特定経路だけHTTP 403で遮断する問題を回避します。</li><li>旧経路も互換用に保持し、既存連携を壊さず新しい安全経路を優先します。</li></ul><h4>0.17.2</h4><ul><li>新規下書きにElementorデータがまだない場合も0件として安全に扱い、共有サーバーのPHP警告による応答破損を防止します。</li><li>複数ページ準備のエラーでHTTP番号を表示し、ホスティング側の拒否とWordPress内部エラーを区別しやすくしました。</li></ul><h4>0.17.1</h4><ul><li>複数ページ準備の接続トークンをHTTPS本文で送信し、XServerなど共有サーバーの認証ヘッダー遮断を回避します。</li><li>ブラウザ直結と安全なサーバー経由の両方で同じ互換経路を利用し、下書き限定の保護を維持します。</li></ul>"
+  "changelog": "<h4>0.17.5</h4><ul><li>認証済みREST書き込みを遮断する共有サーバー向けに、複数ページ準備をWordPress標準のadmin-post経路でも安全に実行できるようにしました。</li><li>フォールバック経路でも同じConnectorトークン、編集権限、下書き限定、未割り当てメニューの保護を維持します。</li></ul><h4>0.17.4</h4><ul><li>共有サーバーが長いConnectorトークンを含む複数ページPOSTだけ拒否する場合に、HTTPS本文の16進互換形式へ自動切り替えます。</li><li>Connector側で元のトークンへ復元して既存のハッシュ照合を行い、権限・有効期限・失効機能を維持します。</li></ul><h4>0.17.3</h4><ul><li>複数ページ準備を既存のElementor書き込み系REST配下へ移し、共有サーバーが特定経路だけHTTP 403で遮断する問題を回避します。</li><li>旧経路も互換用に保持し、既存連携を壊さず新しい安全経路を優先します。</li></ul><h4>0.17.2</h4><ul><li>新規下書きにElementorデータがまだない場合も0件として安全に扱い、共有サーバーのPHP警告による応答破損を防止します。</li><li>複数ページ準備のエラーでHTTP番号を表示し、ホスティング側の拒否とWordPress内部エラーを区別しやすくしました。</li></ul><h4>0.17.1</h4><ul><li>複数ページ準備の接続トークンをHTTPS本文で送信し、XServerなど共有サーバーの認証ヘッダー遮断を回避します。</li><li>ブラウザ直結と安全なサーバー経由の両方で同じ互換経路を利用し、下書き限定の保護を維持します。</li></ul>"
 }

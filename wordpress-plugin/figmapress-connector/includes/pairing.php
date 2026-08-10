@@ -54,11 +54,7 @@ function figmapress_connector_pairing_token_hash( $token ) {
     return hash_hmac( 'sha256', $token, wp_salt( 'auth' ) );
 }
 
-function figmapress_connector_authenticate_pairing_token( $user_id ) {
-    if ( $user_id || ! figmapress_connector_is_scoped_rest_request() ) {
-        return $user_id;
-    }
-
+function figmapress_connector_pairing_token_from_request() {
     $header_token = isset( $_SERVER['HTTP_X_FIGMAPRESS_TOKEN'] )
         ? trim( wp_unslash( $_SERVER['HTTP_X_FIGMAPRESS_TOKEN'] ) )
         : '';
@@ -80,7 +76,10 @@ function figmapress_connector_authenticate_pairing_token( $user_id ) {
             $body_token = $decoded_token;
         }
     }
-    $token        = '' !== $header_token ? $header_token : $body_token;
+    return '' !== $header_token ? $header_token : $body_token;
+}
+
+function figmapress_connector_verify_pairing_token( $token ) {
     if (
         ! preg_match(
             '/^fp1\.([1-9][0-9]{0,19})\.([A-Za-z0-9_-]{32,128})$/',
@@ -88,7 +87,7 @@ function figmapress_connector_authenticate_pairing_token( $user_id ) {
             $matches
         )
     ) {
-        return $user_id;
+        return 0;
     }
 
     $paired_user_id = absint( $matches[1] );
@@ -114,7 +113,7 @@ function figmapress_connector_authenticate_pairing_token( $user_id ) {
             figmapress_connector_pairing_token_hash( $token )
         )
     ) {
-        return $user_id;
+        return 0;
     }
 
     $last_used = absint(
@@ -134,6 +133,16 @@ function figmapress_connector_authenticate_pairing_token( $user_id ) {
     $GLOBALS['figmapress_pairing_authenticated'] = true;
     return $paired_user_id;
 }
+
+function figmapress_connector_authenticate_pairing_token( $user_id ) {
+    if ( $user_id || ! figmapress_connector_is_scoped_rest_request() ) {
+        return $user_id;
+    }
+    $paired_user_id = figmapress_connector_verify_pairing_token(
+        figmapress_connector_pairing_token_from_request()
+    );
+    return $paired_user_id ? $paired_user_id : $user_id;
+}
 add_filter(
     'determine_current_user',
     'figmapress_connector_authenticate_pairing_token',
@@ -147,6 +156,73 @@ function figmapress_connector_allow_pairing_cors_header( $headers ) {
 add_filter(
     'rest_allowed_cors_headers',
     'figmapress_connector_allow_pairing_cors_header'
+);
+
+/**
+ * Shared-host fallback for installations that block authenticated REST writes.
+ * This endpoint is still protected by the same scoped, hashed pairing token.
+ */
+function figmapress_connector_admin_post_prepare_site() {
+    $paired_user_id = figmapress_connector_verify_pairing_token(
+        figmapress_connector_pairing_token_from_request()
+    );
+    if ( ! $paired_user_id ) {
+        wp_send_json(
+            array(
+                'code'    => 'figmapress_auth_required',
+                'message' => 'Authentication is required.',
+                'data'    => array( 'status' => 401 ),
+            ),
+            401
+        );
+    }
+    wp_set_current_user( $paired_user_id );
+    if ( ! current_user_can( 'edit_pages' ) || ! current_user_can( 'edit_theme_options' ) ) {
+        wp_send_json(
+            array(
+                'code'    => 'figmapress_site_permission_required',
+                'message' => '複数ページとメニューを作成する権限がありません。',
+                'data'    => array( 'status' => 403 ),
+            ),
+            403
+        );
+    }
+
+    $payload = isset( $_POST['payload'] )
+        ? wp_unslash( $_POST['payload'] )
+        : '';
+    $request = new WP_REST_Request(
+        'POST',
+        '/figmapress/v1/elementor/site-prepare'
+    );
+    $request->set_param( 'payload', $payload );
+    $result = figmapress_connector_rest_prepare_site( $request );
+    if ( is_wp_error( $result ) ) {
+        $error_data = $result->get_error_data();
+        $status = is_array( $error_data ) && isset( $error_data['status'] )
+            ? absint( $error_data['status'] )
+            : 400;
+        wp_send_json(
+            array(
+                'code'    => $result->get_error_code(),
+                'message' => $result->get_error_message(),
+                'data'    => is_array( $error_data )
+                    ? $error_data
+                    : array( 'status' => $status ),
+            ),
+            $status
+        );
+    }
+    $response = rest_ensure_response( $result );
+    wp_send_json( $response->get_data(), $response->get_status() );
+}
+add_action(
+    'admin_post_nopriv_figmapress_site_prepare',
+    'figmapress_connector_admin_post_prepare_site'
+);
+add_action(
+    'admin_post_figmapress_site_prepare',
+    'figmapress_connector_admin_post_prepare_site'
 );
 
 function figmapress_connector_builder_url() {
