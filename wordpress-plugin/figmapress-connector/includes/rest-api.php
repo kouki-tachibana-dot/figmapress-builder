@@ -377,6 +377,12 @@ function figmapress_connector_sync_site_menu( $site_key, $menu_name, $pages ) {
 function figmapress_connector_rest_prepare_site( WP_REST_Request $request ) {
     $params = $request->get_json_params();
     if ( ! is_array( $params ) ) {
+        $payload = $request->get_param( 'payload' );
+        if ( is_string( $payload ) && '' !== $payload ) {
+            $params = json_decode( wp_unslash( $payload ), true );
+        }
+    }
+    if ( ! is_array( $params ) ) {
         return new WP_Error( 'figmapress_invalid_site', '複数ページの入力内容が無効です。', array( 'status' => 422 ) );
     }
     $site_key = isset( $params['siteKey'] ) ? sanitize_text_field( $params['siteKey'] ) : '';
