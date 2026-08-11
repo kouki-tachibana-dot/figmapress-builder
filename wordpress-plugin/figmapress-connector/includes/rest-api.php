@@ -447,15 +447,20 @@ function figmapress_connector_rest_prepare_site( WP_REST_Request $request, $acto
 
     foreach ( $validated_pages as $index => $requested ) {
         $existing_id = figmapress_connector_find_page_by_meta( '_figmapress_source_key', $requested['sourceKey'] );
-        $can_edit_existing = $actor_user_id
-            ? user_can( $actor_user_id, 'edit_post', $existing_id )
-            : current_user_can( 'edit_post', $existing_id );
-        if ( $existing_id && ( ! $can_edit_existing || 'draft' !== get_post_status( $existing_id ) ) ) {
-            return new WP_Error(
-                'figmapress_site_page_not_editable',
-                'FigmaPress管理ページが下書き以外の状態です。公開済みページは自動更新しません。',
-                array( 'status' => 409, 'postId' => $existing_id )
-            );
+        // map_meta_cap() expects a real post for edit_post. Passing ID 0 for a
+        // page that has not been prepared yet can trigger a fatal error on
+        // newer WordPress versions before wp_insert_post() is reached.
+        if ( $existing_id ) {
+            $can_edit_existing = $actor_user_id
+                ? user_can( $actor_user_id, 'edit_post', $existing_id )
+                : current_user_can( 'edit_post', $existing_id );
+            if ( ! $can_edit_existing || 'draft' !== get_post_status( $existing_id ) ) {
+                return new WP_Error(
+                    'figmapress_site_page_not_editable',
+                    'FigmaPress管理ページが下書き以外の状態です。公開済みページは自動更新しません。',
+                    array( 'status' => 409, 'postId' => $existing_id )
+                );
+            }
         }
         $validated_pages[ $index ]['existingId'] = $existing_id;
     }
