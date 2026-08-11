@@ -299,6 +299,10 @@ function figmapress_connector_sync_site_menu( $site_key, $menu_name, $pages, $ac
         );
     }
 
+    if ( ! function_exists( 'wp_create_nav_menu' ) || ! function_exists( 'wp_update_nav_menu_item' ) ) {
+        require_once ABSPATH . 'wp-admin/includes/nav-menu.php';
+    }
+
     $menu_id = figmapress_connector_find_site_menu( $site_key );
     if ( $menu_id ) {
         $updated = wp_update_nav_menu_object(
@@ -492,7 +496,10 @@ function figmapress_connector_rest_prepare_site( WP_REST_Request $request, $acto
         update_post_meta( $post_id, '_figmapress_source_key', $source_key );
         update_post_meta( $post_id, '_figmapress_site_key', $site_key );
         update_post_meta( $post_id, '_figmapress_page_key', $key );
-        if ( 0 === figmapress_connector_count_elementor_elements( figmapress_connector_read_elementor_data( $post_id ) ) ) {
+        // Newly prepared placeholders have no Elementor document yet. Existing
+        // drafts may contain multi-megabyte image data, so do not decode the
+        // previous document during this lightweight page/menu preparation.
+        if ( ! $existing_id ) {
             update_post_meta( $post_id, '_figmapress_prepared', '1' );
         }
         $pages[] = array(
@@ -737,7 +744,6 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
     $reuse_existing = false;
     if ( $existing_id ) {
         if ( $existing_id && current_user_can( 'edit_post', $existing_id ) ) {
-            $stored_elements = figmapress_connector_count_elementor_elements( figmapress_connector_read_elementor_data( $existing_id ) );
             $existing_lock   = get_option( $request_lock_key );
             $lock_started    = is_array( $existing_lock ) && isset( $existing_lock['started'] )
                 ? absint( $existing_lock['started'] )
@@ -757,32 +763,36 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
                     array( 'status' => 409, 'postId' => $existing_id )
                 );
             }
-            if ( 0 === $stored_elements ) {
-                if ( '1' === (string) get_post_meta( $existing_id, '_figmapress_prepared', true ) && '' !== $source_key ) {
-                    $reuse_existing = true;
-                } else {
+            if ( '' !== $source_key ) {
+                // A stable Figma source always updates the same draft. Avoid
+                // decoding its previous multi-megabyte Elementor document;
+                // the validated incoming document will replace it below.
+                $reuse_existing = true;
+            } else {
+                $stored_elements = figmapress_connector_count_elementor_elements(
+                    figmapress_connector_read_elementor_data( $existing_id )
+                );
+                if ( 0 === $stored_elements ) {
                     wp_delete_post( $existing_id, true );
                     delete_option( $request_lock_key );
                     $existing_id = 0;
+                } else {
+                    return rest_ensure_response(
+                        array(
+                            'id'             => $existing_id,
+                            'slug'           => get_post_field( 'post_name', $existing_id ),
+                            'status'         => $existing_status,
+                            'target'         => 'elementor',
+                            'editLink'       => admin_url( 'post.php?post=' . $existing_id . '&action=elementor' ),
+                            'previewLink'    => get_preview_post_link( $existing_id ),
+                            'rawLink'        => get_permalink( $existing_id ),
+                            'storedElements' => $stored_elements,
+                            'idempotent'     => true,
+                            'updated'        => false,
+                            'warnings'       => array( '前回の処理で作成済みの下書きを再利用しました。重複ページは作成していません。' ),
+                        )
+                    );
                 }
-            } elseif ( '' === $source_key ) {
-                return rest_ensure_response(
-                    array(
-                        'id'             => $existing_id,
-                        'slug'           => get_post_field( 'post_name', $existing_id ),
-                        'status'         => $existing_status,
-                        'target'         => 'elementor',
-                        'editLink'       => admin_url( 'post.php?post=' . $existing_id . '&action=elementor' ),
-                        'previewLink'    => get_preview_post_link( $existing_id ),
-                        'rawLink'        => get_permalink( $existing_id ),
-                        'storedElements' => $stored_elements,
-                        'idempotent'     => true,
-                        'updated'        => false,
-                        'warnings'       => array( '前回の処理で作成済みの下書きを再利用しました。重複ページは作成していません。' ),
-                    )
-                );
-            } else {
-                $reuse_existing = true;
             }
         }
     }

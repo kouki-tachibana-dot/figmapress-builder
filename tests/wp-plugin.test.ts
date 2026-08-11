@@ -547,6 +547,9 @@ test("Connector revisions and verifies a matching draft before visual QA updates
 
 test("Connector prepares idempotent draft pages and a plugin-owned unassigned menu", async () => {
   const rest = await readFile(restApiPath, "utf8");
+  const prepareStart = rest.indexOf("function figmapress_connector_rest_prepare_site");
+  const prepareEnd = rest.indexOf("function figmapress_connector_rest_create_gutenberg_page", prepareStart);
+  const prepareSite = rest.slice(prepareStart, prepareEnd);
   assert.match(rest, /'\/sites\/prepare'/);
   assert.match(rest, /'\/elementor\/site-prepare'/);
   assert.match(rest, /'permission_callback'\s*=>\s*'figmapress_connector_rest_can_build_site'/);
@@ -561,6 +564,7 @@ test("Connector prepares idempotent draft pages and a plugin-owned unassigned me
   assert.match(rest, /'_figmapress_prepared'/);
   assert.match(rest, /wp_create_nav_menu\( \$menu_name \)/);
   assert.match(rest, /wp_update_nav_menu_item\(/);
+  assert.match(rest, /require_once ABSPATH \. 'wp-admin\/includes\/nav-menu\.php'/);
   assert.match(rest, /'menu-item-object'\s*=>\s*'page'/);
   assert.match(rest, /get_nav_menu_locations\(\)/);
   assert.match(rest, /'assigned'\s*=>\s*! empty\( \$assigned \)/);
@@ -569,6 +573,9 @@ test("Connector prepares idempotent draft pages and a plugin-owned unassigned me
   assert.match(rest, /foreach \( \$validated_pages as \$requested \)/);
   assert.match(rest, /\$validated_pages\[ \$index \]\['existingId'\] = \$existing_id/);
   assert.match(rest, /'draft' !== get_post_status\( \$existing_id \)/);
+  assert.doesNotMatch(prepareSite, /figmapress_connector_read_elementor_data/);
+  assert.match(rest, /A stable Figma source always updates the same draft/);
+  assert.match(rest, /the validated incoming document will replace it below/);
   assert.match(
     rest,
     /function figmapress_connector_count_elementor_elements\( \$elements \) \{\s+if \( ! is_array\( \$elements \) \) \{\s+return 0;/,
