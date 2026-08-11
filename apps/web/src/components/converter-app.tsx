@@ -66,6 +66,7 @@ import {
 import {
   buildWordPressSiteBridgeUrl,
   openWordPressSiteBridge,
+  WORDPRESS_SITE_BRIDGE_FRAME_ID,
 } from "@/lib/wordpress-site-bridge";
 
 type SourceMode = "figma" | "json";
@@ -80,7 +81,7 @@ const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
 const CHUNKED_UPLOAD_CONNECTOR_VERSION = "0.16.17";
 const SMALL_CHUNK_UPLOAD_CONNECTOR_VERSION = "0.16.24";
 const FIGMA_HEADER_MEDIA_CONNECTOR_VERSION = "0.16.18";
-const MULTI_PAGE_CONNECTOR_VERSION = "0.17.9";
+const MULTI_PAGE_CONNECTOR_VERSION = "0.17.10";
 
 function safeWordPressSiteBridgeUrl(baseUrl: string): string {
   try {
@@ -355,6 +356,7 @@ interface WordPressStatus {
   siteBuild?: {
     pages: boolean;
     menus: boolean;
+    bridge?: boolean;
   };
   canEditPages: boolean;
   pairing?: {
@@ -824,7 +826,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     FIGMA_HEADER_MEDIA_CONNECTOR_VERSION,
   );
   const connectorSupportsMultiPage = wpStatus?.siteBuild
-    ? wpStatus.siteBuild.pages && wpStatus.siteBuild.menus
+    ? wpStatus.siteBuild.pages
+      && wpStatus.siteBuild.menus
+      && wpStatus.siteBuild.bridge === true
     : versionAtLeast(wpStatus?.connectorVersion, MULTI_PAGE_CONNECTOR_VERSION);
   const multiPagePlan = output?.multiPagePlan;
   const multiPageAvailable = wpTarget === "elementor"
@@ -1523,8 +1527,8 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     const sectionPageKeys = plan.pages
       .map((page) => page.key)
       .filter((key): key is Exclude<FigmaSitePageKey, "home"> => key !== "home");
-    // Open during the submit gesture so popup blockers do not prevent the
-    // target-origin fallback if both cross-origin and Vercel writes are denied.
+    // Prefer the already-loaded target-origin iframe. Older Connector versions
+    // keep the submit-gesture popup fallback for backwards compatibility.
     const siteBridge = credentials.connectorToken
       ? openWordPressSiteBridge(credentials.baseUrl)
       : null;
@@ -2230,7 +2234,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.26.12 live</span>
+          <span className="status-pill"><i /> v0.26.13 live</span>
         </nav>
       </header>
 
@@ -3096,14 +3100,24 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
               {wpBuildMode === "site" && wpStatus && connectorToken && wordpressSiteBridgeUrl && (
                 <div className="paired-connection paired-connection--setup">
                   <strong>WordPress安全接続を準備</strong>
-                  <span>先に接続画面を開いたまま、この画面へ戻って下書き構築を実行してください。</span>
-                  <a
-                    href={wordpressSiteBridgeUrl}
-                    rel="opener"
-                    target="figmapress-site-bridge"
-                  >
-                    WordPress安全接続を先に開く ↗
-                  </a>
+                  <span>対象WordPress内の安全接続をこの画面で待機させます。認証情報はFigmaPressサーバーへ保存・転送しません。</span>
+                  {connectorSupportsMultiPage ? (
+                    <iframe
+                      className="wordpress-site-bridge-frame"
+                      id={WORDPRESS_SITE_BRIDGE_FRAME_ID}
+                      sandbox="allow-same-origin allow-scripts"
+                      src={wordpressSiteBridgeUrl}
+                      title="WordPress安全接続"
+                    />
+                  ) : (
+                    <a
+                      href={wordpressSiteBridgeUrl}
+                      rel="opener"
+                      target="figmapress-site-bridge"
+                    >
+                      WordPress安全接続を先に開く ↗
+                    </a>
+                  )}
                 </div>
               )}
               {visualQaGateRequired && !visualQaComplete && (
@@ -3330,7 +3344,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.26.12</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.26.13</span></div>
       </footer>
     </main>
   );

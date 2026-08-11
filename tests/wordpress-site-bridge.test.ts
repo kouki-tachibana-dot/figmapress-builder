@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { buildWordPressSiteBridgeUrl } from "../apps/web/src/lib/wordpress-site-bridge";
+import {
+  buildWordPressSiteBridgeUrl,
+  WORDPRESS_SITE_BRIDGE_FRAME_ID,
+} from "../apps/web/src/lib/wordpress-site-bridge";
 
 test("WordPress site bridge stays on the configured target origin", () => {
   assert.equal(
@@ -21,12 +24,13 @@ test("WordPress site bridge rejects non-HTTPS target URLs before opening", () =>
   );
 });
 
-test("multi-page form offers a user-initiated WordPress bridge launch", () => {
+test("multi-page form embeds the target-origin WordPress bridge", () => {
   const component = readFileSync(
     new URL("../apps/web/src/components/converter-app.tsx", import.meta.url),
     "utf8",
   );
-  assert.match(component, /target="figmapress-site-bridge"/);
-  assert.match(component, /rel="opener"/);
-  assert.match(component, /WordPress安全接続を先に開く/);
+  assert.equal(WORDPRESS_SITE_BRIDGE_FRAME_ID, "figmapress-site-bridge-frame");
+  assert.match(component, /id=\{WORDPRESS_SITE_BRIDGE_FRAME_ID\}/);
+  assert.match(component, /sandbox="allow-same-origin allow-scripts"/);
+  assert.match(component, /title="WordPress安全接続"/);
 });

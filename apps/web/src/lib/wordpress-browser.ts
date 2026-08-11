@@ -32,6 +32,7 @@ export interface BrowserWordPressStatus {
   siteBuild?: {
     pages: boolean;
     menus: boolean;
+    bridge?: boolean;
   };
   canEditPages: boolean;
   pairing?: {
@@ -392,7 +393,7 @@ export async function probeWordPressDirect(
       imageTransforms?: unknown;
       mediaPersistence?: unknown;
     };
-    siteBuild?: { pages?: unknown; menus?: unknown };
+    siteBuild?: { pages?: unknown; menus?: unknown; bridge?: unknown };
   }>(response, config.connectorToken);
   return {
     authenticated: true,
@@ -435,6 +436,9 @@ export async function probeWordPressDirect(
     siteBuild: status.siteBuild ? {
       pages: status.siteBuild.pages === true,
       menus: status.siteBuild.menus === true,
+      ...(status.siteBuild.bridge !== undefined
+        ? { bridge: status.siteBuild.bridge === true }
+        : {}),
     } : undefined,
     canEditPages: status.canEditPages === true,
     pairing: status.pairing ? {

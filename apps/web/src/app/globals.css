@@ -424,6 +424,7 @@ a { color: inherit; }
 .paired-connection--setup { align-items: flex-start; flex-wrap: wrap; }
 .paired-connection--setup span { flex: 1 1 260px; }
 .paired-connection--setup a { background: #557a2a; border-radius: 999px; color: #fff; flex: 0 0 auto; font-size: 8px; font-weight: 800; padding: 8px 12px; text-decoration: none; }
+.wordpress-site-bridge-frame { background: #fff; border: 1px solid #c8dba9; border-radius: 12px; flex: 1 0 100%; height: 220px; width: 100%; }
 .connection-button { background: transparent; border: 1px solid #bdc8c4; border-radius: 999px; color: #304750; cursor: pointer; flex: 0 0 auto; font-size: 10px; font-weight: 800; min-height: 35px; padding: 0 15px; }
 .connection-button:disabled { cursor: not-allowed; opacity: .5; }
 .connection-status { align-items: center; display: flex; flex-wrap: wrap; gap: 7px; }

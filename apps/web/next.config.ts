@@ -23,7 +23,9 @@ const securityHeaders = [
       "img-src 'self' data: https:",
       // Users connect directly from this page to their own HTTPS WordPress site.
       "connect-src 'self' https:",
-      "frame-src 'self' blob:",
+      // The target WordPress bridge is framed only after an authenticated,
+      // user-configured HTTPS connection has been diagnosed.
+      "frame-src 'self' blob: https:",
       "upgrade-insecure-requests",
     ].join("; "),
   },

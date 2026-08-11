@@ -10,4 +10,5 @@ test("the production CSP permits direct HTTPS WordPress connections", async () =
     .find((header) => header.key === "Content-Security-Policy")?.value;
 
   assert.match(contentSecurityPolicy ?? "", /(?:^|; )connect-src 'self' https:(?:;|$)/);
+  assert.match(contentSecurityPolicy ?? "", /(?:^|; )frame-src 'self' blob: https:(?:;|$)/);
 });
