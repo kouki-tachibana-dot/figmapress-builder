@@ -1,11 +1,11 @@
 {
   "name": "FigmaPress Connector",
   "slug": "figmapress-connector",
-  "version": "0.17.10",
+  "version": "0.17.11",
   "requires": "6.4",
   "requires_php": "7.4",
   "tested": "7.0",
   "homepage": "https://figmapress-builder.vercel.app",
   "download_url": "https://figmapress-builder.vercel.app/downloads/figmapress-connector.zip",
-  "changelog": "<h4>0.17.10</h4><ul><li>WordPress安全接続をFigmaPress内の限定iframeで待機させ、自動ポップアップを禁止するブラウザでも複数下書きを構築できるようにしました。</li><li>埋め込み元はFigmaPress本番オリジンだけに固定し、Connectorトークン、下書き限定、未割り当てメニューの保護を維持します。</li></ul><h4>0.17.9</h4><ul><li>Vercel送信元やクロスオリジン書き込みを拒否するサイト向けに、対象WordPress内で同一オリジン送信する安全な接続ウィンドウを追加しました。</li><li>接続ウィンドウはFigmaPress本番オリジンと起動元を照合し、Connectorトークンを対象WordPress以外へ保存・転送しません。</li></ul><h4>0.17.8</h4><ul><li>wp-admin配下の外部書き込みを拒否するサイト向けに、認証前はゲスト状態を保つ専用REST経路を追加しました。</li><li>専用REST内でConnectorトークンと検証済みユーザーのページ・メニュー権限を明示確認します。</li></ul>"
+  "changelog": "<h4>0.17.11</h4><ul><li>複数ページ準備時に既存の大容量Elementorデータを展開せず、共有サーバーのメモリ上限内で同じ下書きを更新できるようにしました。</li><li>WordPress前面の安全接続からもメニュー関数を確実に読み込み、6ページ後の未割り当てメニュー作成を安定化しました。</li></ul><h4>0.17.10</h4><ul><li>WordPress安全接続をFigmaPress内の限定iframeで待機させ、自動ポップアップを禁止するブラウザでも複数下書きを構築できるようにしました。</li><li>埋め込み元はFigmaPress本番オリジンだけに固定し、Connectorトークン、下書き限定、未割り当てメニューの保護を維持します。</li></ul><h4>0.17.9</h4><ul><li>Vercel送信元やクロスオリジン書き込みを拒否するサイト向けに、対象WordPress内で同一オリジン送信する安全な接続ウィンドウを追加しました。</li><li>接続ウィンドウはFigmaPress本番オリジンと起動元を照合し、Connectorトークンを対象WordPress以外へ保存・転送しません。</li></ul>"
 }
