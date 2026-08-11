@@ -572,6 +572,8 @@ test("Connector prepares idempotent draft pages and a plugin-owned unassigned me
   assert.match(rest, /if \( empty\( \$seen\['home'\] \) \)/);
   assert.match(rest, /foreach \( \$validated_pages as \$requested \)/);
   assert.match(rest, /\$validated_pages\[ \$index \]\['existingId'\] = \$existing_id/);
+  assert.match(rest, /if \( \$existing_id \) \{\s+\$can_edit_existing = \$actor_user_id/);
+  assert.doesNotMatch(rest, /\$can_edit_existing = \$actor_user_id[\s\S]{0,180}\$existing_id &&/);
   assert.match(rest, /'draft' !== get_post_status\( \$existing_id \)/);
   assert.doesNotMatch(prepareSite, /figmapress_connector_read_elementor_data/);
   assert.match(rest, /A stable Figma source always updates the same draft/);
