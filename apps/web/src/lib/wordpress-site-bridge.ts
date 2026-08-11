@@ -14,6 +14,7 @@ type BridgeMessage = {
 
 const BRIDGE_READY_TIMEOUT_MS = 20_000;
 const BRIDGE_REQUEST_TIMEOUT_MS = 120_000;
+export const WORDPRESS_SITE_BRIDGE_FRAME_ID = "figmapress-site-bridge-frame";
 
 function isBridgeMessage(value: unknown): value is BridgeMessage {
   return typeof value === "object" && value !== null;
@@ -38,19 +39,29 @@ export function buildWordPressSiteBridgeUrl(baseUrl: string): string {
 }
 
 /**
- * Open a target-origin helper while the submit click still has popup
- * permission. The helper relays only the scoped site-preparation request and
- * returns its JSON response through an origin-checked postMessage channel.
+ * Reuse the target-origin iframe when available, with a popup fallback for
+ * older Connector versions. The helper relays only the scoped site-preparation
+ * request and returns its JSON response through an origin-checked postMessage
+ * channel.
  */
 export function openWordPressSiteBridge(baseUrl: string): WordPressSiteBridge | null {
   const bridgeUrl = buildWordPressSiteBridgeUrl(baseUrl);
   const targetOrigin = new URL(bridgeUrl).origin;
-  const popup = window.open(
-    bridgeUrl,
-    "figmapress-site-bridge",
-    "popup,width=560,height=720",
-  );
-  if (!popup) return null;
+  const frame = document.getElementById(WORDPRESS_SITE_BRIDGE_FRAME_ID);
+  const embeddedWindow = frame instanceof HTMLIFrameElement
+    && frame.contentWindow
+    && frame.src === bridgeUrl
+    ? frame.contentWindow
+    : null;
+  const popup = embeddedWindow
+    ? null
+    : window.open(
+        bridgeUrl,
+        "figmapress-site-bridge",
+        "popup,width=560,height=720",
+      );
+  const bridgeWindow = embeddedWindow ?? popup;
+  if (!bridgeWindow) return null;
 
   let closed = false;
   let resolveReady: (() => void) | null = null;
@@ -58,7 +69,7 @@ export function openWordPressSiteBridge(baseUrl: string): WordPressSiteBridge | 
     resolveReady = resolve;
   });
   const onReady = (event: MessageEvent<unknown>) => {
-    if (event.origin !== targetOrigin || event.source !== popup || !isBridgeMessage(event.data)) return;
+    if (event.origin !== targetOrigin || event.source !== bridgeWindow || !isBridgeMessage(event.data)) return;
     if (event.data.type === "figmapress:bridge-ready") resolveReady?.();
   };
   window.addEventListener("message", onReady);
@@ -67,10 +78,12 @@ export function openWordPressSiteBridge(baseUrl: string): WordPressSiteBridge | 
     if (closed) return;
     closed = true;
     window.removeEventListener("message", onReady);
-    try {
-      popup.close();
-    } catch {
-      // Cross-origin popups can already be closed by the user.
+    if (popup) {
+      try {
+        popup.close();
+      } catch {
+        // Cross-origin popups can already be closed by the user.
+      }
     }
   };
 
@@ -81,13 +94,13 @@ export function openWordPressSiteBridge(baseUrl: string): WordPressSiteBridge | 
         ready,
         timeoutAfter(
           BRIDGE_READY_TIMEOUT_MS,
-          "WordPress安全接続を開始できませんでした。ポップアップの許可を確認してください。",
+          "WordPress安全接続を開始できませんでした。接続画面の読み込みを確認してください。",
         ),
       ]);
       const requestId = crypto.randomUUID();
       const response = new Promise<T>((resolve, reject) => {
         const onResult = (event: MessageEvent<unknown>) => {
-          if (event.origin !== targetOrigin || event.source !== popup || !isBridgeMessage(event.data)) return;
+          if (event.origin !== targetOrigin || event.source !== bridgeWindow || !isBridgeMessage(event.data)) return;
           if (
             event.data.type !== "figmapress:site-prepared" ||
             event.data.requestId !== requestId
@@ -107,7 +120,7 @@ export function openWordPressSiteBridge(baseUrl: string): WordPressSiteBridge | 
           ));
         };
         window.addEventListener("message", onResult);
-        popup.postMessage({
+        bridgeWindow.postMessage({
           type: "figmapress:prepare-site",
           requestId,
           connectorToken,

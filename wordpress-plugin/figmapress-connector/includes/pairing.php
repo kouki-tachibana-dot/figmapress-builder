@@ -313,8 +313,8 @@ function figmapress_connector_builder_url() {
 
 /**
  * Browser-origin bridge for hosts that reject Vercel or cross-origin writes.
- * The bridge is a popup, never an iframe, and accepts messages only from the
- * pinned production Builder origin and its own opener window.
+ * The bridge accepts messages only from the pinned production Builder origin
+ * and the exact parent iframe or opener window that loaded it.
  */
 function figmapress_connector_render_browser_bridge() {
     if ( ! isset( $_GET['figmapress_bridge'] ) || '1' !== wp_unslash( $_GET['figmapress_bridge'] ) ) {
@@ -324,8 +324,8 @@ function figmapress_connector_render_browser_bridge() {
     status_header( 200 );
     header( 'Content-Type: text/html; charset=UTF-8' );
     header( 'Referrer-Policy: no-referrer' );
-    header( 'X-Frame-Options: DENY' );
-    header( "Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'" );
+    header_remove( 'X-Frame-Options' );
+    header( "Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors https://figmapress-builder.vercel.app; base-uri 'none'; form-action 'none'" );
     $builder_origin = wp_json_encode( figmapress_connector_builder_url() );
     $prepare_url    = wp_json_encode(
         rest_url( 'figmapress/v1/paired/site-prepare' )
@@ -358,22 +358,28 @@ function figmapress_connector_render_browser_bridge() {
     const prepareUrl = <?php echo $prepare_url; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>;
     const status = document.getElementById('status');
     const closeButton = document.getElementById('close');
+    const embedded = window.parent !== window;
+    const peer = embedded ? window.parent : window.opener;
     let busy = false;
     const tokenPattern = /^fp1\.[1-9][0-9]{0,19}\.[A-Za-z0-9_-]{32,128}$/;
     const requestPattern = /^[a-f0-9-]{16,64}$/i;
     const post = (message) => {
-        if (window.opener && !window.opener.closed) {
-            window.opener.postMessage(message, allowedOrigin);
+        if (peer && (embedded || !peer.closed)) {
+            peer.postMessage(message, allowedOrigin);
         }
     };
     const readyTimer = window.setInterval(() => {
         if (!busy) post({ type: 'figmapress:bridge-ready' });
     }, 500);
     post({ type: 'figmapress:bridge-ready' });
-    closeButton.addEventListener('click', () => window.close());
+    if (embedded) {
+        closeButton.hidden = true;
+    } else {
+        closeButton.addEventListener('click', () => window.close());
+    }
     window.addEventListener('message', async (event) => {
         if (
-            busy || event.origin !== allowedOrigin || event.source !== window.opener ||
+            busy || !peer || event.origin !== allowedOrigin || event.source !== peer ||
             !event.data || event.data.type !== 'figmapress:prepare-site'
         ) return;
         const { requestId, connectorToken, payload } = event.data;

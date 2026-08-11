@@ -255,8 +255,9 @@ function figmapress_connector_rest_status() {
                 'mediaPersistence' => true,
             ),
             'siteBuild'         => array(
-                'pages' => true,
-                'menus' => current_user_can( 'edit_theme_options' ),
+                'pages'  => true,
+                'menus'  => current_user_can( 'edit_theme_options' ),
+                'bridge' => true,
             ),
         )
     );
