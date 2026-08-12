@@ -429,6 +429,7 @@ function figmapress_connector_render_browser_bridge() {
             !event.data || ![
                 'figmapress:prepare-site',
                 'figmapress:save-elementor',
+                'figmapress:confirm-elementor',
                 'figmapress:localize-media'
             ].includes(event.data.type)
         ) return;
@@ -475,6 +476,21 @@ function figmapress_connector_render_browser_bridge() {
                     await new Promise((resolve) => window.setTimeout(resolve, 75));
                 }
                 responseType = 'figmapress:elementor-saved';
+            } else if (action === 'figmapress:confirm-elementor') {
+                if (
+                    !Number.isInteger(payload.postId) || payload.postId < 1 ||
+                    typeof payload.requestId !== 'string' || !requestPattern.test(payload.requestId) ||
+                    typeof payload.sourceKey !== 'string'
+                ) return;
+                parsed = await postForm(
+                    elementorPageUrl + encodeURIComponent(payload.postId) + '/stored',
+                    connectorToken,
+                    {
+                        requestId: payload.requestId,
+                        sourceKey: payload.sourceKey,
+                    }
+                );
+                responseType = 'figmapress:elementor-confirmed';
             } else {
                 if (
                     !Number.isInteger(payload.postId) || payload.postId < 1 ||
@@ -509,6 +525,8 @@ function figmapress_connector_render_browser_bridge() {
             post({
                 type: action === 'figmapress:save-elementor'
                     ? 'figmapress:elementor-saved'
+                    : action === 'figmapress:confirm-elementor'
+                        ? 'figmapress:elementor-confirmed'
                     : action === 'figmapress:localize-media'
                         ? 'figmapress:elementor-media'
                         : 'figmapress:site-prepared',
@@ -519,6 +537,9 @@ function figmapress_connector_render_browser_bridge() {
             });
         } finally {
             busy = false;
+            if (embedded) {
+                window.setTimeout(() => post({ type: 'figmapress:bridge-ready' }), 0);
+            }
         }
     });
 })();
