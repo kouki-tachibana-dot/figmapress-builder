@@ -29,8 +29,16 @@ test("multi-page form embeds the target-origin WordPress bridge", () => {
     new URL("../apps/web/src/components/converter-app.tsx", import.meta.url),
     "utf8",
   );
+  const bridge = readFileSync(
+    new URL("../apps/web/src/lib/wordpress-site-bridge.ts", import.meta.url),
+    "utf8",
+  );
   assert.equal(WORDPRESS_SITE_BRIDGE_FRAME_ID, "figmapress-site-bridge-frame");
   assert.match(component, /id=\{WORDPRESS_SITE_BRIDGE_FRAME_ID\}/);
   assert.match(component, /sandbox="allow-same-origin allow-scripts"/);
   assert.match(component, /title="WordPress安全接続"/);
+  assert.match(bridge, /saveElementor<T>/);
+  assert.match(bridge, /localizeMedia<T>/);
+  assert.match(component, /siteBridge\.saveElementor<WordPressResult>/);
+  assert.match(component, /siteBridge\.localizeMedia<BrowserElementorMediaProgress>/);
 });

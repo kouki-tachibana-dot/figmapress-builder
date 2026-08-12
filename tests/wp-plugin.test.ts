@@ -295,10 +295,18 @@ test("Connector browser bridge is origin pinned and token scoped", async () => {
   assert.match(pairing, /tokenPattern = \/\^fp1/);
   assert.match(pairing, /figmapress_token_hex/);
   assert.match(pairing, /credentials: 'same-origin'/);
+  assert.match(pairing, /figmapress:save-elementor/);
+  assert.match(pairing, /figmapress:elementor-saved/);
+  assert.match(pairing, /figmapress:localize-media/);
+  assert.match(pairing, /figmapress:elementor-media/);
+  assert.match(pairing, /elementor\/uploads\//);
+  assert.match(pairing, /elementor\/pages\//);
+  assert.match(pairing, /chunkBytes = 8000/);
   assert.match(pairing, /frame-ancestors https:\/\/figmapress-builder\.vercel\.app/);
   assert.doesNotMatch(pairing, /X-Frame-Options: DENY/);
   assert.match(pairing, /\/paired\/site-prepare/);
   assert.match(rest, /'bridge'\s*=>\s*true/);
+  assert.match(rest, /\$params = \$request->get_body_params\(\)/);
 });
 
 test("Connector updates one draft for a stable Figma source", async () => {

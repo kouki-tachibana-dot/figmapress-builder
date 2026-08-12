@@ -945,6 +945,9 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
 function figmapress_connector_validate_owned_elementor_draft( WP_REST_Request $request ) {
     $post_id    = absint( $request->get_param( 'id' ) );
     $params     = $request->get_json_params();
+    if ( ! is_array( $params ) ) {
+        $params = $request->get_body_params();
+    }
     $request_id = isset( $params['requestId'] ) ? sanitize_text_field( $params['requestId'] ) : '';
     if ( $post_id <= 0 || 'page' !== get_post_type( $post_id ) || 'draft' !== get_post_status( $post_id ) ) {
         return new WP_Error( 'figmapress_draft_not_found', 'The requested Elementor draft is not available.', array( 'status' => 404 ) );
@@ -981,6 +984,9 @@ function figmapress_connector_rest_localize_elementor_media( WP_REST_Request $re
     $localized_images = figmapress_connector_load_media_map( $post_id );
     $media_failures   = figmapress_connector_load_media_failures( $post_id );
     $params           = $request->get_json_params();
+    if ( ! is_array( $params ) ) {
+        $params = $request->get_body_params();
+    }
     if ( ! empty( $params['retryFailed'] ) ) {
         $media_failures = array();
     }

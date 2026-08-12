@@ -67,6 +67,7 @@ import {
   buildWordPressSiteBridgeUrl,
   openWordPressSiteBridge,
   WORDPRESS_SITE_BRIDGE_FRAME_ID,
+  type WordPressSiteBridge,
 } from "@/lib/wordpress-site-bridge";
 
 type SourceMode = "figma" | "json";
@@ -81,7 +82,7 @@ const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
 const CHUNKED_UPLOAD_CONNECTOR_VERSION = "0.16.17";
 const SMALL_CHUNK_UPLOAD_CONNECTOR_VERSION = "0.16.24";
 const FIGMA_HEADER_MEDIA_CONNECTOR_VERSION = "0.16.18";
-const MULTI_PAGE_CONNECTOR_VERSION = "0.17.12";
+const MULTI_PAGE_CONNECTOR_VERSION = "0.17.13";
 
 function safeWordPressSiteBridgeUrl(baseUrl: string): string {
   try {
@@ -1084,6 +1085,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     initialResult: WordPressResult,
     requestId: string,
     retryFailed = false,
+    siteBridge: WordPressSiteBridge | null = null,
   ): Promise<WordPressResult> {
     if (typeof initialResult.remainingMedia !== "number") return initialResult;
     let current = initialResult;
@@ -1095,12 +1097,21 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
           && round < 40;
         round += 1
       ) {
-        const progress = await fetchWordPressMediaBatch(
-          credentials,
-          current.id,
-          requestId,
-          retryFailed && round === 0,
-        );
+        const progress = siteBridge && credentials.connectorToken
+          ? await siteBridge.localizeMedia<BrowserElementorMediaProgress>(
+              credentials.connectorToken,
+              {
+                postId: current.id,
+                requestId,
+                retryFailed: retryFailed && round === 0,
+              },
+            )
+          : await fetchWordPressMediaBatch(
+              credentials,
+              current.id,
+              requestId,
+              retryFailed && round === 0,
+            );
         const warnings = Array.from(new Set([
           ...(current.warnings ?? []),
           ...(progress.warnings ?? []),
@@ -1569,8 +1580,8 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       siteBridge?.close();
       throw error;
     }
-    siteBridge?.close();
-    setWpSiteResult(prepared);
+    try {
+      setWpSiteResult(prepared);
 
     const pageLinks = prepared.pages.map((page) => {
       const rawLink = sameOriginWordPressLink(credentials.baseUrl, page.rawLink);
@@ -1611,26 +1622,31 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         new TextEncoder().encode(serializedPayload).byteLength,
         supportsChunked,
       );
-      let saved = !useProxy
-        ? supportsChunked
-          ? await createWordPressDraftChunkedDirect(
-              credentials,
-              input,
-              versionAtLeast(wpStatus?.connectorVersion, SMALL_CHUNK_UPLOAD_CONNECTOR_VERSION)
-                ? { chunkBytes: 8_000, maxChunks: 128, interChunkDelayMs: 75 }
-                : undefined,
-            )
-          : await createWordPressDraftDirect(credentials, input)
-        : await (async () => {
-            const response = await fetch("/api/wordpress", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: serializedPayload,
-            });
-            const data = await readApi<{ ok: true; result: WordPressResult }>(response);
-            return data.result;
-          })();
-      saved = await persistWordPressMedia(credentials, saved, requestId);
+      let saved = siteBridge && credentials.connectorToken
+        ? await siteBridge.saveElementor<WordPressResult>(
+            credentials.connectorToken,
+            { ...input, status: "draft" },
+          )
+        : !useProxy
+          ? supportsChunked
+            ? await createWordPressDraftChunkedDirect(
+                credentials,
+                input,
+                versionAtLeast(wpStatus?.connectorVersion, SMALL_CHUNK_UPLOAD_CONNECTOR_VERSION)
+                  ? { chunkBytes: 8_000, maxChunks: 128, interChunkDelayMs: 75 }
+                  : undefined,
+              )
+            : await createWordPressDraftDirect(credentials, input)
+          : await (async () => {
+              const response = await fetch("/api/wordpress", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: serializedPayload,
+              });
+              const data = await readApi<{ ok: true; result: WordPressResult }>(response);
+              return data.result;
+            })();
+      saved = await persistWordPressMedia(credentials, saved, requestId, false, siteBridge);
       currentResult = {
         ...currentResult,
         pages: currentResult.pages.map((candidate) =>
@@ -1641,6 +1657,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     }
     setWpResult(null);
     setWpSiteProgress("複数ページとメニューの下書き構築が完了しました。");
+    } finally {
+      siteBridge?.close();
+    }
   }
 
   async function createWordPressDraft(event: FormEvent<HTMLFormElement>) {
@@ -2234,7 +2253,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.26.15 live</span>
+          <span className="status-pill"><i /> v0.26.16 live</span>
         </nav>
       </header>
 
@@ -3344,7 +3363,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.26.15</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.26.16</span></div>
       </footer>
     </main>
   );
