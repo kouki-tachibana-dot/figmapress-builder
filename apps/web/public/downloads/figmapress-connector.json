@@ -1,11 +1,11 @@
 {
   "name": "FigmaPress Connector",
   "slug": "figmapress-connector",
-  "version": "0.17.16",
+  "version": "0.17.17",
   "requires": "6.4",
   "requires_php": "7.4",
   "tested": "7.0",
   "homepage": "https://figmapress-builder.vercel.app",
   "download_url": "https://figmapress-builder.vercel.app/downloads/figmapress-connector.zip",
-  "changelog": "<h4>0.17.16</h4><ul><li>共有サーバーがElementor保存後の応答をHTTP 500やタイムアウトで失った場合、同じ要求・同じ下書き・同じFigma変換元・保存容量・SHA-256を軽量照合して処理を安全に継続します。</li><li>古い完了印を各保存直前に消去し、前回データの誤判定を防ぎます。</li></ul><h4>0.17.15</h4><ul><li>分割受信した大容量Elementor JSONを保存処理前に二重展開せず、保存成功後の応答直前に共有サーバーがメモリ超過する問題を修正しました。</li><li>下書き限定・同一sourceKey更新・未割り当てメニューの保護はそのまま維持します。</li></ul><h4>0.17.14</h4><ul><li>大容量Elementor下書きの更新時に旧文書のリビジョン複製を省略し、共有サーバーのPHPメモリ超過を防ぎます。</li><li>大容量文書は再デコードせずDB保存容量で完全保存を確認し、新規・既存の同じ下書きIDへ安全に置換します。</li></ul>"
+  "changelog": "<h4>0.17.17</h4><ul><li>大容量Elementor本文のDB更新処理中に共有サーバーが応答を終了する環境でも、書き込み前に今回の期待容量・SHA-256を記録し、実データとの完全一致後だけ処理を継続します。</li><li>不完全な本文・前回本文・別要求は成功扱いせず、下書き限定と重複防止を維持します。</li></ul><h4>0.17.16</h4><ul><li>共有サーバーがElementor保存後の応答をHTTP 500やタイムアウトで失った場合、同じ要求・同じ下書き・同じFigma変換元・保存容量・SHA-256を軽量照合して処理を安全に継続します。</li><li>古い完了印を各保存直前に消去し、前回データの誤判定を防ぎます。</li></ul><h4>0.17.15</h4><ul><li>分割受信した大容量Elementor JSONを保存処理前に二重展開せず、保存成功後の応答直前に共有サーバーがメモリ超過する問題を修正しました。</li><li>下書き限定・同一sourceKey更新・未割り当てメニューの保護はそのまま維持します。</li></ul>"
 }

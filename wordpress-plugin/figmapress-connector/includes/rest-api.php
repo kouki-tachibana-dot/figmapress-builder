@@ -1582,18 +1582,11 @@ function figmapress_connector_store_elementor_document( $post_id, $content, $pag
     // draft and a stale request lock. Elementor reads these same metadata keys,
     // so this direct write is both a durable checkpoint and the fast path for
     // large documents.
-    $direct_meta_write = update_metadata(
-        'post',
-        $post_id,
-        '_elementor_data',
-        wp_slash( $encoded_content )
-    );
-
-    // Write a durable receipt immediately after the document. Some shared
-    // hosts terminate the PHP response during later Elementor cache work even
-    // though the complete document has already reached the database. The
-    // lightweight confirmation route verifies this request, byte length, and
-    // SHA-256 without decoding the multi-megabyte JSON again.
+    // Store this attempt's expected database fingerprint before the large
+    // metadata write. Some shared hosts commit _elementor_data and terminate
+    // PHP from inside update_metadata() before the next statement runs. The
+    // confirmation route still requires the database byte length and SHA-256
+    // to equal these values, so a partial or previous document cannot pass.
     if (
         preg_match( '/^[a-f0-9-]{16,64}$/i', $request_id ) &&
         preg_match( figmapress_connector_site_source_key_pattern(), $source_key )
@@ -1603,6 +1596,12 @@ function figmapress_connector_store_elementor_document( $post_id, $content, $pag
         update_post_meta( $post_id, '_figmapress_stored_bytes', $encoded_bytes );
         update_post_meta( $post_id, '_figmapress_stored_hash', hash( 'sha256', $encoded_content ) );
     }
+    $direct_meta_write = update_metadata(
+        'post',
+        $post_id,
+        '_elementor_data',
+        wp_slash( $encoded_content )
+    );
     update_post_meta( $post_id, '_elementor_edit_mode', 'builder' );
     update_post_meta( $post_id, '_elementor_template_type', 'wp-page' );
     update_post_meta( $post_id, '_elementor_version', defined( 'ELEMENTOR_VERSION' ) ? ELEMENTOR_VERSION : '' );
