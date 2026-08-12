@@ -1,6 +1,7 @@
 export type WordPressSiteBridge = {
   prepare<T>(connectorToken: string, payload: unknown): Promise<T>;
   saveElementor<T>(connectorToken: string, payload: unknown): Promise<T>;
+  confirmElementor<T>(connectorToken: string, payload: unknown): Promise<T>;
   localizeMedia<T>(connectorToken: string, payload: unknown): Promise<T>;
   close(): void;
 };
@@ -110,6 +111,16 @@ export function openWordPressSiteBridge(baseUrl: string): WordPressSiteBridge | 
         payload,
         BRIDGE_ELEMENTOR_TIMEOUT_MS,
         "WordPress安全接続でElementorデータの保存がタイムアウトしました。下書き一覧を確認してください。",
+      );
+    },
+    async confirmElementor<T>(connectorToken: string, payload: unknown): Promise<T> {
+      return request<T>(
+        "figmapress:confirm-elementor",
+        "figmapress:elementor-confirmed",
+        connectorToken,
+        payload,
+        BRIDGE_REQUEST_TIMEOUT_MS,
+        "WordPress安全接続でElementor保存を確認できませんでした。",
       );
     },
     async localizeMedia<T>(connectorToken: string, payload: unknown): Promise<T> {

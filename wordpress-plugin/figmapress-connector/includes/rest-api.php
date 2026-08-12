@@ -110,6 +110,15 @@ function figmapress_connector_register_rest_routes() {
     );
     register_rest_route(
         'figmapress/v1',
+        '/elementor/pages/(?P<id>\d+)/stored',
+        array(
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => 'figmapress_connector_rest_confirm_elementor_page',
+            'permission_callback' => 'figmapress_connector_rest_can_edit_requested_page',
+        )
+    );
+    register_rest_route(
+        'figmapress/v1',
         '/elementor/pages/(?P<id>\d+)/snapshot',
         array(
             'methods'             => WP_REST_Server::CREATABLE,
@@ -906,9 +915,23 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
     $localized_images = figmapress_connector_load_media_map( $post_id );
     figmapress_connector_apply_elementor_image_map( $content, $localized_images );
 
+    // Remove the previous completion receipt before replacing the document.
+    // A confirmation request must only succeed for this exact save attempt.
+    delete_post_meta( $post_id, '_figmapress_stored_request_id' );
+    delete_post_meta( $post_id, '_figmapress_stored_source_key' );
+    delete_post_meta( $post_id, '_figmapress_stored_bytes' );
+    delete_post_meta( $post_id, '_figmapress_stored_hash' );
+
     // Persist the complete editable document before any remote image work.
     // Hosts can terminate slow downloads; the page must never be left empty.
-    $stored_elements = figmapress_connector_store_elementor_document( $post_id, $content, $page_settings, $page_template );
+    $stored_elements = figmapress_connector_store_elementor_document(
+        $post_id,
+        $content,
+        $page_settings,
+        $page_template,
+        $request_id,
+        $source_key
+    );
     if ( is_wp_error( $stored_elements ) ) {
         if ( $request_lock_key ) {
             delete_option( $request_lock_key );
@@ -948,6 +971,74 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
             'warnings'      => $warnings,
             ),
             $media_progress
+        )
+    );
+}
+
+/**
+ * Confirm an Elementor draft after a host terminates the final upload response.
+ * This lightweight route never decodes the stored document; it proves the
+ * request identity, source identity, draft status, and durable byte length.
+ */
+function figmapress_connector_rest_confirm_elementor_page( WP_REST_Request $request ) {
+    $post_id = absint( $request->get_param( 'id' ) );
+    $params  = $request->get_json_params();
+    if ( ! is_array( $params ) ) {
+        $params = $request->get_body_params();
+    }
+    $request_id = isset( $params['requestId'] ) ? sanitize_text_field( $params['requestId'] ) : '';
+    $source_key = isset( $params['sourceKey'] ) ? sanitize_text_field( $params['sourceKey'] ) : '';
+    if (
+        $post_id <= 0 || 'page' !== get_post_type( $post_id ) || 'draft' !== get_post_status( $post_id ) ||
+        ! preg_match( '/^[a-f0-9-]{16,64}$/i', $request_id ) ||
+        ! preg_match( figmapress_connector_site_source_key_pattern(), $source_key )
+    ) {
+        return new WP_Error( 'figmapress_invalid_confirmation', 'Elementor下書きの保存確認情報が無効です。', array( 'status' => 422 ) );
+    }
+    $stored_request_id = (string) get_post_meta( $post_id, '_figmapress_stored_request_id', true );
+    $stored_source_key = (string) get_post_meta( $post_id, '_figmapress_stored_source_key', true );
+    $expected_bytes    = absint( get_post_meta( $post_id, '_figmapress_stored_bytes', true ) );
+    $expected_hash     = (string) get_post_meta( $post_id, '_figmapress_stored_hash', true );
+    $stored_bytes      = figmapress_connector_elementor_storage_bytes( $post_id );
+    $stored_hash       = figmapress_connector_elementor_storage_hash( $post_id );
+    if (
+        '' === $stored_request_id || '' === $stored_source_key ||
+        ! hash_equals( $stored_request_id, $request_id ) ||
+        ! hash_equals( $stored_source_key, $source_key ) ||
+        $expected_bytes < 100 || $stored_bytes !== $expected_bytes ||
+        ! preg_match( '/^[a-f0-9]{64}$/', $expected_hash ) ||
+        ! hash_equals( $expected_hash, $stored_hash )
+    ) {
+        return new WP_Error(
+            'figmapress_elementor_not_confirmed',
+            'Elementor下書きの完全保存を確認できませんでした。',
+            array( 'status' => 409, 'storedBytes' => $stored_bytes )
+        );
+    }
+    $request_lock_key = 'figmapress_request_' . substr( hash_hmac( 'sha256', $source_key, wp_salt( 'nonce' ) ), 0, 32 );
+    delete_option( $request_lock_key );
+    delete_post_meta( $post_id, '_figmapress_prepared' );
+    $total_media = absint( get_post_meta( $post_id, '_figmapress_media_total', true ) );
+    $saved_media = count( figmapress_connector_load_media_map( $post_id ) );
+    return rest_ensure_response(
+        array(
+            'id'             => $post_id,
+            'slug'           => get_post_field( 'post_name', $post_id ),
+            'status'         => 'draft',
+            'target'         => 'elementor',
+            'editLink'       => admin_url( 'post.php?post=' . $post_id . '&action=elementor' ),
+            'previewLink'    => get_preview_post_link( $post_id ),
+            'rawLink'        => get_permalink( $post_id ),
+            'storedElements' => 1,
+            'storedBytes'    => $stored_bytes,
+            'idempotent'     => true,
+            'updated'        => true,
+            'savedMedia'     => min( $saved_media, $total_media ),
+            'totalMedia'     => $total_media,
+            'remainingMedia' => max( 0, $total_media - $saved_media ),
+            'failedMedia'    => 0,
+            'mediaComplete'  => $saved_media >= $total_media,
+            'warnings'       => array( 'WordPressの応答終了後に同じ下書きの完全保存を再確認しました。' ),
         )
     );
 }
@@ -1470,7 +1561,7 @@ function figmapress_connector_ensure_elementor_containers() {
     return true;
 }
 
-function figmapress_connector_store_elementor_document( $post_id, $content, $page_settings, $page_template ) {
+function figmapress_connector_store_elementor_document( $post_id, $content, $page_settings, $page_template, $request_id = '', $source_key = '' ) {
     $expected_elements = figmapress_connector_count_elementor_elements( $content );
     $encoded_content   = wp_json_encode( $content );
     if ( false === $encoded_content ) {
@@ -1497,6 +1588,21 @@ function figmapress_connector_store_elementor_document( $post_id, $content, $pag
         '_elementor_data',
         wp_slash( $encoded_content )
     );
+
+    // Write a durable receipt immediately after the document. Some shared
+    // hosts terminate the PHP response during later Elementor cache work even
+    // though the complete document has already reached the database. The
+    // lightweight confirmation route verifies this request, byte length, and
+    // SHA-256 without decoding the multi-megabyte JSON again.
+    if (
+        preg_match( '/^[a-f0-9-]{16,64}$/i', $request_id ) &&
+        preg_match( figmapress_connector_site_source_key_pattern(), $source_key )
+    ) {
+        update_post_meta( $post_id, '_figmapress_stored_request_id', $request_id );
+        update_post_meta( $post_id, '_figmapress_stored_source_key', $source_key );
+        update_post_meta( $post_id, '_figmapress_stored_bytes', $encoded_bytes );
+        update_post_meta( $post_id, '_figmapress_stored_hash', hash( 'sha256', $encoded_content ) );
+    }
     update_post_meta( $post_id, '_elementor_edit_mode', 'builder' );
     update_post_meta( $post_id, '_elementor_template_type', 'wp-page' );
     update_post_meta( $post_id, '_elementor_version', defined( 'ELEMENTOR_VERSION' ) ? ELEMENTOR_VERSION : '' );
@@ -1597,6 +1703,18 @@ function figmapress_connector_elementor_storage_bytes( $post_id ) {
         )
     );
     return is_numeric( $bytes ) ? absint( $bytes ) : 0;
+}
+
+function figmapress_connector_elementor_storage_hash( $post_id ) {
+    global $wpdb;
+    $hash = $wpdb->get_var(
+        $wpdb->prepare(
+            "SELECT LOWER(SHA2(meta_value, 256)) FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s ORDER BY meta_id DESC LIMIT 1",
+            absint( $post_id ),
+            '_elementor_data'
+        )
+    );
+    return is_string( $hash ) ? strtolower( $hash ) : '';
 }
 
 function figmapress_connector_count_elementor_elements( $elements ) {

@@ -38,7 +38,10 @@ test("multi-page form embeds the target-origin WordPress bridge", () => {
   assert.match(component, /sandbox="allow-same-origin allow-scripts"/);
   assert.match(component, /title="WordPress安全接続"/);
   assert.match(bridge, /saveElementor<T>/);
+  assert.match(bridge, /confirmElementor<T>/);
   assert.match(bridge, /localizeMedia<T>/);
   assert.match(component, /siteBridge\.saveElementor<WordPressResult>/);
+  assert.match(component, /siteBridge\.confirmElementor<WordPressResult>/);
+  assert.match(component, /catch \{\s+throw error;\s+\}/);
   assert.match(component, /siteBridge\.localizeMedia<BrowserElementorMediaProgress>/);
 });

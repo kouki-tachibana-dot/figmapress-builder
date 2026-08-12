@@ -297,6 +297,9 @@ test("Connector browser bridge is origin pinned and token scoped", async () => {
   assert.match(pairing, /credentials: 'same-origin'/);
   assert.match(pairing, /figmapress:save-elementor/);
   assert.match(pairing, /figmapress:elementor-saved/);
+  assert.match(pairing, /figmapress:confirm-elementor/);
+  assert.match(pairing, /figmapress:elementor-confirmed/);
+  assert.match(pairing, /window\.setTimeout\(\(\) => post\(\{ type: 'figmapress:bridge-ready' \}\), 0\)/);
   assert.match(pairing, /figmapress:localize-media/);
   assert.match(pairing, /figmapress:elementor-media/);
   assert.match(pairing, /elementor\/uploads\//);
@@ -307,6 +310,12 @@ test("Connector browser bridge is origin pinned and token scoped", async () => {
   assert.match(pairing, /\/paired\/site-prepare/);
   assert.match(rest, /'bridge'\s*=>\s*true/);
   assert.match(rest, /\$params = \$request->get_body_params\(\)/);
+  assert.match(rest, /\/elementor\/pages\/\(\?P<id>\\d\+\)\/stored/);
+  assert.match(rest, /function figmapress_connector_rest_confirm_elementor_page/);
+  assert.match(rest, /_figmapress_stored_request_id/);
+  assert.match(rest, /figmapress_connector_elementor_storage_hash/);
+  assert.match(rest, /\$stored_bytes !== \$expected_bytes/);
+  assert.match(rest, /hash_equals\( \$expected_hash, \$stored_hash \)/);
 });
 
 test("Connector updates one draft for a stable Figma source", async () => {
