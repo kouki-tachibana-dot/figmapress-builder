@@ -849,7 +849,17 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
 
     $created = ! $reuse_existing;
     if ( $reuse_existing ) {
-        wp_save_post_revision( $existing_id );
+        // Revisions copy registered Elementor meta. A legacy absolute-positioned
+        // document can already be several megabytes, and copying it while the
+        // replacement JSON is in memory can exceed a shared host's PHP limit.
+        // Small documents retain the normal revision safety net; large ones are
+        // replaced atomically by the metadata write below.
+        $existing_elementor_bytes = figmapress_connector_elementor_storage_bytes( $existing_id );
+        if ( $existing_elementor_bytes <= 600000 ) {
+            wp_save_post_revision( $existing_id );
+        } else {
+            $warnings[] = '共有サーバーのメモリ保護のため、旧Elementor文書の自動リビジョン複製を省略しました。';
+        }
         $post_id = wp_update_post(
             array(
                 'ID'         => $existing_id,
@@ -1524,13 +1534,23 @@ function figmapress_connector_store_elementor_document( $post_id, $content, $pag
 
     // Persistent object caches can briefly retain an older value. Force the
     // verification read back to the database after the final metadata write.
+    // For a large document, decoding the complete JSON for a second element
+    // count can multiply peak memory. Verify the durable database byte length
+    // instead; the incoming structure was already sanitized and counted.
     wp_cache_delete( $post_id, 'post_meta' );
-    $stored_data     = figmapress_connector_read_elementor_data( $post_id );
-    $stored_elements = is_array( $stored_data )
-        ? figmapress_connector_count_elementor_elements( $stored_data )
-        : 0;
+    if ( $document_api_skipped ) {
+        $stored_bytes    = figmapress_connector_elementor_storage_bytes( $post_id );
+        $stored_data     = null;
+        $stored_elements = $stored_bytes === $encoded_bytes ? $expected_elements : 0;
+    } else {
+        $stored_data     = figmapress_connector_read_elementor_data( $post_id );
+        $stored_elements = is_array( $stored_data )
+            ? figmapress_connector_count_elementor_elements( $stored_data )
+            : 0;
+        $stored_bytes    = is_string( $stored_data ) ? strlen( $stored_data ) : 0;
+    }
 
-    if ( ! is_array( $stored_data ) || $stored_elements !== $expected_elements ) {
+    if ( $stored_elements !== $expected_elements ) {
         return new WP_Error(
             'figmapress_elementor_save_failed',
             'Elementor data could not be stored on this server.',
@@ -1542,6 +1562,7 @@ function figmapress_connector_store_elementor_document( $post_id, $content, $pag
                 'documentApiSkipped'    => $document_api_skipped,
                 'directMetaWrite'       => false !== $direct_meta_write,
                 'encodedBytes'          => $encoded_bytes,
+                'storedBytes'           => $stored_bytes,
             )
         );
     }
@@ -1560,6 +1581,18 @@ function figmapress_connector_read_elementor_data( $post_id ) {
 
     $decoded = json_decode( $stored_value, true );
     return is_array( $decoded ) ? $decoded : null;
+}
+
+function figmapress_connector_elementor_storage_bytes( $post_id ) {
+    global $wpdb;
+    $bytes = $wpdb->get_var(
+        $wpdb->prepare(
+            "SELECT OCTET_LENGTH(meta_value) FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s ORDER BY meta_id DESC LIMIT 1",
+            absint( $post_id ),
+            '_elementor_data'
+        )
+    );
+    return is_numeric( $bytes ) ? absint( $bytes ) : 0;
 }
 
 function figmapress_connector_count_elementor_elements( $elements ) {

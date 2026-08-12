@@ -586,6 +586,12 @@ test("Connector prepares idempotent draft pages and a plugin-owned unassigned me
   assert.doesNotMatch(prepareSite, /figmapress_connector_read_elementor_data/);
   assert.match(rest, /A stable Figma source always updates the same draft/);
   assert.match(rest, /the validated incoming document will replace it below/);
+  assert.match(rest, /figmapress_connector_elementor_storage_bytes\( \$existing_id \)/);
+  assert.match(rest, /if \( \$existing_elementor_bytes <= 600000 \) \{\s+wp_save_post_revision\( \$existing_id \)/);
+  assert.match(rest, /function figmapress_connector_elementor_storage_bytes/);
+  assert.match(rest, /OCTET_LENGTH\(meta_value\)/);
+  assert.match(rest, /if \( \$document_api_skipped \) \{/);
+  assert.match(rest, /\$stored_bytes === \$encoded_bytes \? \$expected_elements : 0/);
   assert.match(
     rest,
     /function figmapress_connector_count_elementor_elements\( \$elements \) \{\s+if \( ! is_array\( \$elements \) \) \{\s+return 0;/,
