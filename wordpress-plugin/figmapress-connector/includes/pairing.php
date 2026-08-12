@@ -330,6 +330,12 @@ function figmapress_connector_render_browser_bridge() {
     $prepare_url    = wp_json_encode(
         rest_url( 'figmapress/v1/paired/site-prepare' )
     );
+    $elementor_upload_url = wp_json_encode(
+        rest_url( 'figmapress/v1/elementor/uploads/' )
+    );
+    $elementor_page_url = wp_json_encode(
+        rest_url( 'figmapress/v1/elementor/pages/' )
+    );
     ?>
 <!doctype html>
 <html lang="ja">
@@ -356,6 +362,8 @@ function figmapress_connector_render_browser_bridge() {
     'use strict';
     const allowedOrigin = <?php echo $builder_origin; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>;
     const prepareUrl = <?php echo $prepare_url; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>;
+    const elementorUploadUrl = <?php echo $elementor_upload_url; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>;
+    const elementorPageUrl = <?php echo $elementor_page_url; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>;
     const status = document.getElementById('status');
     const closeButton = document.getElementById('close');
     const embedded = window.parent !== window;
@@ -363,6 +371,44 @@ function figmapress_connector_render_browser_bridge() {
     let busy = false;
     const tokenPattern = /^fp1\.[1-9][0-9]{0,19}\.[A-Za-z0-9_-]{32,128}$/;
     const requestPattern = /^[a-f0-9-]{16,64}$/i;
+    const hex = (value) => Array.from(
+        new TextEncoder().encode(value),
+        (byte) => byte.toString(16).padStart(2, '0')
+    ).join('');
+    const base64Bytes = (bytes) => {
+        let binary = '';
+        for (let offset = 0; offset < bytes.length; offset += 8192) {
+            binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
+        }
+        return btoa(binary);
+    };
+    const parseResponse = async (response) => {
+        const text = await response.text();
+        let parsed = null;
+        try { parsed = JSON.parse(text); } catch (_) { parsed = null; }
+        if (!response.ok) {
+            throw Object.assign(new Error(
+                parsed && typeof parsed.message === 'string'
+                    ? parsed.message
+                    : 'WordPressが安全接続の処理を受け付けませんでした。'
+            ), { status: response.status });
+        }
+        return parsed;
+    };
+    const postForm = async (url, connectorToken, fields) => {
+        const form = new URLSearchParams();
+        form.set('figmapress_token_hex', hex(connectorToken));
+        Object.entries(fields).forEach(([key, value]) => form.set(key, String(value)));
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { Accept: 'application/json' },
+            body: form,
+            credentials: 'same-origin',
+            redirect: 'error',
+            signal: AbortSignal.timeout(45000),
+        });
+        return parseResponse(response);
+    };
     const post = (message) => {
         if (peer && (embedded || !peer.closed)) {
             peer.postMessage(message, allowedOrigin);
@@ -380,7 +426,11 @@ function figmapress_connector_render_browser_bridge() {
     window.addEventListener('message', async (event) => {
         if (
             busy || !peer || event.origin !== allowedOrigin || event.source !== peer ||
-            !event.data || event.data.type !== 'figmapress:prepare-site'
+            !event.data || ![
+                'figmapress:prepare-site',
+                'figmapress:save-elementor',
+                'figmapress:localize-media'
+            ].includes(event.data.type)
         ) return;
         const { requestId, connectorToken, payload } = event.data;
         if (
@@ -388,40 +438,64 @@ function figmapress_connector_render_browser_bridge() {
             typeof connectorToken !== 'string' || !tokenPattern.test(connectorToken) ||
             !payload || typeof payload !== 'object'
         ) return;
+        const action = event.data.type;
         const serialized = JSON.stringify(payload);
-        if (serialized.length < 20 || serialized.length > 100000) return;
+        const maxBytes = action === 'figmapress:save-elementor' ? 4000000 : 100000;
+        if (serialized.length < 20 || serialized.length > maxBytes) return;
         busy = true;
         window.clearInterval(readyTimer);
-        status.textContent = '下書きページとメニューを準備しています…';
+        status.textContent = action === 'figmapress:prepare-site'
+            ? '下書きページとメニューを準備しています…'
+            : action === 'figmapress:save-elementor'
+                ? 'Elementor編集データを安全に保存しています…'
+                : '画像をメディアライブラリへ保存しています…';
         try {
-            const bytes = new TextEncoder().encode(connectorToken);
-            const tokenHex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
-            const form = new URLSearchParams();
-            form.set('figmapress_token_hex', tokenHex);
-            form.set('payload', serialized);
-            const response = await fetch(prepareUrl, {
-                method: 'POST',
-                headers: { Accept: 'application/json' },
-                body: form,
-                credentials: 'same-origin',
-                redirect: 'error',
-            });
-            const text = await response.text();
             let parsed = null;
-            try { parsed = JSON.parse(text); } catch (_) { parsed = null; }
-            if (!response.ok) {
-                throw Object.assign(new Error(
-                    parsed && typeof parsed.message === 'string'
-                        ? parsed.message
-                        : 'WordPressが下書き準備を受け付けませんでした。'
-                ), { status: response.status });
+            let responseType = 'figmapress:site-prepared';
+            if (action === 'figmapress:prepare-site') {
+                parsed = await postForm(prepareUrl, connectorToken, { payload: serialized });
+            } else if (action === 'figmapress:save-elementor') {
+                if (!payload || typeof payload.requestId !== 'string' || !requestPattern.test(payload.requestId)) return;
+                const bytes = new TextEncoder().encode(serialized);
+                const chunkBytes = 8000;
+                const total = Math.ceil(bytes.length / chunkBytes);
+                if (total < 1 || total > 128) throw new Error('Elementorデータが大きすぎます。');
+                for (let index = 0; index < total; index += 1) {
+                    parsed = await postForm(
+                        elementorUploadUrl + encodeURIComponent(payload.requestId),
+                        connectorToken,
+                        {
+                            index,
+                            total,
+                            chunk: base64Bytes(bytes.subarray(index * chunkBytes, (index + 1) * chunkBytes)),
+                        }
+                    );
+                    if (parsed && parsed.status === 'draft') break;
+                    if (index === total - 1) throw new Error('Elementor下書きの保存を確認できませんでした。');
+                    await new Promise((resolve) => window.setTimeout(resolve, 75));
+                }
+                responseType = 'figmapress:elementor-saved';
+            } else {
+                if (
+                    !Number.isInteger(payload.postId) || payload.postId < 1 ||
+                    typeof payload.requestId !== 'string' || !requestPattern.test(payload.requestId)
+                ) return;
+                parsed = await postForm(
+                    elementorPageUrl + encodeURIComponent(payload.postId) + '/media',
+                    connectorToken,
+                    {
+                        requestId: payload.requestId,
+                        retryFailed: payload.retryFailed === true ? '1' : '0',
+                    }
+                );
+                responseType = 'figmapress:elementor-media';
             }
             status.textContent = '下書き準備が完了しました。FigmaPressへ戻ります…';
             post({
-                type: 'figmapress:site-prepared',
+                type: responseType,
                 requestId,
                 ok: true,
-                status: response.status,
+                status: 200,
                 result: parsed,
             });
         } catch (error) {
@@ -433,12 +507,17 @@ function figmapress_connector_render_browser_bridge() {
                 : 0;
             status.textContent = message;
             post({
-                type: 'figmapress:site-prepared',
+                type: action === 'figmapress:save-elementor'
+                    ? 'figmapress:elementor-saved'
+                    : action === 'figmapress:localize-media'
+                        ? 'figmapress:elementor-media'
+                        : 'figmapress:site-prepared',
                 requestId,
                 ok: false,
                 status: responseStatus,
                 error: message,
             });
+        } finally {
             busy = false;
         }
     });

@@ -1,5 +1,7 @@
 export type WordPressSiteBridge = {
   prepare<T>(connectorToken: string, payload: unknown): Promise<T>;
+  saveElementor<T>(connectorToken: string, payload: unknown): Promise<T>;
+  localizeMedia<T>(connectorToken: string, payload: unknown): Promise<T>;
   close(): void;
 };
 
@@ -14,6 +16,7 @@ type BridgeMessage = {
 
 const BRIDGE_READY_TIMEOUT_MS = 20_000;
 const BRIDGE_REQUEST_TIMEOUT_MS = 120_000;
+const BRIDGE_ELEMENTOR_TIMEOUT_MS = 180_000;
 export const WORDPRESS_SITE_BRIDGE_FRAME_ID = "figmapress-site-bridge-frame";
 
 function isBridgeMessage(value: unknown): value is BridgeMessage {
@@ -62,6 +65,7 @@ export function openWordPressSiteBridge(baseUrl: string): WordPressSiteBridge | 
       );
   const bridgeWindow = embeddedWindow ?? popup;
   if (!bridgeWindow) return null;
+  const activeBridgeWindow = bridgeWindow;
 
   let closed = false;
   let resolveReady: (() => void) | null = null;
@@ -69,7 +73,7 @@ export function openWordPressSiteBridge(baseUrl: string): WordPressSiteBridge | 
     resolveReady = resolve;
   });
   const onReady = (event: MessageEvent<unknown>) => {
-    if (event.origin !== targetOrigin || event.source !== bridgeWindow || !isBridgeMessage(event.data)) return;
+    if (event.origin !== targetOrigin || event.source !== activeBridgeWindow || !isBridgeMessage(event.data)) return;
     if (event.data.type === "figmapress:bridge-ready") resolveReady?.();
   };
   window.addEventListener("message", onReady);
@@ -89,6 +93,46 @@ export function openWordPressSiteBridge(baseUrl: string): WordPressSiteBridge | 
 
   return {
     async prepare<T>(connectorToken: string, payload: unknown): Promise<T> {
+      return request<T>(
+        "figmapress:prepare-site",
+        "figmapress:site-prepared",
+        connectorToken,
+        payload,
+        BRIDGE_REQUEST_TIMEOUT_MS,
+        "WordPress安全接続がタイムアウトしました。下書き一覧を確認してください。",
+      );
+    },
+    async saveElementor<T>(connectorToken: string, payload: unknown): Promise<T> {
+      return request<T>(
+        "figmapress:save-elementor",
+        "figmapress:elementor-saved",
+        connectorToken,
+        payload,
+        BRIDGE_ELEMENTOR_TIMEOUT_MS,
+        "WordPress安全接続でElementorデータの保存がタイムアウトしました。下書き一覧を確認してください。",
+      );
+    },
+    async localizeMedia<T>(connectorToken: string, payload: unknown): Promise<T> {
+      return request<T>(
+        "figmapress:localize-media",
+        "figmapress:elementor-media",
+        connectorToken,
+        payload,
+        BRIDGE_REQUEST_TIMEOUT_MS,
+        "WordPress安全接続で画像保存がタイムアウトしました。下書き一覧を確認してください。",
+      );
+    },
+    close,
+  };
+
+  async function request<T>(
+    requestType: string,
+    responseType: string,
+    connectorToken: string,
+    payload: unknown,
+    timeoutMs: number,
+    timeoutMessage: string,
+  ): Promise<T> {
       if (closed) throw new Error("WordPress安全接続が閉じられました。");
       await Promise.race([
         ready,
@@ -100,9 +144,9 @@ export function openWordPressSiteBridge(baseUrl: string): WordPressSiteBridge | 
       const requestId = crypto.randomUUID();
       const response = new Promise<T>((resolve, reject) => {
         const onResult = (event: MessageEvent<unknown>) => {
-          if (event.origin !== targetOrigin || event.source !== bridgeWindow || !isBridgeMessage(event.data)) return;
+          if (event.origin !== targetOrigin || event.source !== activeBridgeWindow || !isBridgeMessage(event.data)) return;
           if (
-            event.data.type !== "figmapress:site-prepared" ||
+            event.data.type !== responseType ||
             event.data.requestId !== requestId
           ) return;
           window.removeEventListener("message", onResult);
@@ -120,8 +164,8 @@ export function openWordPressSiteBridge(baseUrl: string): WordPressSiteBridge | 
           ));
         };
         window.addEventListener("message", onResult);
-        bridgeWindow.postMessage({
-          type: "figmapress:prepare-site",
+        activeBridgeWindow.postMessage({
+          type: requestType,
           requestId,
           connectorToken,
           payload,
@@ -129,12 +173,7 @@ export function openWordPressSiteBridge(baseUrl: string): WordPressSiteBridge | 
       });
       return await Promise.race([
         response,
-        timeoutAfter(
-          BRIDGE_REQUEST_TIMEOUT_MS,
-          "WordPress安全接続がタイムアウトしました。下書き一覧を確認してください。",
-        ),
+        timeoutAfter(timeoutMs, timeoutMessage),
       ]);
-    },
-    close,
-  };
+  }
 }
