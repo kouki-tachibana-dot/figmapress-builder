@@ -316,6 +316,10 @@ test("Connector browser bridge is origin pinned and token scoped", async () => {
   assert.match(rest, /figmapress_connector_elementor_storage_hash/);
   assert.match(rest, /\$stored_bytes !== \$expected_bytes/);
   assert.match(rest, /hash_equals\( \$expected_hash, \$stored_hash \)/);
+  assert.ok(
+    rest.indexOf("update_post_meta( $post_id, '_figmapress_stored_hash'")
+      < rest.indexOf("$direct_meta_write = update_metadata("),
+  );
 });
 
 test("Connector updates one draft for a stable Figma source", async () => {
