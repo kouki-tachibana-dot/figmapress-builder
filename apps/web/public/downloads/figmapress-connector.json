@@ -1,11 +1,11 @@
 {
   "name": "FigmaPress Connector",
   "slug": "figmapress-connector",
-  "version": "0.17.14",
+  "version": "0.17.15",
   "requires": "6.4",
   "requires_php": "7.4",
   "tested": "7.0",
   "homepage": "https://figmapress-builder.vercel.app",
   "download_url": "https://figmapress-builder.vercel.app/downloads/figmapress-connector.zip",
-  "changelog": "<h4>0.17.14</h4><ul><li>大容量Elementor下書きの更新時に旧文書のリビジョン複製を省略し、共有サーバーのPHPメモリ超過を防ぎます。</li><li>大容量文書は再デコードせずDB保存容量で完全保存を確認し、新規・既存の同じ下書きIDへ安全に置換します。</li></ul><h4>0.17.13</h4><ul><li>大容量のElementor編集データと画像保存を対象WordPress内の安全接続で処理し、共有サーバーの外部通信待ちを回避しました。</li><li>安全接続はFigmaPress本番オリジン・Connectorトークン・下書きIDに限定し、ページ公開やメニュー割り当ては行いません。</li></ul><h4>0.17.12</h4><ul><li>未作成ページの権限確認に存在しない投稿IDを渡さず、WordPress 7系で複数ページ準備が停止する問題を修正しました。</li><li>既存ページは従来どおり下書き状態と編集権限を確認し、公開済みページを自動更新しません。</li></ul>"
+  "changelog": "<h4>0.17.15</h4><ul><li>分割受信した大容量Elementor JSONを保存処理前に二重展開せず、保存成功後の応答直前に共有サーバーがメモリ超過する問題を修正しました。</li><li>下書き限定・同一sourceKey更新・未割り当てメニューの保護はそのまま維持します。</li></ul><h4>0.17.14</h4><ul><li>大容量Elementor下書きの更新時に旧文書のリビジョン複製を省略し、共有サーバーのPHPメモリ超過を防ぎます。</li><li>大容量文書は再デコードせずDB保存容量で完全保存を確認し、新規・既存の同じ下書きIDへ安全に置換します。</li></ul><h4>0.17.13</h4><ul><li>大容量のElementor編集データと画像保存を対象WordPress内の安全接続で処理し、共有サーバーの外部通信待ちを回避しました。</li><li>安全接続はFigmaPress本番オリジン・Connectorトークン・下書きIDに限定し、ページ公開やメニュー割り当ては行いません。</li></ul>"
 }

@@ -695,7 +695,11 @@ function figmapress_connector_rest_upload_elementor_page( WP_REST_Request $reque
     }
     $body = implode( '', $state['chunks'] );
     delete_transient( $upload_key );
-    if ( strlen( $body ) > 4000000 || ! is_array( json_decode( $body, true ) ) ) {
+    // Do not decode the full multi-megabyte JSON here and again inside the
+    // forwarded WP_REST_Request. That duplicate tree survives until request
+    // shutdown on PHP and can exhaust shared-host memory after the document
+    // has already been stored successfully.
+    if ( strlen( $body ) > 4000000 ) {
         return new WP_Error( 'figmapress_invalid_upload', 'Elementorデータを再構成できませんでした。', array( 'status' => 422 ) );
     }
 
