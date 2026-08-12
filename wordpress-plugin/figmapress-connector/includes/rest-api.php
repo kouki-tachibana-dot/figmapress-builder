@@ -995,24 +995,28 @@ function figmapress_connector_rest_confirm_elementor_page( WP_REST_Request $requ
     ) {
         return new WP_Error( 'figmapress_invalid_confirmation', 'Elementor下書きの保存確認情報が無効です。', array( 'status' => 422 ) );
     }
-    $stored_request_id = (string) get_post_meta( $post_id, '_figmapress_stored_request_id', true );
-    $stored_source_key = (string) get_post_meta( $post_id, '_figmapress_stored_source_key', true );
-    $expected_bytes    = absint( get_post_meta( $post_id, '_figmapress_stored_bytes', true ) );
-    $expected_hash     = (string) get_post_meta( $post_id, '_figmapress_stored_hash', true );
+    $receipt           = figmapress_connector_elementor_storage_receipt( $post_id );
+    $stored_request_id = isset( $receipt['_figmapress_stored_request_id'] ) ? (string) $receipt['_figmapress_stored_request_id'] : '';
+    $stored_source_key = isset( $receipt['_figmapress_stored_source_key'] ) ? (string) $receipt['_figmapress_stored_source_key'] : '';
+    $expected_bytes    = isset( $receipt['_figmapress_stored_bytes'] ) ? absint( $receipt['_figmapress_stored_bytes'] ) : 0;
+    $expected_hash     = isset( $receipt['_figmapress_stored_hash'] ) ? (string) $receipt['_figmapress_stored_hash'] : '';
     $stored_bytes      = figmapress_connector_elementor_storage_bytes( $post_id );
     $stored_hash       = figmapress_connector_elementor_storage_hash( $post_id );
-    if (
-        '' === $stored_request_id || '' === $stored_source_key ||
-        ! hash_equals( $stored_request_id, $request_id ) ||
-        ! hash_equals( $stored_source_key, $source_key ) ||
-        $expected_bytes < 100 || $stored_bytes !== $expected_bytes ||
-        ! preg_match( '/^[a-f0-9]{64}$/', $expected_hash ) ||
-        ! hash_equals( $expected_hash, $stored_hash )
-    ) {
+    $request_matches   = '' !== $stored_request_id && hash_equals( $stored_request_id, $request_id );
+    $source_matches    = '' !== $stored_source_key && hash_equals( $stored_source_key, $source_key );
+    $bytes_match       = $expected_bytes >= 100 && $stored_bytes === $expected_bytes;
+    $hash_matches      = preg_match( '/^[a-f0-9]{64}$/', $expected_hash ) && hash_equals( $expected_hash, $stored_hash );
+    if ( ! $request_matches || ! $source_matches || ! $bytes_match || ! $hash_matches ) {
         return new WP_Error(
             'figmapress_elementor_not_confirmed',
             'Elementor下書きの完全保存を確認できませんでした。',
-            array( 'status' => 409, 'storedBytes' => $stored_bytes )
+            array(
+                'status'         => 409,
+                'requestMatches' => $request_matches,
+                'sourceMatches'  => $source_matches,
+                'bytesMatch'     => $bytes_match,
+                'hashMatches'    => $hash_matches,
+            )
         );
     }
     $request_lock_key = 'figmapress_request_' . substr( hash_hmac( 'sha256', $source_key, wp_salt( 'nonce' ) ), 0, 32 );
@@ -1714,6 +1718,32 @@ function figmapress_connector_elementor_storage_hash( $post_id ) {
         )
     );
     return is_string( $hash ) ? strtolower( $hash ) : '';
+}
+
+function figmapress_connector_elementor_storage_receipt( $post_id ) {
+    global $wpdb;
+    $keys         = array(
+        '_figmapress_stored_request_id',
+        '_figmapress_stored_source_key',
+        '_figmapress_stored_bytes',
+        '_figmapress_stored_hash',
+    );
+    $placeholders = implode( ',', array_fill( 0, count( $keys ), '%s' ) );
+    $query_args   = array_merge( array( absint( $post_id ) ), $keys );
+    $rows         = $wpdb->get_results(
+        $wpdb->prepare(
+            "SELECT meta_key, meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key IN ({$placeholders}) ORDER BY meta_id ASC",
+            $query_args
+        ),
+        ARRAY_A
+    );
+    $receipt      = array();
+    foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+        if ( isset( $row['meta_key'], $row['meta_value'] ) && in_array( $row['meta_key'], $keys, true ) ) {
+            $receipt[ $row['meta_key'] ] = $row['meta_value'];
+        }
+    }
+    return $receipt;
 }
 
 function figmapress_connector_count_elementor_elements( $elements ) {
