@@ -592,6 +592,8 @@ test("Connector prepares idempotent draft pages and a plugin-owned unassigned me
   assert.match(rest, /OCTET_LENGTH\(meta_value\)/);
   assert.match(rest, /if \( \$document_api_skipped \) \{/);
   assert.match(rest, /\$stored_bytes === \$encoded_bytes \? \$expected_elements : 0/);
+  assert.doesNotMatch(rest, /strlen\( \$body \) > 4000000 \|\| ! is_array\( json_decode\( \$body, true \) \)/);
+  assert.match(rest, /strlen\( \$body \) > 4000000/);
   assert.match(
     rest,
     /function figmapress_connector_count_elementor_elements\( \$elements \) \{\s+if \( ! is_array\( \$elements \) \) \{\s+return 0;/,
