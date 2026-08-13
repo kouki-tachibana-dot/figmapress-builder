@@ -255,7 +255,7 @@ test("Connector reconstructs bounded user-scoped Elementor uploads", async () =>
   assert.match(source, /figmapress_connector_rest_create_elementor_page\( \$forward \)/);
 });
 
-test("Connector streams oversized Elementor uploads without hydrating the full page", async () => {
+test("Connector streams trusted Elementor uploads without hydrating the full page", async () => {
   const source = await readFile(restApiPath, "utf8");
   const handlerStart = source.indexOf(
     "function figmapress_connector_stream_elementor_upload",
@@ -265,6 +265,12 @@ test("Connector streams oversized Elementor uploads without hydrating the full p
     handlerStart,
   );
   const handler = source.slice(handlerStart, handlerEnd);
+  const uploadStart = handlerEnd;
+  const uploadEnd = source.indexOf(
+    "function figmapress_connector_rest_create_elementor_page",
+    uploadStart,
+  );
+  const uploadHandler = source.slice(uploadStart, uploadEnd);
 
   assert.ok(handlerStart > 0 && handlerEnd > handlerStart);
   assert.match(handler, /autoload'\s*=>\s*'no'/);
@@ -278,6 +284,11 @@ test("Connector streams oversized Elementor uploads without hydrating the full p
   assert.match(handler, /'_figmapress_stored_hash'/);
   assert.doesNotMatch(handler, /json_decode\([^;]*option_value/);
   assert.doesNotMatch(handler, /implode\( '', \$state\['chunks'\] \)/);
+  assert.match(
+    uploadHandler,
+    /if \( current_user_can\( 'unfiltered_html' \) \) \{\s+return figmapress_connector_stream_elementor_upload/,
+  );
+  assert.doesNotMatch(uploadHandler, /\$total > 32/);
 });
 
 test("shared-host site preparation keeps the paired user explicit", async () => {
