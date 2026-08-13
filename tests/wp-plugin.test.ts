@@ -336,6 +336,7 @@ test("Connector browser bridge is origin pinned and token scoped", async () => {
   assert.match(pairing, /figmapress:confirm-elementor/);
   assert.match(pairing, /figmapress:elementor-confirmed/);
   assert.match(pairing, /window\.setTimeout\(\(\) => post\(\{ type: 'figmapress:bridge-ready' \}\), 0\)/);
+  assert.doesNotMatch(pairing, /clearInterval\(readyTimer\)/);
   assert.match(pairing, /figmapress:localize-media/);
   assert.match(pairing, /figmapress:elementor-media/);
   assert.match(pairing, /elementor\/uploads\//);
