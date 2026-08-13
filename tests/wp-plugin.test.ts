@@ -622,6 +622,9 @@ test("Connector prepares idempotent draft pages and a plugin-owned unassigned me
   assert.match(rest, /if \( \$existing_id \) \{\s+\$can_edit_existing = \$actor_user_id/);
   assert.doesNotMatch(rest, /\$can_edit_existing = \$actor_user_id[\s\S]{0,180}\$existing_id &&/);
   assert.match(rest, /'draft' !== get_post_status\( \$existing_id \)/);
+  assert.match(prepareSite, /get_post_field\( 'post_title', \$existing_id, 'raw' \)/);
+  assert.match(prepareSite, /if \( \$current_title === \$page_title \) \{\s+\/\/ Replays should not fire save_post hooks/);
+  assert.match(prepareSite, /\$post_id = \$existing_id;\s+\} else \{\s+\$post_id = wp_update_post/);
   assert.doesNotMatch(prepareSite, /figmapress_connector_read_elementor_data/);
   assert.match(rest, /A stable Figma source always updates the same draft/);
   assert.match(rest, /the validated incoming document will replace it below/);

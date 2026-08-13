@@ -483,13 +483,21 @@ function figmapress_connector_rest_prepare_site( WP_REST_Request $request, $acto
         $existing_id = absint( $requested['existingId'] );
         $created = false;
         if ( $existing_id ) {
-            $post_id = wp_update_post(
-                array(
-                    'ID'         => $existing_id,
-                    'post_title' => $page_title,
-                ),
-                true
-            );
+            $current_title = (string) get_post_field( 'post_title', $existing_id, 'raw' );
+            if ( $current_title === $page_title ) {
+                // Replays should not fire save_post hooks for an identical draft.
+                // Large Elementor documents can exhaust shared-host memory even
+                // when wp_update_post() would not change any stored field.
+                $post_id = $existing_id;
+            } else {
+                $post_id = wp_update_post(
+                    array(
+                        'ID'         => $existing_id,
+                        'post_title' => $page_title,
+                    ),
+                    true
+                );
+            }
         } else {
             $post_data = array(
                 'post_type'    => 'page',
