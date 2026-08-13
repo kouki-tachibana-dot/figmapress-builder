@@ -330,6 +330,27 @@ interface WordPressResult {
   warnings?: string[];
 }
 
+const ELEMENTOR_CONFIRMATION_RETRY_DELAYS_MS = [0, 1_500, 4_000, 10_000, 20_000] as const;
+
+async function confirmElementorAfterInterruptedSave<T>(
+  siteBridge: WordPressSiteBridge,
+  connectorToken: string,
+  payload: { postId: number; requestId: string; sourceKey: string },
+): Promise<T> {
+  let lastError: unknown = new Error("WordPress安全接続でElementor保存を確認できませんでした。");
+  for (const delayMs of ELEMENTOR_CONFIRMATION_RETRY_DELAYS_MS) {
+    if (delayMs > 0) {
+      await new Promise((resolve) => window.setTimeout(resolve, delayMs));
+    }
+    try {
+      return await siteBridge.confirmElementor<T>(connectorToken, payload);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
 interface WordPressStatus {
   authenticated: true;
   user: { id: number; name: string };
@@ -1630,7 +1651,8 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
           ).catch(async (error) => {
             setWpSiteProgress(`${index + 1}/${plan.pages.length}「${page.title}」の保存済みデータを確認しています…`);
             try {
-              return await siteBridge.confirmElementor<WordPressResult>(
+              return await confirmElementorAfterInterruptedSave<WordPressResult>(
+                siteBridge,
                 credentials.connectorToken as string,
                 {
                   postId: target.id,
@@ -2268,7 +2290,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.26.23 live</span>
+          <span className="status-pill"><i /> v0.26.24 live</span>
         </nav>
       </header>
 
@@ -3378,7 +3400,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.26.23</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.26.24</span></div>
       </footer>
     </main>
   );

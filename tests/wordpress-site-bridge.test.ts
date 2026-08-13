@@ -40,8 +40,11 @@ test("multi-page form embeds the target-origin WordPress bridge", () => {
   assert.match(bridge, /saveElementor<T>/);
   assert.match(bridge, /confirmElementor<T>/);
   assert.match(bridge, /localizeMedia<T>/);
+  assert.match(bridge, /BRIDGE_ELEMENTOR_TIMEOUT_MS = 600_000/);
   assert.match(component, /siteBridge\.saveElementor<WordPressResult>/);
-  assert.match(component, /siteBridge\.confirmElementor<WordPressResult>/);
-  assert.match(component, /catch \{\s+throw error;\s+\}/);
+  assert.match(component, /ELEMENTOR_CONFIRMATION_RETRY_DELAYS_MS = \[0, 1_500, 4_000, 10_000, 20_000\]/);
+  assert.match(component, /function confirmElementorAfterInterruptedSave<T>/);
+  assert.match(component, /siteBridge\.confirmElementor<T>\(connectorToken, payload\)/);
+  assert.match(component, /confirmElementorAfterInterruptedSave<WordPressResult>/);
   assert.match(component, /siteBridge\.localizeMedia<BrowserElementorMediaProgress>/);
 });

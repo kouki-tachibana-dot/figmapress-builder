@@ -395,7 +395,7 @@ function figmapress_connector_render_browser_bridge() {
         }
         return parsed;
     };
-    const postForm = async (url, connectorToken, fields) => {
+    const postForm = async (url, connectorToken, fields, timeoutMs = 45000) => {
         const form = new URLSearchParams();
         form.set('figmapress_token_hex', hex(connectorToken));
         Object.entries(fields).forEach(([key, value]) => form.set(key, String(value)));
@@ -405,10 +405,16 @@ function figmapress_connector_render_browser_bridge() {
             body: form,
             credentials: 'same-origin',
             redirect: 'error',
-            signal: AbortSignal.timeout(45000),
+            signal: AbortSignal.timeout(timeoutMs),
         });
         return parseResponse(response);
     };
+    const waitForRetry = (delayMs) => new Promise(
+        (resolve) => window.setTimeout(resolve, delayMs)
+    );
+    const isRetryableElementorError = (error) => (
+        !error || typeof error.status !== 'number' || error.status === 409 || error.status >= 500
+    );
     const post = (message) => {
         if (peer && (embedded || !peer.closed)) {
             peer.postMessage(message, allowedOrigin);
@@ -461,19 +467,46 @@ function figmapress_connector_render_browser_bridge() {
                 const chunkBytes = 8000;
                 const total = Math.ceil(bytes.length / chunkBytes);
                 if (total < 1 || total > 128) throw new Error('Elementorデータが大きすぎます。');
-                for (let index = 0; index < total; index += 1) {
-                    parsed = await postForm(
-                        elementorUploadUrl + encodeURIComponent(payload.requestId),
-                        connectorToken,
-                        {
-                            index,
-                            total,
-                            chunk: base64Bytes(bytes.subarray(index * chunkBytes, (index + 1) * chunkBytes)),
+                const retryDelays = [1000, 2500, 5000, 10000, 20000];
+                let saved = false;
+                let lastError = null;
+                for (let round = 0; round <= retryDelays.length && !saved; round += 1) {
+                    try {
+                        parsed = null;
+                        for (let index = 0; index < total; index += 1) {
+                            parsed = await postForm(
+                                elementorUploadUrl + encodeURIComponent(payload.requestId),
+                                connectorToken,
+                                {
+                                    index,
+                                    total,
+                                    chunk: base64Bytes(bytes.subarray(index * chunkBytes, (index + 1) * chunkBytes)),
+                                },
+                                index === total - 1 ? 150000 : 45000
+                            );
+                            if (parsed && parsed.status === 'draft') {
+                                saved = true;
+                                break;
+                            }
+                            if (index === total - 1) {
+                                throw Object.assign(
+                                    new Error('Elementor下書きの保存を確認できませんでした。'),
+                                    { status: 409 }
+                                );
+                            }
+                            await waitForRetry(75);
                         }
-                    );
-                    if (parsed && parsed.status === 'draft') break;
-                    if (index === total - 1) throw new Error('Elementor下書きの保存を確認できませんでした。');
-                    await new Promise((resolve) => window.setTimeout(resolve, 75));
+                    } catch (error) {
+                        lastError = error;
+                        if (!isRetryableElementorError(error) || round === retryDelays.length) {
+                            throw error;
+                        }
+                        status.textContent = 'Elementor編集データの分割送信を安全に再開しています…';
+                        await waitForRetry(retryDelays[round]);
+                    }
+                }
+                if (!saved) {
+                    throw lastError || new Error('Elementor下書きの保存を確認できませんでした。');
                 }
                 responseType = 'figmapress:elementor-saved';
             } else if (action === 'figmapress:confirm-elementor') {
