@@ -1189,18 +1189,28 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
         // Small documents retain the normal revision safety net; large ones are
         // replaced atomically by the metadata write below.
         $existing_elementor_bytes = figmapress_connector_elementor_storage_bytes( $existing_id );
-        if ( $existing_elementor_bytes <= 600000 ) {
+        if ( $existing_elementor_bytes > 0 && $existing_elementor_bytes <= 600000 ) {
             wp_save_post_revision( $existing_id );
         } else {
-            $warnings[] = '共有サーバーのメモリ保護のため、旧Elementor文書の自動リビジョン複製を省略しました。';
+            if ( $existing_elementor_bytes > 600000 ) {
+                $warnings[] = '共有サーバーのメモリ保護のため、旧Elementor文書の自動リビジョン複製を省略しました。';
+            }
         }
-        $post_id = wp_update_post(
-            array(
-                'ID'         => $existing_id,
-                'post_title' => $title,
-            ),
-            true
-        );
+        $current_title = (string) get_post_field( 'post_title', $existing_id, 'raw' );
+        if ( $current_title === $title ) {
+            // Replacing Elementor data does not require a post update when the
+            // title is unchanged. Avoid firing save_post hooks before the
+            // bounded document write on shared hosts.
+            $post_id = $existing_id;
+        } else {
+            $post_id = wp_update_post(
+                array(
+                    'ID'         => $existing_id,
+                    'post_title' => $title,
+                ),
+                true
+            );
+        }
         $warnings[] = '同じFigmaファイル・ノードの既存下書きを更新しました。重複ページは作成していません。';
     } else {
         $post_id = wp_insert_post(

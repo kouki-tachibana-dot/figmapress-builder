@@ -355,10 +355,16 @@ test("Connector browser bridge is origin pinned and token scoped", async () => {
 
 test("Connector updates one draft for a stable Figma source", async () => {
   const source = await readFile(restApiPath, "utf8");
+  const createStart = source.indexOf("function figmapress_connector_rest_create_elementor_page");
+  const createEnd = source.indexOf("function figmapress_connector_rest_confirm_elementor_page", createStart);
+  const createSource = source.slice(createStart, createEnd);
   assert.match(source, /\^figma:/);
   assert.match(source, /'_figmapress_source_key'/);
   assert.match(source, /figmapress_connector_find_page_by_meta\( '_figmapress_source_key'/);
-  assert.match(source, /wp_update_post\(/);
+  assert.match(createSource, /\$existing_elementor_bytes > 0 && \$existing_elementor_bytes <= 600000/);
+  assert.match(createSource, /get_post_field\( 'post_title', \$existing_id, 'raw' \)/);
+  assert.match(createSource, /if \( \$current_title === \$title \) \{[\s\S]{0,300}\$post_id = \$existing_id;/);
+  assert.match(createSource, /\} else \{\s+\$post_id = wp_update_post\(/);
   assert.match(source, /'updated'\s*=>\s*\$reuse_existing/);
 });
 
@@ -634,7 +640,7 @@ test("Connector prepares idempotent draft pages and a plugin-owned unassigned me
   assert.match(rest, /A stable Figma source always updates the same draft/);
   assert.match(rest, /the validated incoming document will replace it below/);
   assert.match(rest, /figmapress_connector_elementor_storage_bytes\( \$existing_id \)/);
-  assert.match(rest, /if \( \$existing_elementor_bytes <= 600000 \) \{\s+wp_save_post_revision\( \$existing_id \)/);
+  assert.match(rest, /if \( \$existing_elementor_bytes > 0 && \$existing_elementor_bytes <= 600000 \) \{\s+wp_save_post_revision\( \$existing_id \)/);
   assert.match(rest, /function figmapress_connector_elementor_storage_bytes/);
   assert.match(rest, /OCTET_LENGTH\(meta_value\)/);
   assert.match(rest, /if \( \$document_api_skipped \) \{/);
