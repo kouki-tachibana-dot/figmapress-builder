@@ -462,7 +462,6 @@ function figmapress_connector_render_browser_bridge() {
         const maxBytes = action === 'figmapress:save-elementor' ? 4000000 : 100000;
         if (serialized.length < 20 || serialized.length > maxBytes) return;
         busy = true;
-        window.clearInterval(readyTimer);
         status.textContent = action === 'figmapress:prepare-site'
             ? '下書きページとメニューを準備しています…'
             : action === 'figmapress:save-elementor'
