@@ -988,10 +988,13 @@ function figmapress_connector_rest_upload_elementor_page( WP_REST_Request $reque
         return new WP_Error( 'figmapress_invalid_upload_chunk', 'Elementor分割データが無効です。', array( 'status' => 422 ) );
     }
 
-    // Large site pages stay in the database from the first chunk onward. The
-    // legacy in-memory path remains for smaller documents so its stricter
-    // recursive sanitization and media localization behavior are unchanged.
-    if ( $total > 32 && current_user_can( 'unfiltered_html' ) ) {
+    // Keep every trusted Builder upload in the database from the first chunk
+    // onward. Even a smaller page can trigger expensive Elementor/save_post
+    // hooks on shared hosts; the streamed path validates the complete JSON,
+    // allowed structure, widget allowlist, target draft, and request identity
+    // before replacing _elementor_data without firing those hooks. Editors
+    // without unfiltered_html retain the stricter recursive fallback below.
+    if ( current_user_can( 'unfiltered_html' ) ) {
         return figmapress_connector_stream_elementor_upload( $upload_id, $index, $total, $decoded );
     }
 
