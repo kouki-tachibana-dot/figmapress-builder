@@ -282,6 +282,9 @@ test("Connector streams trusted Elementor uploads without hydrating the full pag
   assert.match(handler, /get_post_status\( \$post_id \)/);
   assert.match(handler, /'_elementor_data'/);
   assert.match(handler, /'_figmapress_stored_hash'/);
+  assert.match(handler, /figmapress_connector_deferred_media_progress\( \$media_total \)/);
+  assert.doesNotMatch(handler, /'remainingMedia'\s*=>\s*0/);
+  assert.doesNotMatch(handler, /'mediaComplete'\s*=>\s*true/);
   assert.doesNotMatch(handler, /json_decode\([^;]*option_value/);
   assert.doesNotMatch(handler, /implode\( '', \$state\['chunks'\] \)/);
   assert.match(
@@ -289,6 +292,32 @@ test("Connector streams trusted Elementor uploads without hydrating the full pag
     /if \( current_user_can\( 'unfiltered_html' \) \) \{\s+return figmapress_connector_stream_elementor_upload/,
   );
   assert.doesNotMatch(uploadHandler, /\$total > 32/);
+});
+
+test("Connector always scans streamed and confirmed drafts before declaring media complete", async () => {
+  const source = await readFile(restApiPath, "utf8");
+  const helperStart = source.indexOf(
+    "function figmapress_connector_deferred_media_progress",
+  );
+  const helperEnd = source.indexOf(
+    "function figmapress_connector_localize_elementor_images",
+    helperStart,
+  );
+  const helper = source.slice(helperStart, helperEnd);
+  const confirmStart = source.indexOf(
+    "function figmapress_connector_rest_confirm_elementor_page",
+  );
+  const confirmEnd = source.indexOf(
+    "function figmapress_connector_validate_owned_elementor_draft",
+    confirmStart,
+  );
+  const confirm = source.slice(confirmStart, confirmEnd);
+
+  assert.ok(helperStart > 0 && helperEnd > helperStart);
+  assert.match(helper, /\$needs_scan\s*=\s*\$total_media > 0/);
+  assert.match(helper, /'remainingMedia'\s*=>\s*\$needs_scan \? 1 : 0/);
+  assert.match(helper, /'mediaComplete'\s*=>\s*! \$needs_scan/);
+  assert.match(confirm, /figmapress_connector_deferred_media_progress/);
 });
 
 test("shared-host site preparation keeps the paired user explicit", async () => {

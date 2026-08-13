@@ -935,27 +935,24 @@ function figmapress_connector_stream_elementor_upload( $upload_id, $index, $tota
     delete_option( $state_key );
     wp_cache_delete( $post_id, 'post_meta' );
 
-    $total_media = $media_total;
-    $saved_media = count( figmapress_connector_load_media_map( $post_id ) );
+    $media_progress = figmapress_connector_deferred_media_progress( $media_total );
     return rest_ensure_response(
-        array(
-            'id'             => $post_id,
-            'slug'           => get_post_field( 'post_name', $post_id ),
-            'status'         => 'draft',
-            'target'         => 'elementor',
-            'editLink'       => admin_url( 'post.php?post=' . $post_id . '&action=elementor' ),
-            'previewLink'    => get_preview_post_link( $post_id ),
-            'rawLink'        => get_permalink( $post_id ),
-            'storedElements' => absint( $valid['root_elements'] ),
-            'storedBytes'    => $stored_bytes,
-            'idempotent'     => true,
-            'updated'        => true,
-            'savedMedia'     => min( $saved_media, $total_media ),
-            'totalMedia'     => $total_media,
-            'remainingMedia' => 0,
-            'failedMedia'    => 0,
-            'mediaComplete'  => true,
-            'warnings'       => array( '共有サーバー向け低メモリ保存で同じ下書きを更新しました。既存の保存済み画像は再利用し、その他は元のHTTPS画像を保持します。' ),
+        array_merge(
+            array(
+                'id'             => $post_id,
+                'slug'           => get_post_field( 'post_name', $post_id ),
+                'status'         => 'draft',
+                'target'         => 'elementor',
+                'editLink'       => admin_url( 'post.php?post=' . $post_id . '&action=elementor' ),
+                'previewLink'    => get_preview_post_link( $post_id ),
+                'rawLink'        => get_permalink( $post_id ),
+                'storedElements' => absint( $valid['root_elements'] ),
+                'storedBytes'    => $stored_bytes,
+                'idempotent'     => true,
+                'updated'        => true,
+                'warnings'       => array( '共有サーバー向け低メモリ保存で同じ下書きを更新しました。画像は再開可能なメディア保存へ引き継ぎます。' ),
+            ),
+            $media_progress
         )
     );
 }
@@ -1356,27 +1353,26 @@ function figmapress_connector_rest_confirm_elementor_page( WP_REST_Request $requ
     $request_lock_key = 'figmapress_request_' . substr( hash_hmac( 'sha256', $source_key, wp_salt( 'nonce' ) ), 0, 32 );
     delete_option( $request_lock_key );
     delete_post_meta( $post_id, '_figmapress_prepared' );
-    $total_media = absint( get_post_meta( $post_id, '_figmapress_media_total', true ) );
-    $saved_media = count( figmapress_connector_load_media_map( $post_id ) );
+    $media_progress = figmapress_connector_deferred_media_progress(
+        get_post_meta( $post_id, '_figmapress_media_total', true )
+    );
     return rest_ensure_response(
-        array(
-            'id'             => $post_id,
-            'slug'           => get_post_field( 'post_name', $post_id ),
-            'status'         => 'draft',
-            'target'         => 'elementor',
-            'editLink'       => admin_url( 'post.php?post=' . $post_id . '&action=elementor' ),
-            'previewLink'    => get_preview_post_link( $post_id ),
-            'rawLink'        => get_permalink( $post_id ),
-            'storedElements' => 1,
-            'storedBytes'    => $stored_bytes,
-            'idempotent'     => true,
-            'updated'        => true,
-            'savedMedia'     => min( $saved_media, $total_media ),
-            'totalMedia'     => $total_media,
-            'remainingMedia' => max( 0, $total_media - $saved_media ),
-            'failedMedia'    => 0,
-            'mediaComplete'  => $saved_media >= $total_media,
-            'warnings'       => array( 'WordPressの応答終了後に同じ下書きの完全保存を再確認しました。' ),
+        array_merge(
+            array(
+                'id'             => $post_id,
+                'slug'           => get_post_field( 'post_name', $post_id ),
+                'status'         => 'draft',
+                'target'         => 'elementor',
+                'editLink'       => admin_url( 'post.php?post=' . $post_id . '&action=elementor' ),
+                'previewLink'    => get_preview_post_link( $post_id ),
+                'rawLink'        => get_permalink( $post_id ),
+                'storedElements' => 1,
+                'storedBytes'    => $stored_bytes,
+                'idempotent'     => true,
+                'updated'        => true,
+                'warnings'       => array( 'WordPressの応答終了後に同じ下書きの完全保存を再確認しました。画像は再開可能なメディア保存へ引き継ぎます。' ),
+            ),
+            $media_progress
         )
     );
 }
@@ -2442,6 +2438,25 @@ function figmapress_connector_elementor_media_progress( $elements, $post_id ) {
         'remainingMedia' => $remaining,
         'failedMedia'    => $failed,
         'mediaComplete'  => 0 === $remaining && 0 === $failed,
+    );
+}
+
+/**
+ * Mark a low-memory or confirmation save as awaiting one authoritative media
+ * scan. The streamed document deliberately is not decoded in the final upload
+ * request, so its SQL marker count cannot prove that every URL is already a
+ * Media Library URL. Returning one pending unit makes the browser call the
+ * bounded /media route, which decodes once and returns the exact progress.
+ */
+function figmapress_connector_deferred_media_progress( $total_media ) {
+    $total_media = absint( $total_media );
+    $needs_scan  = $total_media > 0;
+    return array(
+        'savedMedia'     => 0,
+        'totalMedia'     => $total_media,
+        'remainingMedia' => $needs_scan ? 1 : 0,
+        'failedMedia'    => 0,
+        'mediaComplete'  => ! $needs_scan,
     );
 }
 
