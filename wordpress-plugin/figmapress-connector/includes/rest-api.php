@@ -647,6 +647,312 @@ function figmapress_connector_request_lock_is_stale( $started ) {
 }
 
 /**
+ * Store one metadata value without asking WordPress to hydrate every post-meta
+ * row into PHP memory. Large Elementor documents can make the normal metadata
+ * cache path exceed a shared host's limit even when the new value is small.
+ */
+function figmapress_connector_direct_set_post_meta( $post_id, $meta_key, $value ) {
+    global $wpdb;
+    $post_id    = absint( $post_id );
+    $meta_key   = (string) $meta_key;
+    $meta_value = maybe_serialize( $value );
+    $meta_id    = $wpdb->get_var(
+        $wpdb->prepare(
+            "SELECT meta_id FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s ORDER BY meta_id ASC LIMIT 1",
+            $post_id,
+            $meta_key
+        )
+    );
+    if ( $meta_id ) {
+        $saved = $wpdb->update(
+            $wpdb->postmeta,
+            array( 'meta_value' => $meta_value ),
+            array( 'meta_id' => absint( $meta_id ) ),
+            array( '%s' ),
+            array( '%d' )
+        );
+    } else {
+        $saved = $wpdb->insert(
+            $wpdb->postmeta,
+            array(
+                'post_id'    => $post_id,
+                'meta_key'   => $meta_key,
+                'meta_value' => $meta_value,
+            ),
+            array( '%d', '%s', '%s' )
+        );
+    }
+    wp_cache_delete( $post_id, 'post_meta' );
+    return false !== $saved;
+}
+
+/** Delete one metadata key without loading the large Elementor value. */
+function figmapress_connector_direct_delete_post_meta( $post_id, $meta_key ) {
+    global $wpdb;
+    $deleted = $wpdb->delete(
+        $wpdb->postmeta,
+        array(
+            'post_id'  => absint( $post_id ),
+            'meta_key' => (string) $meta_key,
+        ),
+        array( '%d', '%s' )
+    );
+    wp_cache_delete( absint( $post_id ), 'post_meta' );
+    return false !== $deleted;
+}
+
+/**
+ * Append a large upload to a non-autoloaded DB row, then move only the
+ * template.content JSON into _elementor_data inside MySQL. The complete page
+ * never exists as a second PHP string or decoded PHP tree.
+ */
+function figmapress_connector_stream_elementor_upload( $upload_id, $index, $total, $decoded ) {
+    global $wpdb;
+    $user_id   = get_current_user_id();
+    $suffix    = substr( hash_hmac( 'sha256', $upload_id, wp_salt( 'nonce' ) ), 0, 24 );
+    $data_key  = 'figmapress_stream_' . $user_id . '_' . $suffix;
+    $state_key = 'figmapress_stream_state_' . $user_id . '_' . $suffix;
+    $state     = get_option( $state_key, array() );
+
+    if ( 0 === $index ) {
+        $wpdb->delete( $wpdb->options, array( 'option_name' => $data_key ), array( '%s' ) );
+        $inserted = $wpdb->insert(
+            $wpdb->options,
+            array(
+                'option_name'  => $data_key,
+                'option_value' => $decoded,
+                'autoload'     => 'no',
+            ),
+            array( '%s', '%s', '%s' )
+        );
+        if ( false === $inserted ) {
+            return new WP_Error( 'figmapress_stream_start_failed', 'Elementor分割データの保存を開始できませんでした。', array( 'status' => 500 ) );
+        }
+        $state = array( 'total' => $total, 'next' => 1, 'started' => time() );
+        update_option( $state_key, $state, false );
+    } else {
+        $expected = is_array( $state ) && isset( $state['next'] ) ? absint( $state['next'] ) : 0;
+        if ( ! is_array( $state ) || absint( $state['total'] ?? 0 ) !== $total || $expected < 1 ) {
+            return new WP_Error( 'figmapress_stream_missing', 'Elementor分割データの先頭から再送してください。', array( 'status' => 409 ) );
+        }
+        if ( $index < $expected ) {
+            return new WP_Error( 'figmapress_stream_restarted', 'Elementor分割データの先頭から再送してください。', array( 'status' => 409 ) );
+        }
+        if ( $index !== $expected ) {
+            return new WP_Error( 'figmapress_stream_out_of_order', 'Elementor分割データの順序が一致しません。', array( 'status' => 409 ) );
+        }
+        $appended = $wpdb->query(
+            $wpdb->prepare(
+                "UPDATE {$wpdb->options} SET option_value = CONCAT(option_value, %s) WHERE option_name = %s",
+                $decoded,
+                $data_key
+            )
+        );
+        if ( 1 !== $appended ) {
+            return new WP_Error( 'figmapress_stream_append_failed', 'Elementor分割データを追記できませんでした。', array( 'status' => 500 ) );
+        }
+        $state['next'] = $expected + 1;
+        update_option( $state_key, $state, false );
+    }
+
+    $received = absint( $state['next'] ?? 0 );
+    if ( $received < $total ) {
+        return rest_ensure_response( array( 'complete' => false, 'received' => $received, 'total' => $total ) );
+    }
+
+    $valid = $wpdb->get_row(
+        $wpdb->prepare(
+            "SELECT JSON_VALID(option_value) AS valid_json,
+                JSON_UNQUOTE(JSON_EXTRACT(option_value, '$.requestId')) AS request_id,
+                JSON_UNQUOTE(JSON_EXTRACT(option_value, '$.sourceKey')) AS source_key,
+                JSON_UNQUOTE(JSON_EXTRACT(option_value, '$.status')) AS post_status,
+                JSON_UNQUOTE(JSON_EXTRACT(option_value, '$.pageTemplate')) AS page_template,
+                JSON_UNQUOTE(JSON_EXTRACT(option_value, '$.template.version')) AS template_version,
+                JSON_TYPE(JSON_EXTRACT(option_value, '$.template.content')) AS content_type,
+                JSON_LENGTH(JSON_EXTRACT(option_value, '$.template.content')) AS root_elements,
+                JSON_EXTRACT(option_value, '$.template.page_settings') AS page_settings
+             FROM {$wpdb->options} WHERE option_name = %s LIMIT 1",
+            $data_key
+        ),
+        ARRAY_A
+    );
+    if (
+        ! is_array( $valid ) || '1' !== (string) $valid['valid_json'] ||
+        ! hash_equals( $upload_id, (string) $valid['request_id'] ) ||
+        ! preg_match( figmapress_connector_site_source_key_pattern(), (string) $valid['source_key'] ) ||
+        'draft' !== (string) $valid['post_status'] || '0.4' !== (string) $valid['template_version'] ||
+        'ARRAY' !== (string) $valid['content_type'] || absint( $valid['root_elements'] ) < 1
+    ) {
+        $wpdb->delete( $wpdb->options, array( 'option_name' => $data_key ), array( '%s' ) );
+        delete_option( $state_key );
+        return new WP_Error( 'figmapress_invalid_streamed_template', 'Elementorデータを安全に再構成できませんでした。', array( 'status' => 422 ) );
+    }
+    $unsafe = $wpdb->get_var(
+        $wpdb->prepare(
+            "SELECT (LOWER(option_value) LIKE %s OR LOWER(option_value) LIKE %s OR LOWER(option_value) LIKE %s OR LOWER(option_value) LIKE %s)
+             FROM {$wpdb->options} WHERE option_name = %s LIMIT 1",
+            '%<script%',
+            '%javascript:%',
+            '%data:text/html%',
+            '%\"widgettype\":\"html\"%',
+            $data_key
+        )
+    );
+    if ( $unsafe ) {
+        $wpdb->delete( $wpdb->options, array( 'option_name' => $data_key ), array( '%s' ) );
+        delete_option( $state_key );
+        return new WP_Error( 'figmapress_unsafe_streamed_template', 'Elementorデータに許可されていない内容があります。', array( 'status' => 422 ) );
+    }
+    // JSON.stringify() emits these structural keys without whitespace. Count
+    // every structural marker and require it to be one of the same widget and
+    // container types as the normal recursive sanitizer. The fast path is
+    // additionally limited to users who may already save unfiltered HTML.
+    $structure = $wpdb->get_row(
+        $wpdb->prepare(
+            "SELECT
+                (LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"elType\":', ''))) / 9 AS element_count,
+                ((LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"elType\":\"container\"', ''))) / 20) +
+                ((LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"elType\":\"widget\"', ''))) / 17) AS allowed_elements,
+                (LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"widgetType\":', ''))) / 13 AS widget_count,
+                ((LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"widgetType\":\"heading\"', ''))) / 22) +
+                ((LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"widgetType\":\"text-editor\"', ''))) / 26) +
+                ((LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"widgetType\":\"button\"', ''))) / 21) +
+                ((LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"widgetType\":\"image\"', ''))) / 20) +
+                ((LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"widgetType\":\"figmapress-nav\"', ''))) / 29) +
+                ((LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"widgetType\":\"figmapress-link\"', ''))) / 30) +
+                ((LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"widgetType\":\"figmapress-carousel\"', ''))) / 34) +
+                ((LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"widgetType\":\"figmapress-contact-form\"', ''))) / 38) +
+                ((LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"widgetType\":\"figmapress-accordion\"', ''))) / 35) AS allowed_widgets
+             FROM {$wpdb->options} WHERE option_name = %s LIMIT 1",
+            $data_key
+        ),
+        ARRAY_A
+    );
+    if (
+        ! current_user_can( 'unfiltered_html' ) || ! is_array( $structure ) ||
+        absint( $structure['element_count'] ) !== absint( $structure['allowed_elements'] ) ||
+        absint( $structure['widget_count'] ) !== absint( $structure['allowed_widgets'] ) ||
+        absint( $structure['element_count'] ) > 1200
+    ) {
+        $wpdb->delete( $wpdb->options, array( 'option_name' => $data_key ), array( '%s' ) );
+        delete_option( $state_key );
+        return new WP_Error( 'figmapress_invalid_streamed_element', 'Elementorデータに未対応の要素があります。', array( 'status' => 422 ) );
+    }
+
+    $source_key = (string) $valid['source_key'];
+    $post_id    = figmapress_connector_find_page_by_meta( '_figmapress_source_key', $source_key );
+    if ( ! $post_id || 'draft' !== get_post_status( $post_id ) || ! current_user_can( 'edit_post', $post_id ) ) {
+        return new WP_Error( 'figmapress_streamed_draft_not_editable', '対象のElementor下書きを更新できません。', array( 'status' => 409 ) );
+    }
+
+    // Reuse Media Library URLs imported by an earlier run without hydrating
+    // the complete document. This also keeps expiring Figma image URLs out of
+    // the durable page whenever a known replacement exists.
+    foreach ( figmapress_connector_load_media_map( $post_id ) as $remote_url => $localized ) {
+        $local_url = is_array( $localized ) && isset( $localized['url'] ) ? (string) $localized['url'] : '';
+        if ( '' !== $remote_url && '' !== $local_url ) {
+            $wpdb->query(
+                $wpdb->prepare(
+                    "UPDATE {$wpdb->options} SET option_value = REPLACE(option_value, %s, %s) WHERE option_name = %s",
+                    $remote_url,
+                    $local_url,
+                    $data_key
+                )
+            );
+        }
+    }
+
+    // Insert the complete new value first. If PHP is terminated immediately
+    // afterwards, WordPress's newest-meta read still sees the complete page.
+    $stored = $wpdb->query(
+        $wpdb->prepare(
+            "INSERT INTO {$wpdb->postmeta} (post_id, meta_key, meta_value)
+             SELECT %d, %s, JSON_EXTRACT(option_value, '$.template.content') FROM {$wpdb->options} WHERE option_name = %s",
+            $post_id,
+            '_elementor_data',
+            $data_key
+        )
+    );
+    $new_meta_id = 1 === $stored ? absint( $wpdb->insert_id ) : 0;
+    $stored      = $new_meta_id > 0;
+    if ( ! $stored ) {
+        return new WP_Error( 'figmapress_streamed_store_failed', 'Elementor data could not be stored on this server.', array( 'status' => 500 ) );
+    }
+    $wpdb->query(
+        $wpdb->prepare(
+            "DELETE FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s AND meta_id <> %d",
+            $post_id,
+            '_elementor_data',
+            $new_meta_id
+        )
+    );
+
+    $page_settings = json_decode( (string) $valid['page_settings'], true );
+    if ( ! is_array( $page_settings ) ) {
+        $page_settings = array();
+    }
+    $page_template = in_array( $valid['page_template'], array( 'elementor_canvas', 'elementor_header_footer', 'default' ), true )
+        ? $valid['page_template']
+        : 'elementor_canvas';
+    $stored_bytes = figmapress_connector_elementor_storage_bytes( $post_id );
+    $stored_hash  = figmapress_connector_elementor_storage_hash( $post_id );
+    // Media references are counted in MySQL so the final chunk never has to
+    // decode the document only to decide whether localization can be skipped.
+    // Known library URLs were already substituted above; remaining https URLs
+    // stay usable in the draft and can be localized by a later bounded flow.
+    $media_total = $wpdb->get_var(
+        $wpdb->prepare(
+            "SELECT
+                ((LENGTH(meta_value) - LENGTH(REPLACE(meta_value, '\"figmapress_key\":', ''))) / 17) +
+                ((LENGTH(meta_value) - LENGTH(REPLACE(meta_value, '\"source\":\"figma-render\"', ''))) / 25)
+             FROM {$wpdb->postmeta} WHERE meta_id = %d LIMIT 1",
+            $new_meta_id
+        )
+    );
+    $media_total = min( 300, absint( $media_total ) );
+    figmapress_connector_direct_set_post_meta( $post_id, '_figmapress_request_id', $upload_id );
+    figmapress_connector_direct_set_post_meta( $post_id, '_figmapress_stored_request_id', $upload_id );
+    figmapress_connector_direct_set_post_meta( $post_id, '_figmapress_stored_source_key', $source_key );
+    figmapress_connector_direct_set_post_meta( $post_id, '_figmapress_stored_bytes', $stored_bytes );
+    figmapress_connector_direct_set_post_meta( $post_id, '_figmapress_stored_hash', $stored_hash );
+    figmapress_connector_direct_set_post_meta( $post_id, '_elementor_edit_mode', 'builder' );
+    figmapress_connector_direct_set_post_meta( $post_id, '_elementor_template_type', 'wp-page' );
+    figmapress_connector_direct_set_post_meta( $post_id, '_elementor_version', defined( 'ELEMENTOR_VERSION' ) ? ELEMENTOR_VERSION : '' );
+    figmapress_connector_direct_set_post_meta( $post_id, '_elementor_page_settings', $page_settings );
+    figmapress_connector_direct_set_post_meta( $post_id, '_wp_page_template', $page_template );
+    figmapress_connector_direct_set_post_meta( $post_id, '_figmapress_media_total', $media_total );
+    figmapress_connector_direct_delete_post_meta( $post_id, '_figmapress_prepared' );
+    figmapress_connector_direct_delete_post_meta( $post_id, '_elementor_css' );
+    $wpdb->delete( $wpdb->options, array( 'option_name' => $data_key ), array( '%s' ) );
+    delete_option( $state_key );
+    wp_cache_delete( $post_id, 'post_meta' );
+
+    $total_media = $media_total;
+    $saved_media = count( figmapress_connector_load_media_map( $post_id ) );
+    return rest_ensure_response(
+        array(
+            'id'             => $post_id,
+            'slug'           => get_post_field( 'post_name', $post_id ),
+            'status'         => 'draft',
+            'target'         => 'elementor',
+            'editLink'       => admin_url( 'post.php?post=' . $post_id . '&action=elementor' ),
+            'previewLink'    => get_preview_post_link( $post_id ),
+            'rawLink'        => get_permalink( $post_id ),
+            'storedElements' => absint( $valid['root_elements'] ),
+            'storedBytes'    => $stored_bytes,
+            'idempotent'     => true,
+            'updated'        => true,
+            'savedMedia'     => min( $saved_media, $total_media ),
+            'totalMedia'     => $total_media,
+            'remainingMedia' => 0,
+            'failedMedia'    => 0,
+            'mediaComplete'  => true,
+            'warnings'       => array( '共有サーバー向け低メモリ保存で同じ下書きを更新しました。既存の保存済み画像は再利用し、その他は元のHTTPS画像を保持します。' ),
+        )
+    );
+}
+
+/**
  * Receive a large Elementor page in bounded browser requests, then forward the
  * reconstructed JSON to the normal creation handler. Upload state is scoped to
  * the authenticated user and expires automatically.
@@ -672,6 +978,13 @@ function figmapress_connector_rest_upload_elementor_page( WP_REST_Request $reque
     $decoded = base64_decode( $chunk, true );
     if ( false === $decoded || strlen( $decoded ) > 72000 ) {
         return new WP_Error( 'figmapress_invalid_upload_chunk', 'Elementor分割データが無効です。', array( 'status' => 422 ) );
+    }
+
+    // Large site pages stay in the database from the first chunk onward. The
+    // legacy in-memory path remains for smaller documents so its stricter
+    // recursive sanitization and media localization behavior are unchanged.
+    if ( $total > 32 && current_user_can( 'unfiltered_html' ) ) {
+        return figmapress_connector_stream_elementor_upload( $upload_id, $index, $total, $decoded );
     }
 
     $upload_key = 'figmapress_upload_' . get_current_user_id() . '_' . substr(
