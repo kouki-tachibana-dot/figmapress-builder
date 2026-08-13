@@ -330,6 +330,11 @@ test("Connector browser bridge is origin pinned and token scoped", async () => {
   assert.match(pairing, /elementor\/uploads\//);
   assert.match(pairing, /elementor\/pages\//);
   assert.match(pairing, /chunkBytes = 8000/);
+  assert.match(pairing, /const postForm = async \(url, connectorToken, fields, timeoutMs = 45000\)/);
+  assert.match(pairing, /const retryDelays = \[1000, 2500, 5000, 10000, 20000\]/);
+  assert.match(pairing, /index === total - 1 \? 150000 : 45000/);
+  assert.match(pairing, /isRetryableElementorError/);
+  assert.match(pairing, /Elementor編集データの分割送信を安全に再開しています/);
   assert.match(pairing, /frame-ancestors https:\/\/figmapress-builder\.vercel\.app/);
   assert.doesNotMatch(pairing, /X-Frame-Options: DENY/);
   assert.match(pairing, /\/paired\/site-prepare/);

@@ -17,7 +17,10 @@ type BridgeMessage = {
 
 const BRIDGE_READY_TIMEOUT_MS = 20_000;
 const BRIDGE_REQUEST_TIMEOUT_MS = 120_000;
-const BRIDGE_ELEMENTOR_TIMEOUT_MS = 180_000;
+// The target-origin bridge may need to restart a bounded chunk upload after a
+// shared host closes one request. Keep the parent channel alive long enough
+// for that recovery instead of timing out while WordPress is still saving.
+const BRIDGE_ELEMENTOR_TIMEOUT_MS = 600_000;
 export const WORDPRESS_SITE_BRIDGE_FRAME_ID = "figmapress-site-bridge-frame";
 
 function isBridgeMessage(value: unknown): value is BridgeMessage {

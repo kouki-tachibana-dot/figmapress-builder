@@ -3,7 +3,7 @@ Contributors: figmapress
 Tags: blocks, figma, gutenberg, elementor
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 0.17.20
+Stable tag: 0.17.21
 License: GPLv2 or later
 
 Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
@@ -15,6 +15,10 @@ Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
    create a draft page containing figmapress/* blocks.
 
 == Changelog ==
+= 0.17.21 =
+* WordPress内の安全接続でもElementor分割送信を先頭から自動再開し、共有サーバーが途中の応答を閉じても同じ下書きへ安全に再送します。
+* 最終保存は長く待機し、応答が切れた場合も保存証明を時間差で再確認してから失敗を確定します。
+
 = 0.17.20 =
 * 複数ページの再構築時、タイトルが変わっていない既存下書きは不要な投稿更新を省略し、Elementorなどの保存処理を再発火させません。
 * 同じFigma変換元は同じ下書きIDと未割り当てメニューへ安全に再接続し、タイトル変更がある場合だけ更新します。
