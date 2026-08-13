@@ -382,6 +382,18 @@ function figmapress_connector_render_browser_bridge() {
         }
         return btoa(binary);
     };
+    const splitUtf8Bytes = (bytes, maxBytes) => {
+        const chunks = [];
+        let start = 0;
+        while (start < bytes.length) {
+            let end = Math.min(start + maxBytes, bytes.length);
+            while (end < bytes.length && (bytes[end] & 0xc0) === 0x80) end -= 1;
+            if (end <= start) throw new Error('Elementorデータを安全な文字境界で分割できませんでした。');
+            chunks.push(bytes.subarray(start, end));
+            start = end;
+        }
+        return chunks;
+    };
     const parseResponse = async (response) => {
         const text = await response.text();
         let parsed = null;
@@ -465,7 +477,8 @@ function figmapress_connector_render_browser_bridge() {
                 if (!payload || typeof payload.requestId !== 'string' || !requestPattern.test(payload.requestId)) return;
                 const bytes = new TextEncoder().encode(serialized);
                 const chunkBytes = 8000;
-                const total = Math.ceil(bytes.length / chunkBytes);
+                const chunks = splitUtf8Bytes(bytes, chunkBytes);
+                const total = chunks.length;
                 if (total < 1 || total > 128) throw new Error('Elementorデータが大きすぎます。');
                 const retryDelays = [1000, 2500, 5000, 10000, 20000];
                 let saved = false;
@@ -480,7 +493,7 @@ function figmapress_connector_render_browser_bridge() {
                                 {
                                     index,
                                     total,
-                                    chunk: base64Bytes(bytes.subarray(index * chunkBytes, (index + 1) * chunkBytes)),
+                                    chunk: base64Bytes(chunks[index]),
                                 },
                                 index === total - 1 ? 150000 : 45000
                             );

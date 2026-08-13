@@ -402,6 +402,12 @@ test("browser splits large Elementor creation into bounded authenticated uploads
   assert.ok(requests.length > 6);
   assert.ok(requests.every((request) => request.body.length < 48_000));
   assert.ok(requests.every((request) => /elementor\/uploads\/22222222/.test(request.url)));
+  assert.doesNotThrow(() => {
+    for (const request of requests) {
+      const part = JSON.parse(request.body) as { chunk: string };
+      new TextDecoder("utf-8", { fatal: true }).decode(Buffer.from(part.chunk, "base64"));
+    }
+  });
   const reconstructed = requests
     .map((request) => JSON.parse(request.body) as { index: number; chunk: string })
     .sort((left, right) => left.index - right.index)

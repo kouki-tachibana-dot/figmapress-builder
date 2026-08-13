@@ -341,6 +341,9 @@ test("Connector browser bridge is origin pinned and token scoped", async () => {
   assert.match(pairing, /elementor\/uploads\//);
   assert.match(pairing, /elementor\/pages\//);
   assert.match(pairing, /chunkBytes = 8000/);
+  assert.match(pairing, /const splitUtf8Bytes = \(bytes, maxBytes\)/);
+  assert.match(pairing, /\(bytes\[end\] & 0xc0\) === 0x80/);
+  assert.match(pairing, /chunk: base64Bytes\(chunks\[index\]\)/);
   assert.match(pairing, /const postForm = async \(url, connectorToken, fields, timeoutMs = 45000\)/);
   assert.match(pairing, /const retryDelays = \[1000, 2500, 5000, 10000, 20000\]/);
   assert.match(pairing, /index === total - 1 \? 150000 : 45000/);

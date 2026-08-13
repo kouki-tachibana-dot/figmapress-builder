@@ -1,11 +1,11 @@
 {
   "name": "FigmaPress Connector",
   "slug": "figmapress-connector",
-  "version": "0.17.23",
+  "version": "0.17.24",
   "requires": "6.4",
   "requires_php": "7.4",
   "tested": "7.0",
   "homepage": "https://figmapress-builder.vercel.app",
   "download_url": "https://figmapress-builder.vercel.app/downloads/figmapress-connector.zip",
-  "changelog": "<h4>0.17.23</h4><ul><li>管理者によるFigmaPressの分割送信はページ容量にかかわらず検証済み低メモリ保存を使用し、共有サーバー上のElementor・save_post処理による停止を防ぎます。</li><li>JSON構造、許可Widget、下書き所有権、変換元を検証してから、同じ下書きへ直接保存します。</li></ul><h4>0.17.22</h4><ul><li>小容量Elementorページの更新でも、タイトルが同じ既存下書きは不要な投稿更新を省略し、共有サーバー上の保存フック停止を防ぎます。</li><li>Elementor本文がまだ空の準備済み下書きでは空リビジョンを作らず、本文保存を最優先します。</li></ul><h4>0.17.21</h4><ul><li>WordPress内の安全接続でもElementor分割送信を先頭から自動再開し、共有サーバーが途中の応答を閉じても同じ下書きへ安全に再送します。</li><li>最終保存は長く待機し、応答が切れた場合も保存証明を時間差で再確認してから失敗を確定します。</li></ul>"
+  "changelog": "<h4>0.17.24</h4><ul><li>日本語を含むElementor JSONをUTF-8文字の途中で分割せず、共有サーバーのMySQLへ各分割片を安全に追記します。</li><li>WordPress内の安全接続と通常の分割接続で同じ文字境界処理を使用します。</li></ul><h4>0.17.23</h4><ul><li>管理者によるFigmaPressの分割送信はページ容量にかかわらず検証済み低メモリ保存を使用し、共有サーバー上のElementor・save_post処理による停止を防ぎます。</li><li>JSON構造、許可Widget、下書き所有権、変換元を検証してから、同じ下書きへ直接保存します。</li></ul><h4>0.17.22</h4><ul><li>小容量Elementorページの更新でも、タイトルが同じ既存下書きは不要な投稿更新を省略し、共有サーバー上の保存フック停止を防ぎます。</li><li>Elementor本文がまだ空の準備済み下書きでは空リビジョンを作らず、本文保存を最優先します。</li></ul>"
 }

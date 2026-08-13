@@ -561,6 +561,30 @@ function base64Bytes(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
+function splitUtf8Bytes(bytes: Uint8Array, maxBytes: number): Uint8Array[] {
+  const chunks: Uint8Array[] = [];
+  let start = 0;
+  while (start < bytes.byteLength) {
+    let end = Math.min(start + maxBytes, bytes.byteLength);
+    // A MySQL TEXT column validates each append independently. Never end a
+    // request inside a multi-byte UTF-8 sequence, otherwise Japanese content
+    // can be rejected even though the reconstructed JSON would be valid.
+    while (end < bytes.byteLength && (bytes[end] & 0xc0) === 0x80) {
+      end -= 1;
+    }
+    if (end <= start) {
+      throw new WordPressDirectError(
+        "Elementorデータを安全な文字境界で分割できませんでした。",
+        "request",
+        422,
+      );
+    }
+    chunks.push(bytes.subarray(start, end));
+    start = end;
+  }
+  return chunks;
+}
+
 function waitForRetry(delayMs: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, delayMs));
 }
@@ -588,7 +612,8 @@ export async function createWordPressDraftChunkedDirect(
   const chunkBytes = options.chunkBytes ?? 72_000;
   const maxChunks = options.maxChunks ?? 32;
   const interChunkDelayMs = options.interChunkDelayMs ?? 0;
-  const total = Math.ceil(bytes.byteLength / chunkBytes);
+  const chunks = splitUtf8Bytes(bytes, chunkBytes);
+  const total = chunks.length;
   if (total > maxChunks) {
     throw new WordPressDirectError(
       "Elementorデータが大きすぎるため、変換対象を分割してください。",
@@ -610,7 +635,7 @@ export async function createWordPressDraftChunkedDirect(
         const chunkPayload = {
           index,
           total,
-          chunk: base64Bytes(bytes.subarray(index * chunkBytes, (index + 1) * chunkBytes)),
+          chunk: base64Bytes(chunks[index]),
         };
         const chunkBody = JSON.stringify(chunkPayload);
         let response: Response | null = null;
