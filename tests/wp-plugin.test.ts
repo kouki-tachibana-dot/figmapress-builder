@@ -255,6 +255,31 @@ test("Connector reconstructs bounded user-scoped Elementor uploads", async () =>
   assert.match(source, /figmapress_connector_rest_create_elementor_page\( \$forward \)/);
 });
 
+test("Connector streams oversized Elementor uploads without hydrating the full page", async () => {
+  const source = await readFile(restApiPath, "utf8");
+  const handlerStart = source.indexOf(
+    "function figmapress_connector_stream_elementor_upload",
+  );
+  const handlerEnd = source.indexOf(
+    "function figmapress_connector_rest_upload_elementor_page",
+    handlerStart,
+  );
+  const handler = source.slice(handlerStart, handlerEnd);
+
+  assert.ok(handlerStart > 0 && handlerEnd > handlerStart);
+  assert.match(handler, /autoload'\s*=>\s*'no'/);
+  assert.match(handler, /SET option_value = CONCAT\(option_value, %s\)/);
+  assert.match(handler, /JSON_VALID\(option_value\)/);
+  assert.match(handler, /JSON_EXTRACT\(option_value, '\$\.template\.content'\)/);
+  assert.match(handler, /current_user_can\( 'unfiltered_html' \)/);
+  assert.match(handler, /current_user_can\( 'edit_post', \$post_id \)/);
+  assert.match(handler, /get_post_status\( \$post_id \)/);
+  assert.match(handler, /'_elementor_data'/);
+  assert.match(handler, /'_figmapress_stored_hash'/);
+  assert.doesNotMatch(handler, /json_decode\([^;]*option_value/);
+  assert.doesNotMatch(handler, /implode\( '', \$state\['chunks'\] \)/);
+});
+
 test("shared-host site preparation keeps the paired user explicit", async () => {
   const [pairing, rest] = await Promise.all([
     readFile(pairingPath, "utf8"),
