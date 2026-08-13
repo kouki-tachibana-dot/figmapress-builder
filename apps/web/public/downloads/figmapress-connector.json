@@ -1,11 +1,11 @@
 {
   "name": "FigmaPress Connector",
   "slug": "figmapress-connector",
-  "version": "0.17.25",
+  "version": "0.17.26",
   "requires": "6.4",
   "requires_php": "7.4",
   "tested": "7.0",
   "homepage": "https://figmapress-builder.vercel.app",
   "download_url": "https://figmapress-builder.vercel.app/downloads/figmapress-connector.zip",
-  "changelog": "<h4>0.17.25</h4><ul><li>WordPress内の安全接続が初回完了後も準備完了通知を継続し、同じFigmaPressタブから複数ページ構築を安全に再実行できます。</li><li>再実行時も同じ下書きIDと未割り当てメニューを再利用します。</li></ul><h4>0.17.24</h4><ul><li>日本語を含むElementor JSONをUTF-8文字の途中で分割せず、共有サーバーのMySQLへ各分割片を安全に追記します。</li><li>WordPress内の安全接続と通常の分割接続で同じ文字境界処理を使用します。</li></ul><h4>0.17.23</h4><ul><li>管理者によるFigmaPressの分割送信はページ容量にかかわらず検証済み低メモリ保存を使用し、共有サーバー上のElementor・save_post処理による停止を防ぎます。</li><li>JSON構造、許可Widget、下書き所有権、変換元を検証してから、同じ下書きへ直接保存します。</li></ul>"
+  "changelog": "<h4>0.17.26</h4><ul><li>大容量Elementorページの分割保存後も画像完了と誤判定せず、再開可能なメディア保存を必ず開始します。</li><li>保存応答が途切れて確認経路へ切り替わった場合も、期限付きFigma画像URLをWordPressメディアへ引き継ぎます。</li></ul><h4>0.17.25</h4><ul><li>WordPress内の安全接続が初回完了後も準備完了通知を継続し、同じFigmaPressタブから複数ページ構築を安全に再実行できます。</li><li>再実行時も同じ下書きIDと未割り当てメニューを再利用します。</li></ul><h4>0.17.24</h4><ul><li>日本語を含むElementor JSONをUTF-8文字の途中で分割せず、共有サーバーのMySQLへ各分割片を安全に追記します。</li><li>WordPress内の安全接続と通常の分割接続で同じ文字境界処理を使用します。</li></ul>"
 }
