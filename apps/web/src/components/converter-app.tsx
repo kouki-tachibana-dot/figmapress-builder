@@ -315,6 +315,8 @@ interface WordPressResult {
   id: number;
   slug: string;
   status: string;
+  requestId?: string;
+  sitePageKey?: FigmaSitePageKey;
   editLink?: string;
   previewLink?: string;
   rawLink?: string;
@@ -1535,6 +1537,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
 
   async function createWordPressSiteDraft(
     credentials: BrowserWordPressConfig,
+    resumeAfterPageKey?: FigmaSitePageKey,
   ): Promise<void> {
     const plan = output?.multiPagePlan;
     if (!output || !plan || plan.pages.length < 2 || !conversionSourceKey) {
@@ -1556,7 +1559,15 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
           : `${conversionSourceKey}:page:${page.key}`,
       })),
     };
+    const resumeAfterIndex = resumeAfterPageKey
+      ? plan.pages.findIndex((page) => page.key === resumeAfterPageKey)
+      : -1;
+    if (resumeAfterPageKey && resumeAfterIndex < 0) {
+      throw new Error("画像保存を再開するページを確認できませんでした。サイト一式を再実行してください。");
+    }
+    const startIndex = resumeAfterIndex + 1;
     const sectionPageKeys = plan.pages
+      .slice(startIndex)
       .map((page) => page.key)
       .filter((key): key is Exclude<FigmaSitePageKey, "home"> => key !== "home");
     // Prefer the already-loaded target-origin iframe. Older Connector versions
@@ -1568,7 +1579,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     let prepared: BrowserPreparedSiteResult;
     try {
       setWpSiteProgress("Figmaから各ページの編集データを準備しています…");
-      sectionTemplates = await fetchMultiPageTemplates(sectionPageKeys);
+      sectionTemplates = sectionPageKeys.length > 0
+        ? await fetchMultiPageTemplates(sectionPageKeys)
+        : new Map();
       setWpSiteProgress("下書きページと未割り当てメニューを準備しています…");
       const prepareThroughProxy = async (): Promise<BrowserPreparedSiteResult> => {
         if (wpTransport === "direct") {
@@ -1612,7 +1625,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       return { key: page.key, rawLink };
     });
     let currentResult = prepared;
-    for (let index = 0; index < plan.pages.length; index += 1) {
+    for (let index = startIndex; index < plan.pages.length; index += 1) {
       const page = plan.pages[index];
       const target = prepared.pages.find((candidate) => candidate.key === page.key);
       if (!target) throw new Error(`${page.title}の下書き準備結果がありません。`);
@@ -1644,7 +1657,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         supportsChunked,
       );
       const bridgePayload = { ...input, status: "draft" };
-      let saved = siteBridge && credentials.connectorToken
+      let saved: WordPressResult = siteBridge && credentials.connectorToken
         ? await siteBridge.saveElementor<WordPressResult>(
             credentials.connectorToken,
           bridgePayload,
@@ -1683,6 +1696,12 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
               const data = await readApi<{ ok: true; result: WordPressResult }>(response);
               return data.result;
             })();
+      saved = {
+        ...saved,
+        requestId,
+        sitePageKey: page.key,
+      };
+      setWpResult(saved);
       saved = await persistWordPressMedia(credentials, saved, requestId, false, siteBridge);
       currentResult = {
         ...currentResult,
@@ -1810,6 +1829,11 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         createdResult = data.result;
       }
       if (wpTarget === "elementor") {
+        createdResult = {
+          ...createdResult,
+          requestId,
+        };
+        setWpResult(createdResult);
         createdResult = await persistWordPressMedia(
           credentials,
           createdResult,
@@ -1844,21 +1868,40 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   }
 
   async function resumeWordPressMedia(event: MouseEvent<HTMLButtonElement>) {
-    if (!output || !wpResult || !draftRequestId) return;
+    if (!output || !wpResult) return;
+    const requestId = wpResult.requestId || draftRequestId;
+    if (!requestId) return;
+    const sitePageKey = wpResult.sitePageKey;
     const credentials = readWordPressCredentials(
       event.currentTarget.form ? new FormData(event.currentTarget.form) : null,
       { baseUrl, username, applicationPassword, connectorToken },
     );
     setWpError("");
     setWpVisualQaError("");
+    const siteBridge = sitePageKey && credentials.connectorToken
+      ? openWordPressSiteBridge(credentials.baseUrl)
+      : null;
     try {
       const completed = await persistWordPressMedia(
         credentials,
         wpResult,
-        draftRequestId,
+        requestId,
         true,
+        siteBridge,
       );
       setWpResult(completed);
+      if (sitePageKey) {
+        setWpSiteResult((current) => current ? {
+          ...current,
+          pages: current.pages.map((page) =>
+            page.key === sitePageKey ? { ...page, ...completed } : page
+          ),
+        } : current);
+        siteBridge?.close();
+        setWpSiteProgress(`「${sitePageKey}」の画像保存を完了し、残りのページ構築を再開しています…`);
+        await createWordPressSiteDraft(credentials, sitePageKey);
+        return;
+      }
       if (
         connectorSupportsActualVisualQa
         && visualReferencesFor(output).length > 0
@@ -1867,7 +1910,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         await verifyWordPressElementorDraft(
           credentials,
           completed,
-          draftRequestId,
+          requestId,
           output,
         );
       } else if ((completed.failedMedia ?? 0) > 0) {
@@ -1879,6 +1922,8 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       setWpError(
         caught instanceof Error ? caught.message : "画像保存を再開できませんでした。",
       );
+    } finally {
+      siteBridge?.close();
     }
   }
 
@@ -2290,7 +2335,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.26.29 live</span>
+          <span className="status-pill"><i /> v0.26.30 live</span>
         </nav>
       </header>
 
@@ -3400,7 +3445,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.26.29</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.26.30</span></div>
       </footer>
     </main>
   );

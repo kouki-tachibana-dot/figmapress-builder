@@ -47,4 +47,8 @@ test("multi-page form embeds the target-origin WordPress bridge", () => {
   assert.match(component, /siteBridge\.confirmElementor<T>\(connectorToken, payload\)/);
   assert.match(component, /confirmElementorAfterInterruptedSave<WordPressResult>/);
   assert.match(component, /siteBridge\.localizeMedia<BrowserElementorMediaProgress>/);
+  assert.match(component, /requestId\?: string/);
+  assert.match(component, /sitePageKey\?: FigmaSitePageKey/);
+  assert.match(component, /const requestId = wpResult\.requestId \|\| draftRequestId/);
+  assert.match(component, /await createWordPressSiteDraft\(credentials, sitePageKey\)/);
 });
