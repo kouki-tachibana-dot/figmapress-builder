@@ -1,11 +1,11 @@
 {
   "name": "FigmaPress Connector",
   "slug": "figmapress-connector",
-  "version": "0.17.18",
+  "version": "0.17.19",
   "requires": "6.4",
   "requires_php": "7.4",
   "tested": "7.0",
   "homepage": "https://figmapress-builder.vercel.app",
   "download_url": "https://figmapress-builder.vercel.app/downloads/figmapress-connector.zip",
-  "changelog": "<h4>0.17.18</h4><ul><li>保存確認の完了印をWordPressメタキャッシュではなくDBから直接取得し、本文と同じ永続状態で照合します。</li><li>失敗時は各一致可否だけを返し、識別子や本文を応答へ露出しません。</li></ul><h4>0.17.17</h4><ul><li>大容量Elementor本文のDB更新処理中に共有サーバーが応答を終了する環境でも、書き込み前に今回の期待容量・SHA-256を記録し、実データとの完全一致後だけ処理を継続します。</li><li>不完全な本文・前回本文・別要求は成功扱いせず、下書き限定と重複防止を維持します。</li></ul><h4>0.17.16</h4><ul><li>共有サーバーがElementor保存後の応答をHTTP 500やタイムアウトで失った場合、同じ要求・同じ下書き・同じFigma変換元・保存容量・SHA-256を軽量照合して処理を安全に継続します。</li><li>古い完了印を各保存直前に消去し、前回データの誤判定を防ぎます。</li></ul>"
+  "changelog": "<h4>0.17.19</h4><ul><li>XServerなどの共有サーバーでは、大容量Elementor JSONをPHPで結合・再展開せず、DBへ分割追記してDB内で同じ下書きへ置き換えます。</li><li>保存先、JSON構造、変換元、要求ID、許可Widget、危険な埋め込みを検証してから完了印を記録します。</li></ul><h4>0.17.18</h4><ul><li>保存確認の完了印をWordPressメタキャッシュではなくDBから直接取得し、本文と同じ永続状態で照合します。</li><li>失敗時は各一致可否だけを返し、識別子や本文を応答へ露出しません。</li></ul><h4>0.17.17</h4><ul><li>大容量Elementor本文のDB更新処理中に共有サーバーが応答を終了する環境でも、書き込み前に今回の期待容量・SHA-256を記録し、実データとの完全一致後だけ処理を継続します。</li><li>不完全な本文・前回本文・別要求は成功扱いせず、下書き限定と重複防止を維持します。</li></ul>"
 }
