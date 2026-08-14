@@ -3,7 +3,7 @@
  * Plugin Name:       FigmaPress Connector
  * Plugin URI:        https://github.com/kouki-tachibana-dot/figmapress-builder
  * Description:       Connects FigmaPress to Gutenberg and Elementor draft pages.
- * Version:           0.17.26
+ * Version:           0.17.27
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Update URI:        https://figmapress-builder.vercel.app/downloads/figmapress-connector.json
@@ -20,12 +20,50 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 define( 'FIGMAPRESS_CONNECTOR_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FIGMAPRESS_CONNECTOR_URL', plugin_dir_url( __FILE__ ) );
-define( 'FIGMAPRESS_CONNECTOR_VERSION', '0.17.26' );
+define( 'FIGMAPRESS_CONNECTOR_VERSION', '0.17.27' );
 
 require_once FIGMAPRESS_CONNECTOR_DIR . 'includes/pairing.php';
 require_once FIGMAPRESS_CONNECTOR_DIR . 'includes/rest-api.php';
 require_once FIGMAPRESS_CONNECTOR_DIR . 'includes/contact-form.php';
 require_once FIGMAPRESS_CONNECTOR_DIR . 'includes/update-checker.php';
+
+/**
+ * Open FigmaPress-owned Elementor drafts with Elementor instead of the block editor.
+ *
+ * Large generated documents can exhaust shared-host memory while WordPress prepares
+ * the block editor, even though Elementor can edit the same document normally. This
+ * redirect runs before the editor bootstraps and is intentionally limited to owned
+ * Elementor pages and interactive GET requests.
+ */
+function figmapress_connector_redirect_owned_elementor_editor() {
+    if (
+        ! is_admin()
+        || wp_doing_ajax()
+        || ! isset( $_GET['post'], $_GET['action'] )
+        || ( ! defined( 'ELEMENTOR_VERSION' ) && ! class_exists( '\\Elementor\\Plugin' ) )
+    ) {
+        return;
+    }
+
+    $post_id = absint( wp_unslash( $_GET['post'] ) );
+    $action  = sanitize_key( wp_unslash( $_GET['action'] ) );
+    if ( ! $post_id || 'edit' !== $action || ! current_user_can( 'edit_post', $post_id ) ) {
+        return;
+    }
+    if ( 'builder' !== (string) get_post_meta( $post_id, '_elementor_edit_mode', true ) ) {
+        return;
+    }
+
+    $source_key = (string) get_post_meta( $post_id, '_figmapress_source_key', true );
+    $request_id = (string) get_post_meta( $post_id, '_figmapress_request_id', true );
+    if ( '' === $source_key && '' === $request_id ) {
+        return;
+    }
+
+    wp_safe_redirect( admin_url( 'post.php?post=' . $post_id . '&action=elementor' ) );
+    exit;
+}
+add_action( 'load-post.php', 'figmapress_connector_redirect_owned_elementor_editor', 1 );
 
 /**
  * Register all figmapress/* blocks on init.
