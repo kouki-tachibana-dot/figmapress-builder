@@ -142,6 +142,29 @@ test("Connector accepts and registers functional Elementor widgets", async () =>
   }
 });
 
+test("Connector keeps the mobile navigation above later Elementor content", async () => {
+  const styles = await readFile(interactionStylePath, "utf8");
+  assert.match(
+    styles,
+    /\.elementor-widget-figmapress-nav\s*\{[^}]*z-index:\s*1000\s*!important;/s,
+  );
+});
+
+test("Connector routes only owned Elementor pages away from the memory-heavy block editor", async () => {
+  const plugin = await readFile(pluginPath, "utf8");
+  assert.match(plugin, /function figmapress_connector_redirect_owned_elementor_editor/);
+  assert.match(plugin, /wp_doing_ajax\(\)/);
+  assert.match(plugin, /current_user_can\( 'edit_post', \$post_id \)/);
+  assert.match(plugin, /'_elementor_edit_mode'/);
+  assert.match(plugin, /'_figmapress_source_key'/);
+  assert.match(plugin, /'_figmapress_request_id'/);
+  assert.match(plugin, /wp_safe_redirect\( admin_url\( 'post\.php\?post=' \./);
+  assert.match(
+    plugin,
+    /add_action\( 'load-post\.php', 'figmapress_connector_redirect_owned_elementor_editor', 1 \)/,
+  );
+});
+
 test("Connector renders and localizes the Figma navigation CTA icon", async () => {
   const [widgets, styles, rest] = await Promise.all([
     readFile(elementorWidgetsPath, "utf8"),
