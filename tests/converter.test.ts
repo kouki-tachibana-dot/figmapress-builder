@@ -2221,7 +2221,28 @@ test("ungrouped root-level corporate headers are synthesized without duplicating
     },
   };
 
-  const result = await convertFile(file);
+  const pageCandidate = (id: number, title: string) => ({
+    id: `${id}:1`, title, confidence: "content" as const,
+    desktop: {
+      id: `${id}:1`, name: `PC ${title}`, label: title,
+      width: 1440, height: 1300, variant: "desktop" as const,
+    },
+    mobile: {
+      id: `${id}:2`, name: `SP ${title}`, label: title,
+      width: 440, height: 1000, variant: "mobile" as const,
+    },
+  });
+  const result = await convertFile(file, {}, {}, [], {}, {
+    candidates: [
+      pageCandidate(20, "ホーム"),
+      pageCandidate(21, "会社案内"),
+      pageCandidate(22, "選ばれる理由"),
+      pageCandidate(23, "事業内容"),
+      pageCandidate(24, "施工事例"),
+    ],
+    selectedFrameId: "20:1",
+    siteTitle: "建工101",
+  });
   const elements: typeof result.elementorTemplate.content = [];
   const visit = (items: typeof result.elementorTemplate.content): void => {
     for (const item of items) {
@@ -2238,6 +2259,14 @@ test("ungrouped root-level corporate headers are synthesized without duplicating
   );
   assert.equal((navigation[0]?.settings.items as Array<unknown>).length, 5);
   assert.equal((navigation[1]?.settings.items as Array<unknown>).length, 5);
+  assert.equal(
+    (navigation[0]?.settings.home_url as { url: string }).url,
+    "#figmapress-page-home",
+  );
+  assert.equal(
+    (navigation[1]?.settings.home_url as { url: string }).url,
+    "#figmapress-page-home",
+  );
   assert.equal(
     elements.some((element) => element.settings.figmapress_node_id === "20:menu:1"),
     false,
