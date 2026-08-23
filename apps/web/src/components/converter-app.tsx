@@ -86,7 +86,7 @@ type OutputTarget = "gutenberg" | "elementor";
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
-const APP_RELEASE = "0.26.50";
+const APP_RELEASE = "0.26.51";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -95,6 +95,7 @@ const SMALL_CHUNK_UPLOAD_CONNECTOR_VERSION = "0.16.24";
 const FIGMA_HEADER_MEDIA_CONNECTOR_VERSION = "0.16.18";
 const MULTI_PAGE_CONNECTOR_VERSION = "0.17.18";
 const FIGMA_PAGE_SET_CONNECTOR_VERSION = "0.17.28";
+const EXACT_VISUAL_CONNECTOR_VERSION = "0.17.29";
 
 function safeWordPressSiteBridgeUrl(baseUrl: string): string {
   try {
@@ -762,6 +763,7 @@ ${webfontUrl ? `<link rel="stylesheet" href="${webfontUrl}">` : ""}
 section{padding:64px clamp(24px,7vw,88px);max-width:1100px;margin:0 auto}h1,h2,h3{line-height:1.13;letter-spacing:-.035em}h1{font-size:clamp(36px,7vw,72px);margin:0 0 20px}h2{font-size:clamp(28px,5vw,48px);margin:0 0 28px}h3{font-size:20px}p{color:#53636c}a{display:inline-block;background:#c8ff61;color:#102029;text-decoration:none;font-weight:750;padding:13px 20px;border-radius:999px}
 .wp-block-figmapress-hero{display:grid;grid-template-columns:1fr;align-items:center;gap:48px;min-height:520px}.wp-block-figmapress-hero[data-layout="text-left-image-right"]{grid-template-columns:1.15fr .85fr}.wp-block-figmapress-hero__image img{width:100%;border-radius:24px}.wp-block-figmapress-service-list,.wp-block-figmapress-faq{background:#fff}.wp-block-figmapress-card-grid__items,.wp-block-figmapress-service-list__items{list-style:none;padding:0;display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.wp-block-figmapress-card-grid__item,.wp-block-figmapress-service-list__item{padding:24px;background:#fff;border:1px solid #dbe1df;border-radius:18px}.wp-block-figmapress-faq__items dt{font-weight:750;margin-top:20px}.wp-block-figmapress-faq__items dd{margin:6px 0 0;color:#53636c}.wp-block-figmapress-cta{text-align:center;background:#112832;color:#fff;border-radius:28px}.wp-block-figmapress-cta h2{color:#fff}.wp-block-figmapress-contact{text-align:center}
 .figmapress-figma-preview{container-type:inline-size;overflow:hidden;position:relative;width:100%}.figmapress-figma-preview *{box-sizing:border-box;margin:0;max-width:none}.figmapress-figma-preview img{display:block}.figmapress-figma-preview--mobile{display:none}
+.figmapress-exact-stack{overflow:hidden;position:relative;width:100%}.figmapress-exact-editable-source{left:-200vw;pointer-events:none;position:fixed;top:0;width:100vw}.figmapress-exact-preview img{height:100%;object-fit:fill;width:100%}
 @media(max-width:767px){section{padding:44px 22px}.wp-block-figmapress-hero{grid-template-columns:1fr;min-height:auto}.wp-block-figmapress-card-grid__items,.wp-block-figmapress-service-list__items{grid-template-columns:1fr}.figmapress-figma-preview--desktop{display:none}.figmapress-figma-preview--mobile{display:block}}
 </style></head><body>${content}</body></html>`;
 }
@@ -1017,6 +1019,10 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const connectorSupportsFigmaHeaderMedia = versionAtLeast(
     wpStatus?.connectorVersion,
     FIGMA_HEADER_MEDIA_CONNECTOR_VERSION,
+  );
+  const connectorSupportsExactVisual = versionAtLeast(
+    wpStatus?.connectorVersion,
+    EXACT_VISUAL_CONNECTOR_VERSION,
   );
   const multiPagePlan = output?.multiPagePlan;
   const requiredMultiPageConnectorVersion = multiPagePlan?.pages.some((page) => page.frameId)
@@ -3524,6 +3530,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                     {wpTarget === "elementor" && (
                       <span>実ページQA {connectorSupportsActualVisualQa ? "対応" : "更新必要"}</span>
                     )}
+                    {wpTarget === "elementor" && visualQaReferenceCount > 0 && (
+                      <span>Figma精密表示 {connectorSupportsExactVisual ? "対応" : "更新必要"}</span>
+                    )}
                     {multiPageAvailable && (
                       <span>複数ページ {connectorSupportsMultiPage ? "対応" : "更新必要"}</span>
                     )}
@@ -3564,6 +3573,11 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
               {wpStatus && wpTarget === "elementor" && visualQaReferenceCount > 0 && wpStatus.connectorInstalled && connectorSupportsInteractions && !connectorSupportsActualVisualQa && (
                 <div className="alert alert--error" role="alert">
                   実際のElementor下書きをFigmaと再比較して自動補正するにはConnector v{ACTUAL_VISUAL_QA_CONNECTOR_VERSION}以上が必要です。WordPressのプラグイン更新画面から最新版へ更新し、再診断してください。
+                </div>
+              )}
+              {wpStatus && wpTarget === "elementor" && visualQaReferenceCount > 0 && wpStatus.connectorInstalled && !connectorSupportsExactVisual && (
+                <div className="alert alert--error" role="alert">
+                  Figma原本のPC・スマホ精密表示にはConnector v{EXACT_VISUAL_CONNECTOR_VERSION}以上が必要です。<a href="/downloads/figmapress-connector.zip" download>最新版ZIPをダウンロード</a>して更新し、再診断してください。
                 </div>
               )}
               {wpStatus && wpTarget === "elementor" && wpBuildMode === "site" && wpStatus.connectorInstalled && !connectorSupportsMultiPage && (
@@ -3760,7 +3774,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                 <span>常に <code>status: draft</code></span>
                 <button
                   className="button button--dark"
-                  disabled={!confirmed || wpBusy || visualQaBlocksDraft || multiPageBlocked || !wpStatus || !wpStatus.connectorInstalled || !wpStatus.canEditPages || (wpTarget === "elementor" && (!wpStatus.elementor.active || !connectorSupportsInteractions || (visualQaReferenceCount > 0 && !connectorSupportsActualVisualQa)))}
+                  disabled={!confirmed || wpBusy || visualQaBlocksDraft || multiPageBlocked || !wpStatus || !wpStatus.connectorInstalled || !wpStatus.canEditPages || (wpTarget === "elementor" && (!wpStatus.elementor.active || !connectorSupportsInteractions || (visualQaReferenceCount > 0 && (!connectorSupportsActualVisualQa || !connectorSupportsExactVisual))))}
                   type="submit"
                 >
                   {wpBusy

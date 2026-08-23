@@ -1,11 +1,11 @@
 {
   "name": "FigmaPress Connector",
   "slug": "figmapress-connector",
-  "version": "0.17.28",
+  "version": "0.17.29",
   "requires": "6.4",
   "requires_php": "7.4",
   "tested": "7.0",
   "homepage": "https://figmapress-builder.vercel.app",
   "download_url": "https://figmapress-builder.vercel.app/downloads/figmapress-connector.zip",
-  "changelog": "<h4>0.17.28</h4><ul><li>Figma内で検出した任意のページ名を最大20ページまで下書きと未割り当てメニューへ安全に構築できるようにしました。</li><li>企業サイト向けの会社案内・事業内容・施工事例・お問い合わせ等のページキーを受け付けます。</li></ul><h4>0.17.27</h4><ul><li>スマートフォンの展開メニューを後続コンテンツより前面に固定し、全ページでリンクを操作できるようにしました。</li><li>FigmaPressが作成したElementor下書きの通常編集をElementorへ安全に案内し、大容量ページでのブロックエディタ起動時メモリ超過を防ぎます。</li></ul><h4>0.17.26</h4><ul><li>大容量Elementorページの分割保存後も画像完了と誤判定せず、再開可能なメディア保存を必ず開始します。</li><li>保存応答が途切れて確認経路へ切り替わった場合も、期限付きFigma画像URLをWordPressメディアへ引き継ぎます。</li></ul>"
+  "changelog": "<h4>0.17.29</h4><ul><li>Figma原本の精密表示レイヤーと編集可能なElementor構造を二層で保持できるようにしました。</li><li>公開画面ではPC・スマホの原本表示、Elementor編集画面ではネイティブ構造へ安全に切り替えます。</li></ul><h4>0.17.28</h4><ul><li>Figma内で検出した任意のページ名を最大20ページまで下書きと未割り当てメニューへ安全に構築できるようにしました。</li><li>企業サイト向けの会社案内・事業内容・施工事例・お問い合わせ等のページキーを受け付けます。</li></ul><h4>0.17.27</h4><ul><li>スマートフォンの展開メニューを後続コンテンツより前面に固定し、全ページでリンクを操作できるようにしました。</li><li>FigmaPressが作成したElementor下書きの通常編集をElementorへ安全に案内し、大容量ページでのブロックエディタ起動時メモリ超過を防ぎます。</li></ul>"
 }
