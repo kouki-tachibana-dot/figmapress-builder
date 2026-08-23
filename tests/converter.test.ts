@@ -1503,6 +1503,136 @@ test("stacked mobile contact fields preserve each Figma control box", async () =
   );
 });
 
+test("root-level corporate inquiry fields become complete responsive forms", async () => {
+  const formRoot = (
+    id: string,
+    name: string,
+    x: number,
+    width: number,
+  ): FigmaNode => {
+    const labels = [
+      "お問い合わせ項目",
+      "企業名",
+      "読み方",
+      "ご担当者様",
+      "ふりがな",
+      "ご住所",
+      "電話番号",
+      "アドレス",
+      "HPを知られたキッカケ",
+      "ご質問の詳細",
+      "【個人情報の取扱い】",
+    ];
+    const left = x + width * 0.08;
+    const controlX = x + width * 0.36;
+    const controlWidth = width * 0.54;
+    const children: FigmaNode[] = [];
+    labels.forEach((characters, index) => {
+      const y = 130 + index * 78;
+      children.push({
+        id: `${id}:label:${index}`,
+        name: characters,
+        type: "TEXT",
+        characters,
+        absoluteBoundingBox: { x: left, y, width: width * 0.24, height: 24 },
+        style: { fontSize: 16, fontWeight: 600 },
+      });
+      children.push({
+        id: `${id}:control:${index}`,
+        name: `Rectangle ${140 + index}`,
+        type: "RECTANGLE",
+        absoluteBoundingBox: {
+          x: controlX,
+          y: y - 12,
+          width: controlWidth,
+          height: characters === "ご質問の詳細" ? 64 : 48,
+        },
+        fills: [{ type: "SOLID", color: { r: 1, g: 1, b: 1 } }],
+      });
+    });
+    children.push({
+      id: `${id}:option:1`, name: "お問い合わせ", type: "TEXT", characters: "お問い合わせ",
+      absoluteBoundingBox: { x: controlX, y: 130, width: 120, height: 24 },
+      style: { fontSize: 16, fontWeight: 400 },
+    }, {
+      id: `${id}:option:2`, name: "資料請求", type: "TEXT", characters: "資料請求",
+      absoluteBoundingBox: { x: controlX + 150, y: 130, width: 100, height: 24 },
+      style: { fontSize: 16, fontWeight: 400 },
+    }, {
+      id: `${id}:send-bg`, name: "Rectangle 160", type: "RECTANGLE",
+      absoluteBoundingBox: { x: x + width * 0.3, y: 1030, width: width * 0.4, height: 62 },
+      fills: [{ type: "SOLID", color: { r: 0.1, g: 0.25, b: 0.4 } }],
+    }, {
+      id: `${id}:send`, name: "送信", type: "TEXT", characters: "送信",
+      absoluteBoundingBox: { x: x + width * 0.46, y: 1048, width: width * 0.08, height: 24 },
+      style: { fontSize: 18, fontWeight: 700 },
+    });
+    return {
+      id,
+      name,
+      type: "FRAME",
+      absoluteBoundingBox: { x, y: 0, width, height: 1200 },
+      children,
+    };
+  };
+  const file: MockFigmaFile = {
+    document: {
+      id: "0:0",
+      name: "Loose inquiry form",
+      type: "DOCUMENT",
+      children: [{
+        id: "1:0",
+        name: "Page",
+        type: "CANVAS",
+        children: [
+          formRoot("40:1", "PC お問い合わせ", 0, 1440),
+          formRoot("40:2", "SP お問い合わせ", 2000, 440),
+        ],
+      }],
+    },
+  };
+
+  const result = await convertFile(file);
+  const elements: typeof result.elementorTemplate.content = [];
+  const visit = (items: typeof result.elementorTemplate.content): void => {
+    for (const item of items) {
+      elements.push(item);
+      visit(item.elements);
+    }
+  };
+  visit(result.elementorTemplate.content);
+  const forms = elements.filter((element) => element.widgetType === "figmapress-contact-form");
+  assert.equal(forms.length, 2);
+  assert.deepEqual(
+    forms.map((element) => element.settings.figmapress_node_id),
+    ["40:1:figmapress-contact-form", "40:2:figmapress-contact-form"],
+  );
+  const fields = forms[0]?.settings.fields as Array<{
+    name: string;
+    label: string;
+    type: string;
+    required: string;
+    options: string;
+  }>;
+  assert.equal(fields.length, 11);
+  assert.deepEqual(
+    fields.map((field) => field.name),
+    [
+      "inquiry_type", "company", "company_kana", "name", "name_kana",
+      "address", "phone", "email", "source", "message", "privacy_consent",
+    ],
+  );
+  assert.equal(fields.find((field) => field.name === "email")?.type, "email");
+  assert.equal(fields.find((field) => field.name === "message")?.required, "");
+  assert.equal(fields.find((field) => field.name === "inquiry_type")?.options, "お問い合わせ\n資料請求");
+  assert.equal(
+    elements.some((element) => element.settings.figmapress_node_id === "40:1:label:1"),
+    false,
+  );
+  assert.equal(result.qualityReport?.metrics.expectedFunctionalWidgets.contactForm, 2);
+  assert.equal(result.qualityReport?.metrics.functionalWidgets.contactForm, 2);
+});
+
 test("Figma carousel and prototype actions become editable functional widgets", async () => {
   const slide = (
     id: string,

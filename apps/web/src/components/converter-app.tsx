@@ -96,7 +96,7 @@ type PageTemplateEntry = {
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
-const APP_RELEASE = "0.26.64";
+const APP_RELEASE = "0.26.65";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -106,6 +106,7 @@ const FIGMA_HEADER_MEDIA_CONNECTOR_VERSION = "0.16.18";
 const MULTI_PAGE_CONNECTOR_VERSION = "0.17.18";
 const FIGMA_PAGE_SET_CONNECTOR_VERSION = "0.17.28";
 const EXACT_VISUAL_CONNECTOR_VERSION = "0.17.29";
+const DYNAMIC_FORM_CONNECTOR_VERSION = "0.17.30";
 
 function safeWordPressSiteBridgeUrl(baseUrl: string): string {
   try {
@@ -1042,6 +1043,12 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     wpStatus?.connectorVersion,
     EXACT_VISUAL_CONNECTOR_VERSION,
   );
+  const connectorSupportsDynamicForms = versionAtLeast(
+    wpStatus?.connectorVersion,
+    DYNAMIC_FORM_CONNECTOR_VERSION,
+  );
+  const conversionRequiresDynamicForms = wpBuildMode === "site"
+    || (output?.qualityReport?.metrics.functionalWidgets.contactForm ?? 0) > 0;
   const multiPagePlan = output?.multiPagePlan;
   const requiredMultiPageConnectorVersion = multiPagePlan?.pages.some((page) => page.frameId)
     ? FIGMA_PAGE_SET_CONNECTOR_VERSION
@@ -1899,6 +1906,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     if (!connectorSupportsMultiPage) {
       throw new Error(`複数ページ自動構築にはConnector v${requiredMultiPageConnectorVersion}以上が必要です。`);
     }
+    if (!connectorSupportsDynamicForms) {
+      throw new Error(`Figmaフォームの全項目送信にはConnector v${DYNAMIC_FORM_CONNECTOR_VERSION}以上が必要です。`);
+    }
     const siteInput = {
       siteKey: conversionSourceKey,
       title: plan.title,
@@ -2088,6 +2098,14 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
           ? "Elementor下書きの前にFigma視覚差分を測定してください。"
           : "重大な視覚差分の確認チェックを入れてから下書きを作成してください。",
       );
+      return;
+    }
+    if (
+      wpTarget === "elementor"
+      && conversionRequiresDynamicForms
+      && !connectorSupportsDynamicForms
+    ) {
+      setWpError(`Figmaフォームの全項目送信にはConnector v${DYNAMIC_FORM_CONNECTOR_VERSION}以上が必要です。`);
       return;
     }
     const credentials = readWordPressCredentials(new FormData(event.currentTarget), {
@@ -3659,6 +3677,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                     {wpTarget === "elementor" && visualQaReferenceCount > 0 && (
                       <span>Figma精密表示 {connectorSupportsExactVisual ? "対応" : "更新必要"}</span>
                     )}
+                    {wpTarget === "elementor" && conversionRequiresDynamicForms && (
+                      <span>Figmaフォーム {connectorSupportsDynamicForms ? "対応" : "更新必要"}</span>
+                    )}
                     {multiPageAvailable && (
                       <span>複数ページ {connectorSupportsMultiPage ? "対応" : "更新必要"}</span>
                     )}
@@ -3704,6 +3725,11 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
               {wpStatus && wpTarget === "elementor" && visualQaReferenceCount > 0 && wpStatus.connectorInstalled && !connectorSupportsExactVisual && (
                 <div className="alert alert--error" role="alert">
                   Figma原本のPC・スマホ精密表示にはConnector v{EXACT_VISUAL_CONNECTOR_VERSION}以上が必要です。<a href="/downloads/figmapress-connector.zip" download>最新版ZIPをダウンロード</a>して更新し、再診断してください。
+                </div>
+              )}
+              {wpStatus && wpTarget === "elementor" && conversionRequiresDynamicForms && wpStatus.connectorInstalled && !connectorSupportsDynamicForms && (
+                <div className="alert alert--error" role="alert">
+                  Figmaの全入力欄・必須項目・選択肢を送信可能なフォームにするにはConnector v{DYNAMIC_FORM_CONNECTOR_VERSION}以上が必要です。<a href="/downloads/figmapress-connector.zip" download>最新版ZIPをダウンロード</a>して更新し、再診断してください。
                 </div>
               )}
               {wpStatus && wpTarget === "elementor" && wpBuildMode === "site" && wpStatus.connectorInstalled && !connectorSupportsMultiPage && (
@@ -3900,7 +3926,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                 <span>常に <code>status: draft</code></span>
                 <button
                   className="button button--dark"
-                  disabled={!confirmed || wpBusy || visualQaBlocksDraft || multiPageBlocked || !wpStatus || !wpStatus.connectorInstalled || !wpStatus.canEditPages || (wpTarget === "elementor" && (!wpStatus.elementor.active || !connectorSupportsInteractions || (visualQaReferenceCount > 0 && (!connectorSupportsActualVisualQa || !connectorSupportsExactVisual))))}
+                  disabled={!confirmed || wpBusy || visualQaBlocksDraft || multiPageBlocked || !wpStatus || !wpStatus.connectorInstalled || !wpStatus.canEditPages || (wpTarget === "elementor" && (!wpStatus.elementor.active || !connectorSupportsInteractions || (conversionRequiresDynamicForms && !connectorSupportsDynamicForms) || (visualQaReferenceCount > 0 && (!connectorSupportsActualVisualQa || !connectorSupportsExactVisual))))}
                   type="submit"
                 >
                   {wpBusy

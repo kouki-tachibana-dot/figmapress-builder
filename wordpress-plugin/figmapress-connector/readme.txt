@@ -3,7 +3,7 @@ Contributors: figmapress
 Tags: blocks, figma, gutenberg, elementor
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 0.17.29
+Stable tag: 0.17.30
 License: GPLv2 or later
 
 Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
@@ -15,6 +15,11 @@ Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
    create a draft page containing figmapress/* blocks.
 
 == Changelog ==
+
+= 0.17.30 =
+* Figmaでグループ化されていない企業向け問い合わせ欄も、PC/SP双方で送信可能なフォームへ合成します。
+* 企業名、読み方、担当者、住所、電話、メール、流入元、質問、個人情報同意などFigma上の全入力項目を保持します。
+* 動的入力項目は保存済みWidget定義だけを許可し、必須、形式、文字数、選択肢をサーバー側でも再検証します。
 
 = 0.17.29 =
 * Added pixel-locked Figma presentation layers while preserving native Elementor editing and functional overlays.

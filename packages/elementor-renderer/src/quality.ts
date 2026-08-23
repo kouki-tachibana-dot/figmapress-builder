@@ -4,6 +4,7 @@ import type {
 } from "@figmapress/figma-parser";
 import {
   figmaTextShouldWrap,
+  findFigmaContactFormNode,
   findFigmaNavigationMenuTexts,
   findFigmaNavigationNode,
   findFigmaResponsiveRoots,
@@ -606,16 +607,7 @@ function countExpectedFunctionalWidgets(roots: FigmaNode[]): {
       /(?:\{wp:carousel\}|carousel|slider|スライダー|カルーセル)/i.test(node.name)
       && !/(?:item|prev|previous|next|arrow|dot|項目|前へ|次へ)/i.test(node.name)
     );
-    result.contactForm += countOutermostMatches(root, (node) => {
-      if (!/(?:\{wp:form\}|contact.?form|button.?cta|お問い合わせ)/i.test(node.name)) return false;
-      const copy = nodeDescendants(node)
-        .filter((child) => child.type === "TEXT" && child.characters?.trim())
-        .map((child) => child.characters ?? "")
-        .join(" ");
-      return /メールアドレス|e-?mail/i.test(copy)
-        && /ご相談|ご意見|message|お問い合わせ内容/i.test(copy)
-        && /お名前|氏名|name/i.test(copy);
-    });
+    result.contactForm += findFigmaContactFormNode(root) ? 1 : 0;
     result.accordion += countOutermostMatches(root, (node) =>
       /(?:\{wp:accordion\}|profile|プロフィール|faq|よくある質問)/i.test(node.name)
       && nodeDescendants(node).filter((child) =>
