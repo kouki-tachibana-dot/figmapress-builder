@@ -2364,6 +2364,22 @@ test("visible semantic page labels correct stale prototype wires and dates never
               style: { fontSize: 16, fontWeight: 600 },
             }],
           }, {
+            id: "10:5",
+            name: "Footer/Menu-Item",
+            type: "FRAME",
+            absoluteBoundingBox: { x: 1000, y: 800, width: 180, height: 50 },
+            interactions: [{
+              actions: [{ type: "NODE", navigation: "NAVIGATE", destinationId: "10:1" }],
+            }],
+            children: [{
+              id: "10:6",
+              name: "Menu label",
+              type: "TEXT",
+              characters: "お問い合わせ",
+              absoluteBoundingBox: { x: 1010, y: 810, width: 150, height: 28 },
+              style: { fontSize: 16, fontWeight: 600 },
+            }],
+          }, {
             id: "10:4",
             name: "2026.03.24",
             type: "TEXT",
@@ -2397,7 +2413,9 @@ test("visible semantic page labels correct stale prototype wires and dates never
   });
   const serialized = JSON.stringify(result.elementorTemplate);
   assert.match(serialized, /#figmapress-page-officers/);
+  assert.match(serialized, /#figmapress-page-contact/);
   assert.doesNotMatch(serialized, /tel:20260324/);
   assert.match(result.previewHtml, /href="#figmapress-page-officers"/);
+  assert.match(result.previewHtml, /href="#figmapress-page-contact"/);
   assert.doesNotMatch(result.previewHtml, /href="tel:20260324"/);
 });

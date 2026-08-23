@@ -125,6 +125,29 @@ test("unknown and incomplete menu destinations are rejected", () => {
   );
 });
 
+test("a duplicated semantic label cannot hide a wrong menu or CTA destination", () => {
+  const home = exactTemplate("home", ["company", "contact"]);
+  home.content.push({
+    id: "stale-contact-wire",
+    elType: "widget",
+    widgetType: "figmapress-link",
+    isInner: false,
+    settings: {
+      link_label: "お問い合わせ ▷",
+      link_url: { url: figmaPageLinkPlaceholder("home") },
+    },
+    elements: [],
+  });
+  assert.throws(
+    () => inspectFigmaSiteTemplates(plan, new Map([
+      ["home", home],
+      ["company", exactTemplate("company", ["home", "contact"])],
+      ["contact", exactTemplate("contact", ["home", "company"])],
+    ])),
+    /ホーム.*リンク名と移動先が一致しません.*お問い合わせ.*figmapress-page-home.*figmapress-page-contact/,
+  );
+});
+
 test("missing responsive navigation or the contact form is rejected", () => {
   const missingMobileNavigation = exactTemplate("home", ["company", "contact"]);
   missingMobileNavigation.content = missingMobileNavigation.content.filter(

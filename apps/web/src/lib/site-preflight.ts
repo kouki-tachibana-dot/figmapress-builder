@@ -1,6 +1,7 @@
 import {
   auditElementorTemplateLinks,
   figmaPageLinkPlaceholder,
+  sectionAnchorFromText,
   type ElementorTemplate,
   type FigmaMultiPagePlan,
   type FigmaSitePageKey,
@@ -21,6 +22,7 @@ export interface FigmaSitePreflightReport {
 interface TemplateFunctionalInventory {
   navigationWidgets: number;
   navigationDestinations: Set<string>;
+  semanticDestinationMismatches: string[];
   contactForms: number;
   carousels: number;
   accordions: number;
@@ -28,10 +30,12 @@ interface TemplateFunctionalInventory {
 
 function inspectTemplateFunctionalInventory(
   template: ElementorTemplate,
+  plan: FigmaMultiPagePlan,
 ): TemplateFunctionalInventory {
   const result: TemplateFunctionalInventory = {
     navigationWidgets: 0,
     navigationDestinations: new Set<string>(),
+    semanticDestinationMismatches: [],
     contactForms: 0,
     carousels: 0,
     accordions: 0,
@@ -41,6 +45,22 @@ function inspectTemplateFunctionalInventory(
     const url = (value as Record<string, unknown>).url;
     if (typeof url === "string" && url.trim()) result.navigationDestinations.add(url.trim());
   };
+  const recordSemanticUrl = (label: unknown, value: unknown): void => {
+    if (typeof label !== "string" || !value || typeof value !== "object") return;
+    const url = (value as Record<string, unknown>).url;
+    if (typeof url !== "string" || !url.trim()) return;
+    const semantic = /(?:^|\b)home(?:\b|$)|ホーム|トップ/i.test(label)
+      ? "home"
+      : sectionAnchorFromText(label);
+    const key = semantic === "top" ? "home" : semantic;
+    if (!key || !plan.pages.some((page) => page.key === key)) return;
+    const expected = figmaPageLinkPlaceholder(key);
+    if (url.trim() !== expected) {
+      result.semanticDestinationMismatches.push(
+        `${label.trim() || key}→${url.trim()}（正:${expected}）`,
+      );
+    }
+  };
   const visit = (elements: ElementorTemplate["content"]): void => {
     for (const element of elements) {
       if (element.widgetType === "figmapress-nav") {
@@ -48,11 +68,18 @@ function inspectTemplateFunctionalInventory(
         const items = Array.isArray(element.settings.items) ? element.settings.items : [];
         for (const item of items) {
           if (item && typeof item === "object") {
-            recordUrl((item as Record<string, unknown>).url);
+            const record = item as Record<string, unknown>;
+            recordUrl(record.url);
+            recordSemanticUrl(record.label, record.url);
           }
         }
         recordUrl(element.settings.home_url);
+        recordSemanticUrl("home", element.settings.home_url);
         recordUrl(element.settings.cta_url);
+        recordSemanticUrl(element.settings.cta_label, element.settings.cta_url);
+      }
+      if (element.widgetType === "figmapress-link") {
+        recordSemanticUrl(element.settings.link_label, element.settings.link_url);
       }
       if (element.widgetType === "figmapress-contact-form") result.contactForms += 1;
       if (element.widgetType === "figmapress-carousel") result.carousels += 1;
@@ -112,7 +139,12 @@ export function inspectFigmaSiteTemplates(
     }
     links += audit.total;
 
-    const inventory = inspectTemplateFunctionalInventory(template);
+    const inventory = inspectTemplateFunctionalInventory(template, plan);
+    if (inventory.semanticDestinationMismatches.length) {
+      throw new Error(
+        `「${page.title}」のリンク名と移動先が一致しません（${inventory.semanticDestinationMismatches.slice(0, 4).join("、")}）。WordPressには送信していません。`,
+      );
+    }
     const expectedNavigationWidgets = Math.max(
       1,
       Number(page.hasDesktop) + Number(page.hasMobile),
