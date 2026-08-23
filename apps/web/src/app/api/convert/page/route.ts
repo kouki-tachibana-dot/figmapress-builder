@@ -122,7 +122,8 @@ export async function POST(request: Request): Promise<Response> {
       }
       refreshedOAuthCookie = oauth?.refreshedCookie;
       if (figmaRequest.candidatePages) {
-        const pages = await Promise.all(figmaRequest.candidatePages.map(async (page) => {
+        const pages = [];
+        for (const page of figmaRequest.candidatePages) {
           const fetched = await fetchFigmaFile(
             figmaRequest.fileKeyOrUrl,
             token,
@@ -162,7 +163,7 @@ export async function POST(request: Request): Promise<Response> {
             nativeTemplate,
             fetched.visualReferences,
           );
-          return {
+          pages.push({
             page,
             elementorTemplate,
             linkIntegrity: createFigmaQualityReport(
@@ -170,8 +171,8 @@ export async function POST(request: Request): Promise<Response> {
               elementorTemplate,
               assets,
             ).metrics.navigationIntegrity,
-          };
-        }));
+          });
+        }
         const responseBody = { ok: true, pages };
         if (new TextEncoder().encode(JSON.stringify(responseBody)).byteLength > 4_000_000) {
           throw new RequestError(

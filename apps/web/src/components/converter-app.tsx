@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useRef,
   useState,
   useSyncExternalStore,
   type ChangeEvent,
@@ -87,11 +88,15 @@ import {
 
 type SourceMode = "figma" | "json";
 type OutputTarget = "gutenberg" | "elementor";
+type PageTemplateEntry = {
+  page: { key: FigmaSitePageKey };
+  elementorTemplate: ElementorTemplate;
+};
 
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
-const APP_RELEASE = "0.26.60";
+const APP_RELEASE = "0.26.61";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -855,8 +860,12 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const [wpSiteProgress, setWpSiteProgress] = useState("");
   const [sitePreflightBusy, setSitePreflightBusy] = useState(false);
   const [sitePreflightError, setSitePreflightError] = useState("");
+  const [sitePreflightProgress, setSitePreflightProgress] = useState("");
   const [sitePreflightResult, setSitePreflightResult] =
     useState<FigmaSitePreflightReport | null>(null);
+  const sitePreflightTemplates = useRef(
+    new Map<FigmaSitePageKey, ElementorTemplate>(),
+  );
   const [wpVisualQaBusy, setWpVisualQaBusy] = useState(false);
   const [wpMediaBusy, setWpMediaBusy] = useState(false);
   const [wpVisualQaError, setWpVisualQaError] = useState("");
@@ -1142,6 +1151,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     setSelectedFrameId("");
     setOutput(null);
     setError("");
+    sitePreflightTemplates.current.clear();
+    setSitePreflightProgress("");
+    setSitePreflightResult(null);
   }
 
   function updateFigmaTokenPersistence(persistent: boolean) {
@@ -1185,7 +1197,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     setWpSiteProgress("");
     setSitePreflightBusy(false);
     setSitePreflightError("");
+    setSitePreflightProgress("");
     setSitePreflightResult(null);
+    sitePreflightTemplates.current.clear();
     setWpBuildMode("single");
     setWpVisualQaBusy(false);
     setWpMediaBusy(false);
@@ -1729,6 +1743,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
 
   async function fetchMultiPageTemplates(
     pages: FigmaSitePagePlan[],
+    onPage?: (entry: PageTemplateEntry) => void,
   ): Promise<Map<FigmaSitePageKey, ElementorTemplate>> {
     let baseBody: Record<string, unknown>;
     if (mode === "figma") {
@@ -1756,32 +1771,19 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         ...(selectedFrameId ? { selectedFrameId } : {}),
       };
     }
-    type PageTemplateEntry = {
-        page: { key: FigmaSitePageKey };
-        elementorTemplate: ElementorTemplate;
-    };
     const requestBatch = async (
       requestedPages: FigmaSitePagePlan[],
     ): Promise<PageTemplateEntry[]> => {
       const candidateMode = requestedPages.every((page) => page.frameId);
-      const response = await fetch("/api/convert/page", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...baseBody,
-          ...(candidateMode
-            ? {
-                candidatePages: requestedPages.map((page) => ({
-                  key: page.key,
-                  title: page.title,
-                  slug: page.slug,
-                  frameId: page.frameId,
-                  hasDesktop: page.hasDesktop,
-                  hasMobile: page.hasMobile,
-                })),
-                sitePages: output?.multiPagePlan?.pages
-                  .filter((page) => page.frameId)
-                  .map((page) => ({
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const response = await fetch("/api/convert/page", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...baseBody,
+            ...(candidateMode
+              ? {
+                  candidatePages: requestedPages.map((page) => ({
                     key: page.key,
                     title: page.title,
                     slug: page.slug,
@@ -1789,28 +1791,48 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                     hasDesktop: page.hasDesktop,
                     hasMobile: page.hasMobile,
                   })),
-              }
-            : { pageKeys: requestedPages.map((page) => page.key) }),
-        }),
-      });
-      if (response.status === 413 && requestedPages.length > 1) {
-        const middle = Math.ceil(requestedPages.length / 2);
-        return [
-          ...await requestBatch(requestedPages.slice(0, middle)),
-          ...await requestBatch(requestedPages.slice(middle)),
-        ];
+                  sitePages: output?.multiPagePlan?.pages
+                    .filter((page) => page.frameId)
+                    .map((page) => ({
+                      key: page.key,
+                      title: page.title,
+                      slug: page.slug,
+                      frameId: page.frameId,
+                      hasDesktop: page.hasDesktop,
+                      hasMobile: page.hasMobile,
+                    })),
+                }
+              : { pageKeys: requestedPages.map((page) => page.key) }),
+          }),
+        });
+        if (response.status === 413 && requestedPages.length > 1) {
+          const middle = Math.ceil(requestedPages.length / 2);
+          return [
+            ...await requestBatch(requestedPages.slice(0, middle)),
+            ...await requestBatch(requestedPages.slice(middle)),
+          ];
+        }
+        if ([429, 502, 503, 504].includes(response.status) && attempt < 2) {
+          await new Promise((resolve) => window.setTimeout(resolve, 4_000 * (attempt + 1)));
+          continue;
+        }
+        const data = await readApi<{ ok: true; pages: PageTemplateEntry[] }>(response);
+        return data.pages;
       }
-      const data = await readApi<{ ok: true; pages: PageTemplateEntry[] }>(response);
-      return data.pages;
+      throw new Error("Figmaページを取得できませんでした。時間を置いて再試行してください。");
     };
     const candidateMode = pages.every((page) => page.frameId);
     const entries: PageTemplateEntry[] = [];
     if (candidateMode) {
-      for (let index = 0; index < pages.length; index += 2) {
-        entries.push(...await requestBatch(pages.slice(index, index + 2)));
+      for (const page of pages) {
+        const batch = await requestBatch([page]);
+        entries.push(...batch);
+        batch.forEach((entry) => onPage?.(entry));
       }
     } else {
-      entries.push(...await requestBatch(pages));
+      const batch = await requestBatch(pages);
+      entries.push(...batch);
+      batch.forEach((entry) => onPage?.(entry));
     }
     return new Map(entries.map((entry) => [entry.page.key, entry.elementorTemplate]));
   }
@@ -1826,9 +1848,24 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     setSitePreflightResult(null);
     try {
       const subpages = plan.pages.filter((page) => page.key !== "home");
-      const templates = await fetchMultiPageTemplates(subpages);
+      const templates = new Map(sitePreflightTemplates.current);
+      const missingPages = subpages.filter((page) => !templates.has(page.key));
+      setSitePreflightProgress(
+        `${1 + templates.size}/${plan.pages.length}ページを確認済み`,
+      );
+      if (missingPages.length) {
+        const fetched = await fetchMultiPageTemplates(missingPages, (entry) => {
+          sitePreflightTemplates.current.set(entry.page.key, entry.elementorTemplate);
+          templates.set(entry.page.key, entry.elementorTemplate);
+          setSitePreflightProgress(
+            `${1 + sitePreflightTemplates.current.size}/${plan.pages.length}ページを確認済み`,
+          );
+        });
+        for (const [key, template] of fetched) templates.set(key, template);
+      }
       templates.set("home", output.elementorTemplate);
       setSitePreflightResult(inspectFigmaSiteTemplates(plan, templates));
+      setSitePreflightProgress("");
     } catch (caught) {
       setSitePreflightError(
         caught instanceof Error
@@ -3519,7 +3556,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                         type="button"
                       >
                         {sitePreflightBusy
-                          ? `${multiPagePlan.pages.length}ページを検証中…`
+                          ? sitePreflightProgress || `${multiPagePlan.pages.length}ページを検証中…`
                           : `全${multiPagePlan.pages.length}ページを事前検証`}
                       </button>
                       {sitePreflightResult && (
