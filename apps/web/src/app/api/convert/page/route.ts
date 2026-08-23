@@ -26,6 +26,7 @@ import {
   createCandidatePageLinkTargets,
   createSemanticPageLinkTargets,
 } from "@/lib/figma-site-plan";
+import { applyExactVisualTemplate } from "@/lib/exact-visual";
 import {
   RequestError,
   clientIp,
@@ -127,8 +128,16 @@ export async function POST(request: Request): Promise<Response> {
             token,
             figmaRequest.token ? "pat" : "oauth",
             page.frameId,
-            { includeVisualReferences: false },
           );
+          if (
+            (page.hasDesktop && !fetched.visualReferences.desktop)
+            || (page.hasMobile && !fetched.visualReferences.mobile)
+          ) {
+            throw new RequestError(
+              `「${page.title}」のPC/SP精密表示を取得できませんでした。時間を置いて再試行してください。`,
+              502,
+            );
+          }
           const sitePages = figmaRequest.sitePages ?? figmaRequest.candidatePages ?? [];
           const sitePlan: FigmaMultiPagePlan = {
             title: fetched.fileName,
@@ -144,10 +153,14 @@ export async function POST(request: Request): Promise<Response> {
             ),
             pageTargets: createSemanticPageLinkTargets(sitePlan),
           };
-          const elementorTemplate = new FigmaElementorExporter().toTemplate(
+          const nativeTemplate = new FigmaElementorExporter().toTemplate(
             fetched.file,
             page.title,
             assets,
+          );
+          const elementorTemplate = applyExactVisualTemplate(
+            nativeTemplate,
+            fetched.visualReferences,
           );
           return {
             page,
