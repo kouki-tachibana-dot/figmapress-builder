@@ -1517,6 +1517,21 @@ function functionalLink(
           && action.destinationId
           && !/(?:OVERLAY|SWAP|BACK|CLOSE)/.test(navigation)
         ) {
+          const semanticTargetKey = sectionAnchorFromText(actionLabel(node));
+          const semanticTarget = semanticTargetKey
+            ? context.assets.pageTargets?.[semanticTargetKey]?.trim()
+            : "";
+          if (semanticTarget) {
+            return {
+              // In a generated multi-page site the visible semantic label is
+              // authoritative even when a stale Figma wire points back to the
+              // current frame. This keeps every duplicate header/footer/CTA
+              // label attached to the same logical WordPress page.
+              url: semanticTarget,
+              label: actionLabel(node),
+              external: false,
+            };
+          }
           const destination = findNode(context.root, action.destinationId);
           const anchor = destination?.id === context.root.id
             ? "top"
@@ -1530,16 +1545,12 @@ function functionalLink(
           }
           const crossPageUrl = context.assets.linkTargets?.[action.destinationId]?.trim();
           if (crossPageUrl) {
-            const semanticTargetKey = sectionAnchorFromText(actionLabel(node));
-            const semanticTarget = semanticTargetKey
-              ? context.assets.pageTargets?.[semanticTargetKey]?.trim()
-              : "";
             return {
               // Business-site files often contain stale prototype wires after
               // a menu label is renamed. A known visible page label is safer
               // than a conflicting frame ID; generic CTAs still use the
               // explicit Figma destination.
-              url: semanticTarget || crossPageUrl,
+              url: crossPageUrl,
               label: actionLabel(node),
               external: false,
             };
