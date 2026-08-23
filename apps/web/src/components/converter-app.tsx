@@ -2648,7 +2648,10 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
             <div>
               <span className="eyebrow">Conversion complete</span>
               <h2>変換できました</h2>
-              <p>{output.summary.pageTitle} — {output.summary.sectionCount}セクションを生成しました。</p>
+              <p>
+                {output.summary.pageTitle} — {output.summary.sectionCount}
+                {output.qualityReport ? "レイヤー" : "セクション"}を変換しました。
+              </p>
             </div>
           </div>
 
@@ -2662,7 +2665,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
             </div>
             <aside className="output-card">
               <span className="eyebrow">Generated</span>
-              <h3>{output.summary.sectionCount} sections</h3>
+              <h3>
+                {output.summary.sectionCount} {output.qualityReport ? "layers" : "sections"}
+              </h3>
               <div className="section-tags">
                 {output.summary.sectionTypes.map((type) => (
                   <span key={type}>{sectionLabels[type] || type}</span>

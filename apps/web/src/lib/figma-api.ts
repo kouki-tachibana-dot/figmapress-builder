@@ -452,16 +452,21 @@ async function fetchVisualReferences(
     const rendered = await Promise.all(roots.map(async (node) => {
       const bounds = node.absoluteBoundingBox;
       if (!bounds) return null;
-      const preferredWidth = bounds.width <= 768 ? 440 : 960;
+      // Browser Visual QA compares desktop pages at 800px and mobile pages at
+      // 440px. Ask Figma for a lossless reference at that same width so the
+      // score measures layout differences instead of JPEG compression and a
+      // second resampling pass. Keeping the rendered reference below four
+      // million pixels also bounds download size for very long pages.
+      const preferredWidth = bounds.width <= 768 ? 440 : 800;
       const widthScale = Math.min(1, preferredWidth / bounds.width);
       const pixelScale = Math.min(
         1,
-        Math.sqrt(8_000_000 / (bounds.width * bounds.height)),
+        Math.sqrt(4_000_000 / (bounds.width * bounds.height)),
       );
       const scale = Math.max(0.01, Math.min(widthScale, pixelScale));
       const query = new URLSearchParams({
         ids: node.id,
-        format: "jpg",
+        format: "png",
         scale: String(Math.round(scale * 1_000) / 1_000),
         use_absolute_bounds: "true",
       });

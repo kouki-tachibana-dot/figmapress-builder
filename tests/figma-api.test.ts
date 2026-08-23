@@ -68,6 +68,11 @@ test("real Figma file shape is normalized into parser tokens", async (context) =
   assert.equal(result.visualReferences.desktop?.nodeId, "2:2");
   assert.equal(result.visualReferences.desktop?.url, "https://s3-alpha-sig.figma.com/reference.png");
   assert.match(requested[0] ?? "", /ids=2%3A2/);
+  assert.ok(requested.some((url) =>
+    url.includes("/v1/images/")
+    && url.includes("format=png")
+    && url.includes("scale=0.556"),
+  ));
 });
 
 test("Figma OAuth uses Bearer auth without exposing the token as a PAT header", async (context) => {
