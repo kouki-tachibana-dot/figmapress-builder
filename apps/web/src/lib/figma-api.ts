@@ -40,6 +40,7 @@ export interface FigmaVisualReference {
   url: string;
   width: number;
   height: number;
+  format: "png" | "jpg";
 }
 
 export interface FigmaVisualReferences {
@@ -487,6 +488,7 @@ async function fetchVisualReferences(
 
       let image: string | null = null;
       let renderedScale = 1;
+      let renderedFormat: "png" | "jpg" = "jpg";
       for (const attempt of attempts) {
         const requestScale = Math.round(attempt.scale * 1_000) / 1_000;
         const query = new URLSearchParams({
@@ -506,16 +508,25 @@ async function fetchVisualReferences(
         if (typeof candidate === "string") {
           image = candidate;
           renderedScale = requestScale;
+          renderedFormat = attempt.format;
           break;
         }
       }
       if (!image) return null;
+      const renderedWidth = Math.max(
+        1,
+        Math.round(bounds.width * renderedScale),
+      );
       return {
         nodeId: node.id,
         name: node.name,
         url: image,
-        width: Math.max(1, Math.round(bounds.width * renderedScale)),
-        height: Math.max(1, Math.round(bounds.height * renderedScale)),
+        width: renderedWidth,
+        height: Math.max(
+          1,
+          Math.round(renderedWidth * (bounds.height / bounds.width)),
+        ),
+        format: renderedFormat,
       };
     }));
     const references = new Map(
