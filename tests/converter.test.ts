@@ -1881,6 +1881,10 @@ test("cross-page Figma prototype links survive page pruning in Elementor and pre
   assert.equal(pageLinks.length, 2);
   assert.match(result.previewHtml, /data-figmapress-preview-link/);
   assert.match(result.previewHtml, /href="#figmapress-page-company"/);
+  assert.match(
+    result.previewHtml,
+    /data-figmapress-preview-link[^>]*style="background:transparent;border:0;border-radius:0;box-shadow:none;/,
+  );
   assert.equal(result.qualityReport?.metrics.navigationIntegrity.missingTargets, 0);
 });
 
