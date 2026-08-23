@@ -60,6 +60,19 @@ test("candidate page pairs become a stable business-site plan", () => {
   assert.equal(plan.pages.every((page) => page.hasDesktop && page.hasMobile), true);
 });
 
+test("previewing contact never replaces the stable Figma home page", () => {
+  const candidates = [
+    paired(10, "1からはじまる信頼の道"),
+    paired(20, "会社案内"),
+    paired(30, "お問い合わせ"),
+  ];
+  const plan = createCandidateFigmaMultiPagePlan(candidates, "30:2", "株式会社建工101");
+  assert.ok(plan);
+  assert.deepEqual(plan.pages.map((page) => page.key), ["home", "company", "contact"]);
+  assert.deepEqual(plan.pages.map((page) => page.frameId), ["10:1", "20:1", "30:1"]);
+  assert.deepEqual(plan.pages.map((page) => page.title), ["ホーム", "会社案内", "お問い合わせ"]);
+});
+
 test("unpaired component scraps are excluded when complete page pairs exist", () => {
   const candidates: FigmaPageCandidate[] = [
     paired(10, "ホーム"),
