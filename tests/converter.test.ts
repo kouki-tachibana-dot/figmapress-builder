@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import mockFigma from "../examples/mock-figma.json";
 import { convertFile } from "../apps/web/src/lib/converter.ts";
@@ -568,6 +569,14 @@ test("exact presentation keeps responsive snapshots and native Elementor editing
   assert.match(String(stack?.elements[2]?.settings.css_classes), /figmapress-native-layout/);
   assert.match(String(stack?.elements[3]?.settings.css_classes), /figmapress-native-layout/);
   assert.ok(exact.warnings.some((warning) => warning.includes("精密表示レイヤー")));
+  const appSource = readFileSync(
+    new URL("../apps/web/src/components/converter-app.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    appSource,
+    /figmapress-exact-interaction-layer \.figmapress-figma-preview\{background:transparent!important;background-image:none!important/,
+  );
 });
 
 test("mobile containers preserve their Figma width across Elementor breakpoints", async () => {
