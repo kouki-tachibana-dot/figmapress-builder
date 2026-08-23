@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import mockFigma from "../examples/mock-figma.json";
 import { convertFile } from "../apps/web/src/lib/converter.ts";
+import { applyExactVisualPresentation } from "../apps/web/src/lib/exact-visual.ts";
 import {
   figmaRotationShouldApply,
   figmaTextShouldWrap,
@@ -499,6 +500,72 @@ test("larger mixed-size runs keep Figma's common absolute line box", async () =>
   assert.match(editor, /font-size:4\.444vw[^>]*line-height:1\.688/);
   assert.doesNotMatch(editor, /font-size:6\.667vw[^>]*line-height:1\.688/);
   assert.match(result.previewHtml, /font-size:6\.667vw[^>]*line-height:1\.125/);
+});
+
+test("exact presentation keeps responsive snapshots and native Elementor editing", () => {
+  const output: Awaited<ReturnType<typeof convertFile>> = {
+    blueprint: {
+      site: { name: "Exact", type: "landing_page", language: "ja" },
+      tokens: { colors: [], typography: [], spacing: [] },
+      pages: [],
+      warnings: [],
+    },
+    pageContent: "",
+    elementorTemplate: {
+      title: "Exact",
+      type: "page",
+      version: "0.4",
+      page_settings: {},
+      content: [
+        { id: "native1", elType: "container", isInner: false, settings: { css_classes: "figmapress-layout figmapress-layout--desktop" }, elements: [] },
+        { id: "native2", elType: "container", isInner: false, settings: { css_classes: "figmapress-layout figmapress-layout--mobile" }, elements: [] },
+      ],
+    },
+    previewHtml: '<div class="figmapress-figma-preview figmapress-figma-preview--desktop" data-figmapress-layout="desktop"><div data-figmapress-kind="text">編集文字</div></div>',
+    qualityReport: {} as NonNullable<Awaited<ReturnType<typeof convertFile>>["qualityReport"]>,
+    multiPagePlan: null,
+    themeJson: {},
+    warnings: [],
+    summary: { pageTitle: "Exact", sectionCount: 1, sectionTypes: ["figma"] },
+  };
+
+  const exact = applyExactVisualPresentation(output, {
+    desktop: {
+      nodeId: "10:1",
+      name: "PC",
+      url: "https://images.example/exact-pc.jpg",
+      width: 800,
+      height: 4477,
+      sourceWidth: 1440,
+      sourceHeight: 8058,
+      format: "jpg",
+    },
+    mobile: {
+      nodeId: "10:2",
+      name: "SP",
+      url: "https://images.example/exact-mobile.jpg",
+      width: 440,
+      height: 5390,
+      sourceWidth: 440,
+      sourceHeight: 5390,
+      format: "jpg",
+    },
+  });
+
+  assert.match(exact.previewHtml, /figmapress-exact-preview/);
+  assert.match(exact.previewHtml, /exact-pc\.jpg/);
+  assert.match(exact.previewHtml, /exact-mobile\.jpg/);
+  assert.match(exact.previewHtml, /figmapress-exact-editable-source[^>]*>.*編集文字/);
+  assert.equal(exact.elementorTemplate.page_settings.figmapress_exact_visual, "yes");
+  assert.equal(exact.elementorTemplate.content.length, 1);
+  const stack = exact.elementorTemplate.content[0];
+  assert.match(String(stack?.settings.css_classes), /figmapress-exact-stack/);
+  assert.equal(stack?.elements.length, 4);
+  assert.match(String(stack?.elements[0]?.settings.css_classes), /figmapress-exact-layout--desktop/);
+  assert.match(String(stack?.elements[1]?.settings.css_classes), /figmapress-exact-layout--mobile/);
+  assert.match(String(stack?.elements[2]?.settings.css_classes), /figmapress-native-layout/);
+  assert.match(String(stack?.elements[3]?.settings.css_classes), /figmapress-native-layout/);
+  assert.ok(exact.warnings.some((warning) => warning.includes("精密表示レイヤー")));
 });
 
 test("mobile containers preserve their Figma width across Elementor breakpoints", async () => {
