@@ -91,6 +91,25 @@ export function createCandidateFigmaMultiPagePlan(
   };
 }
 
+/**
+ * Identify which logical site page owns the template produced by the current
+ * single-page conversion. The selected value normally is the candidate id,
+ * but matching the PC/SP member ids as well keeps deep-linked Figma frames
+ * safe. A previewed subpage must never be stored as the Home template.
+ */
+export function currentCandidateFigmaSitePageKey(
+  plan: FigmaMultiPagePlan,
+  candidates: FigmaPageCandidate[],
+  selectedFrameId: string,
+): string | null {
+  const selectedCandidate = candidates.find((candidate) =>
+    [candidate.id, candidate.desktop?.id, candidate.mobile?.id]
+      .some((id) => id === selectedFrameId),
+  );
+  const plannedFrameId = selectedCandidate?.id ?? selectedFrameId;
+  return plan.pages.find((page) => page.frameId === plannedFrameId)?.key ?? null;
+}
+
 /** Build stable prototype targets for both members of every PC/SP pair. */
 export function createCandidatePageLinkTargets(
   candidates: FigmaPageCandidate[],
