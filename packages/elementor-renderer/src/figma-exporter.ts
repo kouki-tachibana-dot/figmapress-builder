@@ -569,7 +569,11 @@ function navigationElement(
       functionalLink(ctaText ?? node, context, false)
         ?? inferredSectionLink("お問い合わせ", context),
     ),
-    home_url: elementorUrl(inferredSectionLink("トップ", context)),
+    home_url: elementorUrl({
+      url: context.assets.pageTargets?.home?.trim() || anchorHref("top", context),
+      label: "ホーム",
+      external: false,
+    }),
     background_color: solidColor(background?.fills) ?? "rgba(255,255,255,0.92)",
     accent_color: solidColor(topBar?.fills) ?? "#D10B2C",
     text_color: solidColor(menuTexts[0]?.fills) ?? "#202020",
