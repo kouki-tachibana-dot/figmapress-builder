@@ -99,6 +99,8 @@ export interface VisualQaMetrics {
   width: number;
   height: number;
   changedPixelRatio: number;
+  contentChangedPixelRatio: number;
+  worstBandChangedPixelRatio: number;
   meanColorError: number;
   brightnessDelta: number;
   generatedHeight: number;
@@ -890,12 +892,19 @@ export function estimateVisualGeometry(
 function recommendationsFor(
   score: number,
   changedPixelRatio: number,
+  contentChangedPixelRatio: number,
+  worstBandChangedPixelRatio: number,
   brightnessDelta: number,
   heightDifferenceRatio: number,
   hotspots: VisualQaHotspot[],
   alignment: VisualQaAlignment,
 ): string[] {
-  if (score >= 92 && Math.abs(heightDifferenceRatio) < 3) {
+  if (
+    score >= 94
+    && contentChangedPixelRatio < 8
+    && worstBandChangedPixelRatio < 12
+    && Math.abs(heightDifferenceRatio) < 3
+  ) {
     return ["Figma基準画像との大きな視覚差は検出されませんでした。"];
   }
 
@@ -913,6 +922,16 @@ function recommendationsFor(
   if (hotspots.length) {
     recommendations.push(
       `${hotspots.map((hotspot) => hotspot.label).join("、")}に差分が集中しています。該当セクションの位置・高さ・余白を確認してください。`,
+    );
+  }
+  if (contentChangedPixelRatio >= 12) {
+    recommendations.push(
+      `文字・画像・部品がある領域の${round(contentChangedPixelRatio)}%に差があります。余白で平均化せず、原本との横並び比較で内容を確認してください。`,
+    );
+  }
+  if (worstBandChangedPixelRatio >= 20) {
+    recommendations.push(
+      `最も差が大きい縦区間では${round(worstBandChangedPixelRatio)}%が異なります。該当区間を優先して修正してください。`,
     );
   }
   if (Math.abs(brightnessDelta) >= 8) {
@@ -1122,6 +1141,8 @@ export function analyzeVisualPixels(
   );
   const diffPixels = new Uint8ClampedArray(expectedLength);
   let changed = 0;
+  let contentPixels = 0;
+  let changedContentPixels = 0;
   let colorError = 0;
   let referenceBrightness = 0;
   let targetBrightness = 0;
@@ -1139,6 +1160,24 @@ export function analyzeVisualPixels(
     const alphaError = Math.abs(reference[offset + 3] - target[offset + 3]);
     const pixelError = (redError + greenError + blueError + alphaError) / 4;
     const pixelChanged = pixelError > threshold;
+    // Plain page backgrounds can occupy most of a long website screenshot and
+    // previously hid very visible typography and component differences. Count
+    // the union of non-white pixels separately so foreground content is not
+    // diluted by large matching margins.
+    const referenceHasContent =
+      reference[offset] < 246
+      || reference[offset + 1] < 246
+      || reference[offset + 2] < 246
+      || reference[offset + 3] < 250;
+    const targetHasContent =
+      target[offset] < 246
+      || target[offset + 1] < 246
+      || target[offset + 2] < 246
+      || target[offset + 3] < 250;
+    if (referenceHasContent || targetHasContent) {
+      contentPixels += 1;
+      if (pixelChanged) changedContentPixels += 1;
+    }
 
     colorError += pixelError;
     bands[bandIndex].pixels += 1;
@@ -1175,6 +1214,9 @@ export function analyzeVisualPixels(
 
   const totalPixels = width * height;
   const changedPixelRatio = (changed / totalPixels) * 100;
+  const contentChangedPixelRatio = contentPixels
+    ? (changedContentPixels / contentPixels) * 100
+    : changedPixelRatio;
   const meanColorError = colorError / totalPixels;
   const brightnessDelta = (targetBrightness - referenceBrightness) / totalPixels;
   const normalizedGeneratedHeight =
@@ -1199,10 +1241,16 @@ export function analyzeVisualPixels(
             "ページ全体の高さがFigma基準と異なるため、位置補正より先にセクション高と欠落要素の確認が必要です。",
         }
       : estimatedAlignment;
+  const bandChangedRatios = bands.map((band) =>
+    band.pixels ? (band.changed / band.pixels) * 100 : 0,
+  );
+  const worstBandChangedPixelRatio = Math.max(0, ...bandChangedRatios);
   const score = clamp(
     100 -
-      changedPixelRatio * 0.68 -
-      (meanColorError / 255) * 32 -
+      changedPixelRatio * 0.38 -
+      contentChangedPixelRatio * 0.52 -
+      worstBandChangedPixelRatio * 0.12 -
+      (meanColorError / 255) * 24 -
       Math.min(30, Math.abs(heightDifferenceRatio) * 0.35),
     0,
     100,
@@ -1229,14 +1277,30 @@ export function analyzeVisualPixels(
       meanColorError: round(band.meanColorError),
     }));
   const roundedScore = round(score);
+  const roundedContentChangedPixelRatio = round(contentChangedPixelRatio);
+  const roundedWorstBandChangedPixelRatio = round(worstBandChangedPixelRatio);
+  const status: VisualQaStatus =
+    roundedScore >= 94
+      && roundedContentChangedPixelRatio < 8
+      && roundedWorstBandChangedPixelRatio < 12
+      && Math.abs(heightDifferenceRatio) < 3
+      ? "pass"
+      : roundedScore >= 75
+        && roundedContentChangedPixelRatio < 32
+        && roundedWorstBandChangedPixelRatio < 50
+        && Math.abs(heightDifferenceRatio) < 12
+        ? "review"
+        : "fail";
 
   return {
     metrics: {
       score: roundedScore,
-      status: roundedScore >= 92 ? "pass" : roundedScore >= 75 ? "review" : "fail",
+      status,
       width,
       height,
       changedPixelRatio: round(changedPixelRatio),
+      contentChangedPixelRatio: roundedContentChangedPixelRatio,
+      worstBandChangedPixelRatio: roundedWorstBandChangedPixelRatio,
       meanColorError: round(meanColorError),
       brightnessDelta: round(brightnessDelta),
       generatedHeight: Math.round(normalizedGeneratedHeight),
@@ -1246,6 +1310,8 @@ export function analyzeVisualPixels(
       recommendations: recommendationsFor(
         roundedScore,
         changedPixelRatio,
+        contentChangedPixelRatio,
+        worstBandChangedPixelRatio,
         brightnessDelta,
         heightDifferenceRatio,
         hotspots,

@@ -578,7 +578,7 @@ function visualScoreMap(
 function serializableVisualQaResults(results: VisualQaBrowserResult[]) {
   return results.map((result) =>
     Object.fromEntries(
-      Object.entries(result).filter(([key]) => key !== "diffImageUrl"),
+      Object.entries(result).filter(([key]) => !key.endsWith("ImageUrl")),
     ),
   );
 }
@@ -2407,7 +2407,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.26.39 live</span>
+          <span className="status-pill"><i /> v0.26.40 live</span>
         </nav>
       </header>
 
@@ -2952,7 +2952,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
               )}
               {visualQaBusy && visualQaResults.length === 0 && (
                 <div className="visual-qa-progress" role="status">
-                  <span className="spinner" /> 長いページを縮小して比較しています…
+                  <span className="spinner" /> PC／スマホを原寸幅で描画して比較しています…
                 </div>
               )}
               {visualQaResults.length > 0 && (
@@ -2977,9 +2977,11 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                       </div>
                       <dl className="visual-qa-metrics">
                         <div><dt>差分面積</dt><dd>{result.changedPixelRatio}%</dd></div>
+                        <div><dt>内容領域差分</dt><dd>{result.contentChangedPixelRatio}%</dd></div>
+                        <div><dt>最大区間差分</dt><dd>{result.worstBandChangedPixelRatio}%</dd></div>
                         <div><dt>平均色差</dt><dd>{result.meanColorError}</dd></div>
                         <div><dt>全体高差</dt><dd>{result.heightDifferenceRatio > 0 ? "+" : ""}{result.heightDifferenceRatio}%</dd></div>
-                        <div><dt>測定寸法</dt><dd>{result.width}×{result.height}</dd></div>
+                        <div><dt>描画幅／測定幅</dt><dd>{result.renderWidth}px／{result.width}px</dd></div>
                       </dl>
                       {(result.status !== "pass" || result.alignment.safeToApply) && (
                         <div className={`visual-qa-alignment ${result.alignment.safeToApply ? "is-safe" : "is-guarded"}`}>
@@ -3128,6 +3130,29 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                           <li key={recommendation}>{recommendation}</li>
                         ))}
                       </ul>
+                      <details className="visual-qa-comparison" open>
+                        <summary>Figma原本と生成プレビューを直接比較</summary>
+                        <div>
+                          <figure>
+                            <figcaption>Figma原本</figcaption>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              alt={`${result.variant === "desktop" ? "PC" : "スマホ"}版のFigma原本`}
+                              loading="lazy"
+                              src={result.referenceImageUrl}
+                            />
+                          </figure>
+                          <figure>
+                            <figcaption>生成プレビュー</figcaption>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              alt={`${result.variant === "desktop" ? "PC" : "スマホ"}版の生成プレビュー`}
+                              loading="lazy"
+                              src={result.previewImageUrl}
+                            />
+                          </figure>
+                        </div>
+                      </details>
                       <details className="visual-qa-diff">
                         <summary>差分ヒートマップを見る</summary>
                         {/* Generated in-browser as a data URL; Next Image cannot optimize it. */}
@@ -3576,7 +3601,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.26.39</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.26.40</span></div>
       </footer>
     </main>
   );

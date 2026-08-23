@@ -54,6 +54,10 @@ test("browser Visual QA waits for the srcdoc DOM separately from slow media", as
   assert.match(source, /45_000/);
   assert.match(source, /Promise\.all\(\[\s*html2canvas/);
   assert.match(source, /loadReferenceImage\(reference\.url\)/);
+  assert.match(source, /`width:\$\{renderWidth\}px`/);
+  assert.match(source, /scale: captureScale/);
+  assert.match(source, /referenceImageUrl: referenceCanvas\.toDataURL/);
+  assert.match(source, /previewImageUrl: targetCanvas\.toDataURL/);
 });
 
 test("actual-page Visual QA refuses a misleading score when snapshot images are omitted", async () => {
@@ -235,7 +239,9 @@ test("visual QA locates a concentrated difference near the page bottom", () => {
   const analysis = analyzeVisualPixels(reference, target, width, height);
 
   assert.equal(analysis.metrics.changedPixelRatio, 10);
-  assert.equal(analysis.metrics.status, "review");
+  assert.equal(analysis.metrics.status, "fail");
+  assert.equal(analysis.metrics.contentChangedPixelRatio, 100);
+  assert.equal(analysis.metrics.worstBandChangedPixelRatio, 100);
   assert.equal(analysis.metrics.hotspots[0]?.startPercent, 90);
   assert.match(analysis.metrics.hotspots[0]?.label ?? "", /下部/);
   assert.ok(analysis.metrics.brightnessDelta < 0);

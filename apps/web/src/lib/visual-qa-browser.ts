@@ -20,10 +20,14 @@ export interface VisualQaBrowserResult extends VisualQaMetrics {
   variant: "desktop" | "mobile";
   referenceName: string;
   referenceNodeId: string;
+  renderWidth: number;
+  renderHeight: number;
   sections: VisualQaRegionMetrics[];
   textNodes: VisualQaRegionMetrics[];
   visualNodes: VisualQaRegionMetrics[];
   decorationNodes: VisualQaRegionMetrics[];
+  referenceImageUrl: string;
+  previewImageUrl: string;
   diffImageUrl: string;
 }
 
@@ -225,8 +229,16 @@ async function loadReferenceImage(url: string): Promise<HTMLImageElement> {
 function captureSize(
   reference: VisualQaReference,
   variant: "desktop" | "mobile",
-): { width: number; height: number } {
+): {
+  width: number;
+  height: number;
+  renderWidth: number;
+  renderHeight: number;
+  captureScale: number;
+} {
   const preferredWidth = variant === "mobile" ? 440 : 800;
+  const renderWidth = Math.max(1, Math.round(reference.width));
+  const renderHeight = Math.max(1, Math.round(reference.height));
   let width = Math.max(1, Math.round(Math.min(reference.width, preferredWidth)));
   let height = Math.max(1, Math.round(width * (reference.height / reference.width)));
   if (width * height > MAX_CAPTURE_PIXELS) {
@@ -234,11 +246,18 @@ function captureSize(
     width = Math.max(1, Math.floor(width * scale));
     height = Math.max(1, Math.floor(height * scale));
   }
-  return { width, height };
+  return {
+    width,
+    height,
+    renderWidth,
+    renderHeight,
+    captureScale: width / renderWidth,
+  };
 }
 
 function regionInput(
   element: HTMLElement,
+  scale = 1,
 ): VisualQaRegionInput | null {
   const rect = element.getBoundingClientRect();
   const nodeId = element.dataset.figmapressNodeId;
@@ -246,10 +265,10 @@ function regionInput(
   return {
     nodeId,
     name: element.dataset.figmapressNodeName || nodeId,
-    x: rect.left,
-    y: rect.top,
-    width: rect.width,
-    height: rect.height,
+    x: rect.left * scale,
+    y: rect.top * scale,
+    width: rect.width * scale,
+    height: rect.height * scale,
   };
 }
 
@@ -258,7 +277,13 @@ export async function runVisualQa(
   sourceDocument: string,
   variant: "desktop" | "mobile",
 ): Promise<VisualQaBrowserResult> {
-  const { width, height } = captureSize(reference, variant);
+  const {
+    width,
+    height,
+    renderWidth,
+    renderHeight,
+    captureScale,
+  } = captureSize(reference, variant);
   // JPEG is the only Figma-supported reference format for very long pages.
   // Ignore its small block/compression noise while keeping the stricter
   // lossless threshold for ordinary PNG references.
@@ -270,8 +295,8 @@ export async function runVisualQa(
     "position:fixed",
     "left:-12000px",
     "top:0",
-    `width:${width}px`,
-    `height:${height}px`,
+    `width:${renderWidth}px`,
+    `height:${renderHeight}px`,
     "border:0",
     "pointer-events:none",
     "z-index:-1",
@@ -363,7 +388,7 @@ export async function runVisualQa(
       ? (markedSections.length
           ? markedSections
           : Array.from(visiblePreview.children) as HTMLElement[])
-          .map((element) => regionInput(element as HTMLElement))
+          .map((element) => regionInput(element as HTMLElement, captureScale))
           .filter((region): region is VisualQaRegionInput => region !== null)
       : [];
     const textRegions = visiblePreview
@@ -372,7 +397,7 @@ export async function runVisualQa(
             '[data-figmapress-kind="text"]',
           ),
         )
-          .map(regionInput)
+          .map((element) => regionInput(element, captureScale))
           .filter((region): region is VisualQaRegionInput => region !== null)
           .filter(
             (region) =>
@@ -393,7 +418,7 @@ export async function runVisualQa(
             '[data-figmapress-kind="visual"]',
           ),
         )
-          .map(regionInput)
+          .map((element) => regionInput(element, captureScale))
           .filter((region): region is VisualQaRegionInput => region !== null)
           .filter(
             (region) =>
@@ -420,7 +445,7 @@ export async function runVisualQa(
               && !element.textContent?.trim()
               && !element.querySelector("[data-figmapress-node-id]"),
           )
-          .map(regionInput)
+          .map((element) => regionInput(element, captureScale))
           .filter((region): region is VisualQaRegionInput => region !== null)
           .filter(
             (region) =>
@@ -443,13 +468,13 @@ export async function runVisualQa(
       html2canvas(frameDocument.documentElement, {
         allowTaint: false,
         backgroundColor: "#ffffff",
-        height,
+        height: renderHeight,
         logging: false,
-        scale: 1,
+        scale: captureScale,
         useCORS: true,
-        width,
-        windowHeight: height,
-        windowWidth: width,
+        width: renderWidth,
+        windowHeight: renderHeight,
+        windowWidth: renderWidth,
         x: 0,
         y: 0,
       }),
@@ -477,7 +502,7 @@ export async function runVisualQa(
       width,
       height,
       pixelThreshold,
-      generatedHeight,
+      generatedHeight * captureScale,
     );
     const sections = analyzeVisualRegions(
       referencePixels.data,
@@ -568,10 +593,14 @@ export async function runVisualQa(
       variant,
       referenceName: reference.name,
       referenceNodeId: reference.nodeId,
+      renderWidth,
+      renderHeight,
       sections,
       textNodes,
       visualNodes,
       decorationNodes,
+      referenceImageUrl: referenceCanvas.toDataURL("image/jpeg", 0.82),
+      previewImageUrl: targetCanvas.toDataURL("image/jpeg", 0.82),
       diffImageUrl: diffCanvas.toDataURL("image/png"),
     };
   } finally {
