@@ -87,7 +87,7 @@ type OutputTarget = "gutenberg" | "elementor";
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
-const APP_RELEASE = "0.26.58";
+const APP_RELEASE = "0.26.59";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -1900,6 +1900,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         ? output.elementorTemplate
         : sectionTemplates.get(page.key);
       if (!template) throw new Error(`「${page.title}」のElementorデータを準備できませんでした。`);
+      if (page.frameId && template.page_settings.figmapress_exact_visual !== "yes") {
+        throw new Error(`「${page.title}」のPC/SP精密表示が不足しているため、WordPressには保存していません。`);
+      }
       const linkedTemplate = rewriteElementorTemplatePageLinks(template, pageLinks);
       const linkAudit = auditElementorTemplateLinks(linkedTemplate, pageLinks);
       if (!linkAudit.valid) {

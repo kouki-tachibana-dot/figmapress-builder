@@ -3,7 +3,10 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import mockFigma from "../examples/mock-figma.json";
 import { convertFile } from "../apps/web/src/lib/converter.ts";
-import { applyExactVisualPresentation } from "../apps/web/src/lib/exact-visual.ts";
+import {
+  applyExactVisualPresentation,
+  applyExactVisualTemplate,
+} from "../apps/web/src/lib/exact-visual.ts";
 import {
   figmaRotationShouldApply,
   figmaTextShouldWrap,
@@ -576,6 +579,41 @@ test("exact presentation keeps responsive snapshots and native Elementor editing
   assert.match(
     appSource,
     /figmapress-exact-interaction-layer \.figmapress-figma-preview\{background:transparent!important;background-image:none!important/,
+  );
+});
+
+test("multi-page Elementor templates receive the same exact PC/SP presentation", () => {
+  const template = {
+    title: "会社案内",
+    type: "page" as const,
+    version: "0.4" as const,
+    page_settings: {},
+    content: [{
+      id: "native",
+      elType: "container" as const,
+      isInner: false,
+      settings: { css_classes: "figmapress-layout figmapress-layout--desktop" },
+      elements: [],
+    }],
+  };
+  const exact = applyExactVisualTemplate(template, {
+    desktop: {
+      nodeId: "20:1", name: "会社案内 PC",
+      url: "https://images.example/company-pc.jpg",
+      width: 800, height: 4369, sourceWidth: 1440, sourceHeight: 7865, format: "jpg",
+    },
+    mobile: {
+      nodeId: "20:2", name: "会社案内 SP",
+      url: "https://images.example/company-sp.jpg",
+      width: 440, height: 7559, sourceWidth: 440, sourceHeight: 7559, format: "jpg",
+    },
+  });
+  assert.equal(exact.page_settings.figmapress_exact_visual, "yes");
+  assert.equal(exact.content.length, 1);
+  assert.equal(exact.content[0]?.elements.length, 3);
+  assert.match(
+    JSON.stringify(exact),
+    /company-pc\.jpg[^]*company-sp\.jpg[^]*figmapress-native-layout/,
   );
 });
 

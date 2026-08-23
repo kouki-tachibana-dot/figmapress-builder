@@ -1,4 +1,8 @@
-import type { ElementorElement, ElementorSettings } from "@figmapress/elementor-renderer";
+import type {
+  ElementorElement,
+  ElementorSettings,
+  ElementorTemplate,
+} from "@figmapress/elementor-renderer";
 import type { ConversionOutput } from "./converter";
 import type { FigmaVisualReference, FigmaVisualReferences } from "./figma-api";
 
@@ -119,7 +123,32 @@ export function applyExactVisualPresentation(
   const exactPreview = available
     .map(([variant, reference]) => exactPreviewRoot(reference, variant))
     .join("");
-  const nativeContent = output.elementorTemplate.content.map((element) => ({
+  const elementorTemplate = applyExactVisualTemplate(output.elementorTemplate, references);
+
+  return {
+    ...output,
+    previewHtml: `<div class="figmapress-exact-stack">${exactPreview}<div class="figmapress-exact-interaction-layer">${nativePreview}</div></div>`,
+    elementorTemplate,
+    warnings: [...new Set([
+      ...output.warnings,
+      "公開表示はFigma原本の精密表示レイヤーを使用し、Elementor編集画面には編集可能なネイティブ構造を保持します。",
+    ])],
+  };
+}
+
+export function applyExactVisualTemplate(
+  template: ElementorTemplate,
+  references: FigmaVisualReferences,
+): ElementorTemplate {
+  const available = ([
+    ["desktop", references.desktop],
+    ["mobile", references.mobile],
+  ] as const).filter(
+    (entry): entry is readonly ["desktop" | "mobile", FigmaVisualReference] =>
+      Boolean(entry[1]),
+  );
+  if (!available.length) return template;
+  const nativeContent = template.content.map((element) => ({
     ...element,
     settings: appendClass(element.settings, "figmapress-native-layout"),
   }));
@@ -128,41 +157,33 @@ export function applyExactVisualPresentation(
   );
 
   return {
-    ...output,
-    previewHtml: `<div class="figmapress-exact-stack">${exactPreview}<div class="figmapress-exact-interaction-layer">${nativePreview}</div></div>`,
-    elementorTemplate: {
-      ...output.elementorTemplate,
-      page_settings: {
-        ...output.elementorTemplate.page_settings,
-        figmapress_exact_visual: "yes",
-        figmapress_exact_visual_version: "1",
-      },
-      content: [{
-        id: "fxstack",
-        elType: "container",
-        isInner: false,
-        settings: {
-          css_classes: "figmapress-exact-stack",
-          content_width: "full",
-          width: { unit: "%", size: 100, sizes: [] },
-          flex_direction: "column",
-          flex_gap: { unit: "px", size: 0, sizes: [] },
-          padding: {
-            unit: "px",
-            top: "0",
-            right: "0",
-            bottom: "0",
-            left: "0",
-            isLinked: true,
-          },
-          overflow: "hidden",
-        },
-        elements: [...exactContent, ...nativeContent],
-      }],
+    ...template,
+    page_settings: {
+      ...template.page_settings,
+      figmapress_exact_visual: "yes",
+      figmapress_exact_visual_version: "1",
     },
-    warnings: [...new Set([
-      ...output.warnings,
-      "公開表示はFigma原本の精密表示レイヤーを使用し、Elementor編集画面には編集可能なネイティブ構造を保持します。",
-    ])],
+    content: [{
+      id: "fxstack",
+      elType: "container",
+      isInner: false,
+      settings: {
+        css_classes: "figmapress-exact-stack",
+        content_width: "full",
+        width: { unit: "%", size: 100, sizes: [] },
+        flex_direction: "column",
+        flex_gap: { unit: "px", size: 0, sizes: [] },
+        padding: {
+          unit: "px",
+          top: "0",
+          right: "0",
+          bottom: "0",
+          left: "0",
+          isLinked: true,
+        },
+        overflow: "hidden",
+      },
+      elements: [...exactContent, ...nativeContent],
+    }],
   };
 }
