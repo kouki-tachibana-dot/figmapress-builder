@@ -1775,7 +1775,7 @@ function previewNode(
   const action = functionalLink(node, context);
   if (!children && !background && !border && !action) return "";
   const link = action
-    ? `<a data-figmapress-preview-link href="${escapeAttribute(action.url)}" aria-label="${escapeAttribute(action.label)}"${action.external ? ' target="_blank" rel="noopener noreferrer"' : ""} style="display:block;inset:0;position:absolute;z-index:20"></a>`
+    ? `<a data-figmapress-preview-link href="${escapeAttribute(action.url)}" aria-label="${escapeAttribute(action.label)}"${action.external ? ' target="_blank" rel="noopener noreferrer"' : ""} style="background:transparent;border:0;border-radius:0;box-shadow:none;color:transparent;display:block;inset:0;margin:0;padding:0;position:absolute;text-decoration:none;z-index:20"></a>`
     : "";
   return `<div aria-label="${escapeAttribute(node.name)}" ${attributes} data-figmapress-kind="container" style="${position};${previewAutoLayout(node)}${background}${border}${previewRadius(node)}${overflow}${previewTransform(node, parentBounds)}${previewEffects(node)}">${children}${link}</div>`;
 }
@@ -1786,7 +1786,7 @@ function previewActionWrapper(
   action: FunctionalLink | null,
 ): string {
   if (!action) return content;
-  return `<a data-figmapress-preview-link href="${escapeAttribute(action.url)}" aria-label="${escapeAttribute(action.label || node.name)}"${action.external ? ' target="_blank" rel="noopener noreferrer"' : ""} style="display:contents">${content}</a>`;
+  return `<a data-figmapress-preview-link href="${escapeAttribute(action.url)}" aria-label="${escapeAttribute(action.label || node.name)}"${action.external ? ' target="_blank" rel="noopener noreferrer"' : ""} style="background:transparent;border:0;border-radius:0;box-shadow:none;display:contents;margin:0;padding:0;text-decoration:none">${content}</a>`;
 }
 
 function previewNodeAttributes(node: FigmaNode): string {
