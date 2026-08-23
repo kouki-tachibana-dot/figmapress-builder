@@ -86,7 +86,7 @@ type OutputTarget = "gutenberg" | "elementor";
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
-const APP_RELEASE = "0.26.46";
+const APP_RELEASE = "0.26.47";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -894,11 +894,16 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const currentPreviewTextIntegrity = previewTextIntegrity?.source === srcDoc
     ? previewTextIntegrity
     : null;
+  const previewTextIntegrityPassed = Boolean(
+    currentPreviewTextIntegrity
+    && currentPreviewTextIntegrity.total > 0
+    && currentPreviewTextIntegrity.visible === currentPreviewTextIntegrity.total,
+  );
 
   const handlePreviewLoad = (event: SyntheticEvent<HTMLIFrameElement>) => {
     const integrity = inspectPreviewTextIntegrity(event.currentTarget);
     setPreviewTextIntegrity(integrity
-      ? { ...integrity, source: event.currentTarget.srcdoc }
+      ? { ...integrity, source: srcDoc }
       : null);
   };
   const connectorSupportsInteractions = wpStatus?.functionalWidgets
@@ -2760,16 +2765,18 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                 srcDoc={srcDoc}
                 title="生成ページのプレビュー"
               />
-              {currentPreviewTextIntegrity && (
+              {currentPreviewTextIntegrity && output.qualityReport && (
                 <p
-                  className={`preview-text-integrity${currentPreviewTextIntegrity.visible === currentPreviewTextIntegrity.total ? " is-pass" : " is-fail"}`}
+                  className={`preview-text-integrity${previewTextIntegrityPassed ? " is-pass" : " is-fail"}`}
                   role="status"
                 >
-                  {currentPreviewTextIntegrity.visible === currentPreviewTextIntegrity.total ? "✓" : "!"}
+                  {previewTextIntegrityPassed ? "✓" : "!"}
                   {" "}文字表示 {currentPreviewTextIntegrity.visible}/{currentPreviewTextIntegrity.total}
-                  {currentPreviewTextIntegrity.visible === currentPreviewTextIntegrity.total
+                  {previewTextIntegrityPassed
                     ? " — 全テキストを実描画で確認"
-                    : " — 非表示文字があるため変換結果を使用しないでください"}
+                    : currentPreviewTextIntegrity.total === 0
+                      ? " — 検査対象を取得できないため変換結果を使用しないでください"
+                      : " — 非表示文字があるため変換結果を使用しないでください"}
                 </p>
               )}
               {staleReleaseDetected && (
