@@ -553,6 +553,7 @@ test("exact presentation keeps responsive snapshots and native Elementor editing
   });
 
   assert.match(exact.previewHtml, /figmapress-exact-preview/);
+  assert.match(exact.previewHtml, /data-figmapress-reference-node-id="10:1"/);
   assert.match(exact.previewHtml, /exact-pc\.jpg/);
   assert.match(exact.previewHtml, /exact-mobile\.jpg/);
   assert.match(exact.previewHtml, /figmapress-exact-editable-source[^>]*>.*編集文字/);

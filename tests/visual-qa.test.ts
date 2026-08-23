@@ -59,6 +59,7 @@ test("browser Visual QA waits for the srcdoc DOM separately from slow media", as
   assert.match(source, /loadReferenceImage\(reference\.url\)/);
   assert.match(source, /verifiedExactSnapshot/);
   assert.match(source, /data-figmapress-exact-snapshot/);
+  assert.match(source, /figmapressReferenceNodeId !== reference\.nodeId/);
   assert.match(source, /fillsReferenceViewport \? image : null/);
   assert.match(source, /comparisonTargetCanvas/);
   assert.match(source, /`width:\$\{renderWidth\}px`/);
