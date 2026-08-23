@@ -59,6 +59,7 @@ import {
 } from "@/lib/visual-qa";
 import { readApi } from "@/lib/api-client";
 import { resolveFigmaRequestAuthentication } from "@/lib/figma-client-auth";
+import type { FigmaPageCandidate } from "@/lib/figma-frame-selection";
 import {
   runWordPressWriteWithNetworkFallback,
   shouldProxyWordPressDraft,
@@ -205,7 +206,7 @@ function createRequestId(): string {
   return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
 }
 
-function figmaSourceKey(input: string): string | undefined {
+function figmaSourceKey(input: string, selectedFrameId?: string): string | undefined {
   const value = input.trim();
   let fileKey = "";
   let nodeId = "root";
@@ -230,7 +231,7 @@ function figmaSourceKey(input: string): string | undefined {
       return undefined;
     }
   }
-  return `figma:${fileKey}:${nodeId}`;
+  return `figma:${fileKey}:${selectedFrameId || nodeId}`;
 }
 
 interface ConversionResult {
@@ -309,6 +310,12 @@ interface ConversionResult {
     desktop?: VisualQaReference;
     mobile?: VisualQaReference;
   };
+}
+
+interface FigmaFrameSelectionResult {
+  ok: true;
+  selectionRequired: true;
+  candidates: FigmaPageCandidate[];
 }
 
 interface WordPressResult {
@@ -697,6 +704,8 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     useState<FigmaOAuthClientStatus | null>(null);
   const [jsonText, setJsonText] = useState(sampleJson);
   const [output, setOutput] = useState<ConversionResult | null>(null);
+  const [figmaPageCandidates, setFigmaPageCandidates] = useState<FigmaPageCandidate[]>([]);
+  const [selectedFrameId, setSelectedFrameId] = useState("");
   const [converting, setConverting] = useState(false);
   const [error, setError] = useState("");
   const [wpBusy, setWpBusy] = useState(false);
@@ -928,6 +937,14 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     writeFigmaToken(value);
   }
 
+  function changeSourceMode(nextMode: SourceMode) {
+    setMode(nextMode);
+    setFigmaPageCandidates([]);
+    setSelectedFrameId("");
+    setOutput(null);
+    setError("");
+  }
+
   function updateFigmaTokenPersistence(persistent: boolean) {
     writeFigmaToken(figmaToken, persistent);
   }
@@ -1001,9 +1018,10 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         body = {
           mode,
           fileKeyOrUrl,
+          ...(selectedFrameId ? { selectedFrameId } : {}),
           ...authentication.credentials,
         };
-        nextSourceKey = figmaSourceKey(fileKeyOrUrl);
+        nextSourceKey = figmaSourceKey(fileKeyOrUrl, selectedFrameId || undefined);
       } else {
         let data: unknown;
         try {
@@ -1011,7 +1029,11 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         } catch {
           throw new Error("貼り付けたJSONの形式を確認してください。");
         }
-        body = { mode, data };
+        body = {
+          mode,
+          data,
+          ...(selectedFrameId ? { selectedFrameId } : {}),
+        };
       }
 
       const response = await fetch("/api/convert", {
@@ -1019,7 +1041,21 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const data = await readApi<{ ok: true } & ConversionResult>(response);
+      const data = await readApi<
+        FigmaFrameSelectionResult | ({ ok: true; selectionRequired?: false } & ConversionResult)
+      >(response);
+      if (data.selectionRequired === true) {
+        setFigmaPageCandidates(data.candidates);
+        setSelectedFrameId((current) =>
+          data.candidates.some((candidate) => candidate.id === current)
+            ? current
+            : data.candidates[0]?.id ?? "",
+        );
+        requestAnimationFrame(() => {
+          document.getElementById("figma-page-picker")?.scrollIntoView({ behavior: "smooth", block: "center" });
+        });
+        return;
+      }
       setOutput(data);
       setConversionSourceKey(nextSourceKey);
       setDraftRequestId(createRequestId());
@@ -1041,7 +1077,13 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       return;
     }
     const reader = new FileReader();
-    reader.onload = () => setJsonText(String(reader.result ?? ""));
+    reader.onload = () => {
+      setJsonText(String(reader.result ?? ""));
+      setFigmaPageCandidates([]);
+      setSelectedFrameId("");
+      setOutput(null);
+      setError("");
+    };
     reader.onerror = () => setError("JSONファイルを読み込めませんでした。");
     reader.readAsText(file);
   }
@@ -1494,6 +1536,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       baseBody = {
         mode,
         fileKeyOrUrl,
+        ...(selectedFrameId ? { selectedFrameId } : {}),
         ...authentication.credentials,
       };
     } else {
@@ -1507,6 +1550,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         mode,
         data,
         pageTitle: output?.summary.pageTitle,
+        ...(selectedFrameId ? { selectedFrameId } : {}),
       };
     }
     type PageTemplateEntry = {
@@ -2335,7 +2379,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.26.31 live</span>
+          <span className="status-pill"><i /> v0.26.32 live</span>
         </nav>
       </header>
 
@@ -2403,7 +2447,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
               aria-selected={mode === "figma"}
               aria-controls="source-panel"
               className={mode === "figma" ? "is-active" : ""}
-              onClick={() => setMode("figma")}
+              onClick={() => changeSourceMode("figma")}
               role="tab"
               type="button"
             >
@@ -2413,7 +2457,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
               aria-selected={mode === "json"}
               aria-controls="source-panel"
               className={mode === "json" ? "is-active" : ""}
-              onClick={() => setMode("json")}
+              onClick={() => changeSourceMode("json")}
               role="tab"
               type="button"
             >
@@ -2428,7 +2472,13 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                   <span>FigmaファイルURL またはファイルキー</span>
                   <input
                     autoComplete="off"
-                    onChange={(event) => setFileKeyOrUrl(event.target.value)}
+                    onChange={(event) => {
+                      setFileKeyOrUrl(event.target.value);
+                      setFigmaPageCandidates([]);
+                      setSelectedFrameId("");
+                      setOutput(null);
+                      setError("");
+                    }}
                     placeholder="https://www.figma.com/design/…"
                     required
                     value={fileKeyOrUrl}
@@ -2514,11 +2564,55 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                 </div>
                 <textarea
                   id="figma-json"
-                  onChange={(event) => setJsonText(event.target.value)}
+                  onChange={(event) => {
+                    setJsonText(event.target.value);
+                    setFigmaPageCandidates([]);
+                    setSelectedFrameId("");
+                    setOutput(null);
+                    setError("");
+                  }}
                   spellCheck={false}
                   value={jsonText}
                 />
               </div>
+            )}
+
+            {figmaPageCandidates.length > 0 && (
+              <fieldset className="figma-page-picker" id="figma-page-picker">
+                <legend>変換するページを選ぶ</legend>
+                <p>
+                  このFigmaには複数のWebページがあります。別ページ同士を混ぜず、選んだPC画面と対応するスマホ画面だけを変換します。
+                </p>
+                <div className="figma-page-picker__grid">
+                  {figmaPageCandidates.map((candidate, index) => {
+                    const selected = candidate.id === selectedFrameId;
+                    return (
+                      <label className={selected ? "is-selected" : ""} key={candidate.id}>
+                        <input
+                          checked={selected}
+                          name="figma-page-candidate"
+                          onChange={() => setSelectedFrameId(candidate.id)}
+                          type="radio"
+                          value={candidate.id}
+                        />
+                        <span>
+                          <small>PAGE {String(index + 1).padStart(2, "0")}</small>
+                          <strong>{candidate.title}</strong>
+                          <em>
+                            {candidate.desktop
+                              ? `PC ${candidate.desktop.width}×${candidate.desktop.height}`
+                              : "PCなし"}
+                            {" / "}
+                            {candidate.mobile
+                              ? `スマホ ${candidate.mobile.width}×${candidate.mobile.height}`
+                              : "スマホなし"}
+                          </em>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </fieldset>
             )}
 
             <details className="naming-guide">
@@ -2536,7 +2630,11 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
             <div className="form-footer">
               <p><span className="lock">⌁</span> PATはOAuthより優先され、標準はこのタブ内、選択時だけこのブラウザに保持します。</p>
               <button className="button button--primary button--submit" disabled={converting} type="submit">
-                {converting ? <><span className="spinner" /> 変換中…</> : <>WordPress用に変換 <span>→</span></>}
+                {converting
+                  ? <><span className="spinner" /> 変換中…</>
+                  : figmaPageCandidates.length > 0
+                    ? <>選択したページを変換 <span>→</span></>
+                    : <>WordPress用に変換 <span>→</span></>}
               </button>
             </div>
           </form>
@@ -3445,7 +3543,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.26.31</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.26.32</span></div>
       </footer>
     </main>
   );

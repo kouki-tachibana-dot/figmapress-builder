@@ -10,7 +10,15 @@ import {
   figmaOAuthCookie,
   resolveFigmaOAuthAccess,
 } from "@/lib/figma-oauth";
-import { fetchFigmaFile } from "@/lib/figma-api";
+import {
+  fetchFigmaFile,
+  FigmaFrameSelectionRequired,
+} from "@/lib/figma-api";
+import {
+  discoverFigmaPageCandidates,
+  pruneFigmaDocumentToFrames,
+  selectedFigmaFrameIds,
+} from "@/lib/figma-frame-selection";
 import {
   RequestError,
   clientIp,
@@ -35,11 +43,13 @@ const RequestSchema = z.discriminatedUnion("mode", [
     data: z.unknown(),
     pageKeys: PageKeysSchema,
     pageTitle: z.string().trim().max(160).optional(),
+    selectedFrameId: z.string().regex(/^[0-9]+:[0-9]+$/).optional(),
   }).strict(),
   z.object({
     mode: z.literal("figma"),
     fileKeyOrUrl: z.string().trim().min(6).max(500),
     token: z.string().trim().min(10).max(500).optional(),
+    selectedFrameId: z.string().regex(/^[0-9]+:[0-9]+$/).optional(),
     pageKeys: PageKeysSchema,
   }).strict(),
 ]);
@@ -80,20 +90,51 @@ export async function POST(request: Request): Promise<Response> {
         );
       }
       refreshedOAuthCookie = oauth?.refreshedCookie;
-      const fetched = await fetchFigmaFile(
-        parsed.data.fileKeyOrUrl,
-        token,
-        parsed.data.token ? "pat" : "oauth",
-      );
+      let fetched;
+      try {
+        fetched = await fetchFigmaFile(
+          parsed.data.fileKeyOrUrl,
+          token,
+          parsed.data.token ? "pat" : "oauth",
+          parsed.data.selectedFrameId,
+        );
+      } catch (error) {
+        if (error instanceof FigmaFrameSelectionRequired) {
+          throw new RequestError("変換するFigmaページを選び直してください。", 422);
+        }
+        throw error;
+      }
       file = fetched.file;
-      title = fetched.fileName;
+      title = fetched.pageTitle;
       assets = {
         imageUrls: fetched.imageUrls,
         renderedNodeUrls: fetched.renderedNodeUrls,
       };
     } else {
       file = parsed.data.data as MockFigmaFile;
-      title = parsed.data.pageTitle || file.document?.name || "FigmaPress Page";
+      const candidates = discoverFigmaPageCandidates(file.document);
+      let selectedPageTitle = parsed.data.pageTitle || file.document?.name || "FigmaPress Page";
+      if (candidates.length > 1 && !parsed.data.selectedFrameId) {
+        throw new RequestError("変換するFigmaページを選び直してください。", 422);
+      }
+      if (candidates.length) {
+        const selectedId = parsed.data.selectedFrameId || candidates[0]?.id || "";
+        const frameIds = selectedFigmaFrameIds(candidates, selectedId);
+        const selectedPage = candidates.find((candidate) =>
+          candidate.id === selectedId
+          || candidate.desktop?.id === selectedId
+          || candidate.mobile?.id === selectedId,
+        );
+        if (!frameIds.length) {
+          throw new RequestError("選択したFigmaページが見つかりません。", 422);
+        }
+        selectedPageTitle = selectedPage?.title || selectedPageTitle;
+        file = {
+          ...file,
+          document: pruneFigmaDocumentToFrames(file.document, frameIds),
+        };
+      }
+      title = selectedPageTitle;
     }
 
     const plan = createFigmaMultiPagePlan(file, title);
