@@ -2,7 +2,41 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import mockFigma from "../examples/mock-figma.json";
 import { convertFile } from "../apps/web/src/lib/converter.ts";
-import type { MockFigmaFile } from "@figmapress/figma-parser";
+import { figmaTextShouldWrap } from "../packages/elementor-renderer/src/figma-exporter.ts";
+import type { FigmaNode, MockFigmaFile } from "@figmapress/figma-parser";
+
+test("single-line fixed Figma headings do not wrap into adjacent text", () => {
+  const heading: FigmaNode = {
+    id: "hero-line-2",
+    name: "0からの挑戦、確かな実績",
+    type: "TEXT",
+    characters: "0からの挑戦、確かな実績",
+    textAutoResize: "NONE",
+    absoluteBoundingBox: { x: 20, y: 538, width: 387, height: 68 },
+    style: {
+      fontFamily: "Noto Serif JP",
+      fontSize: 32,
+      fontWeight: 400,
+      lineHeightPx: 46,
+    },
+    characterStyleOverrides: [1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+    styleOverrideTable: {
+      "1": { fontSize: 48 },
+      "2": { fontSize: 28 },
+    },
+  };
+
+  assert.equal(figmaTextShouldWrap(heading), false);
+  assert.equal(
+    figmaTextShouldWrap({
+      ...heading,
+      id: "paragraph",
+      name: "Fixed paragraph",
+      absoluteBoundingBox: { x: 20, y: 700, width: 387, height: 140 },
+    }),
+    true,
+  );
+});
 
 test("mock Figma JSON converts into six Gutenberg blocks", async () => {
   const result = await convertFile(mockFigma as MockFigmaFile);

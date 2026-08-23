@@ -2371,11 +2371,7 @@ function textWordBreak(node: FigmaNode): "break-word" | "keep-all" {
 }
 
 export function figmaTextShouldWrap(node: FigmaNode): boolean {
-  if (
-    node.textAutoResize === "HEIGHT"
-    || node.textAutoResize === "NONE"
-    || node.textAutoResize === "TRUNCATE"
-  ) {
+  if (node.textAutoResize === "HEIGHT" || node.textAutoResize === "TRUNCATE") {
     return true;
   }
 
@@ -2386,6 +2382,23 @@ export function figmaTextShouldWrap(node: FigmaNode): boolean {
   const fontSize = textFontSize(style, runs, bounds);
   const lineHeight = textLineHeight(style, runs, fontSize);
   const explicitLines = node.characters.split("\n").length;
+  if (node.textAutoResize === "NONE") {
+    // A fixed Figma text box that is only one line tall is commonly used for
+    // art-directed headings. Browser wrapping inside that box creates an extra
+    // line which collides with the next absolutely positioned heading. Honor
+    // the one-line geometry; taller fixed boxes remain safely wrappable.
+    const tallestRunLineHeight = Math.max(
+      lineHeight,
+      ...runs.map((run) =>
+        positive(run.style.lineHeightPx)
+          ? run.style.lineHeightPx
+          : positive(run.style.fontSize)
+            ? run.style.fontSize * 1.25
+            : lineHeight,
+      ),
+    );
+    return explicitLines > 1 || bounds.height > tallestRunLineHeight * 1.4;
+  }
   return bounds.height > lineHeight * (explicitLines + 0.4);
 }
 
