@@ -1841,18 +1841,20 @@ function textRuns(node: FigmaNode): RichRun[] {
     const overrideStyle = node.styleOverrideTable[String(current)] ?? {};
     const style = { ...baseStyle, ...overrideStyle };
     // Figma's override table can change only the font size while leaving the
-    // node-level absolute lineHeightPx in the base style. Reusing that pixel
-    // value unchanged makes smaller rich-text runs render with 2x+ line
-    // heights (most visible in mobile hero headings). Preserve the base
-    // line-height ratio whenever the run does not define its own line height.
+    // node-level absolute lineHeightPx in the base style. Smaller runs should
+    // preserve the base ratio, otherwise they gain 2x+ line heights. Larger
+    // runs (for example an enlarged leading numeral) share the node's absolute
+    // line box; scaling that line height again pushes every following line
+    // down even though Figma keeps the common lineHeightPx.
     if (
       overrideStyle.lineHeightPx === undefined
       && positive(baseStyle.fontSize)
       && positive(baseStyle.lineHeightPx)
       && positive(overrideStyle.fontSize)
     ) {
-      style.lineHeightPx = baseStyle.lineHeightPx
-        * (overrideStyle.fontSize / baseStyle.fontSize);
+      style.lineHeightPx = overrideStyle.fontSize > baseStyle.fontSize
+        ? baseStyle.lineHeightPx
+        : baseStyle.lineHeightPx * (overrideStyle.fontSize / baseStyle.fontSize);
     }
     runs.push({
       text: value.slice(start, index),
@@ -2408,13 +2410,10 @@ export function figmaTextShouldWrap(node: FigmaNode): boolean {
   const explicitLines = node.characters.split("\n").length;
   const tallestRunLineHeight = Math.max(
     lineHeight,
-    ...runs.map((run) =>
-      positive(run.style.lineHeightPx)
-        ? run.style.lineHeightPx
-        : positive(run.style.fontSize)
-          ? run.style.fontSize * 1.25
-          : lineHeight,
-    ),
+    ...runs.map((run) => Math.max(
+      positive(run.style.lineHeightPx) ? run.style.lineHeightPx : 0,
+      positive(run.style.fontSize) ? run.style.fontSize * 1.25 : lineHeight,
+    )),
   );
   // Figma can label a text box HEIGHT, NONE or WIDTH_AND_HEIGHT depending on
   // how its width was authored. The rendered bounds are the reliable signal:

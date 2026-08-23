@@ -453,6 +453,54 @@ test("rich text font-size overrides preserve the base line-height ratio", async 
   assert.match(result.previewHtml, /display:block;font-size:0;line-height:0;max-width:100%/);
 });
 
+test("larger mixed-size runs keep Figma's common absolute line box", async () => {
+  const file: MockFigmaFile = {
+    document: {
+      id: "0:0",
+      name: "Desktop mixed-size heading",
+      type: "DOCUMENT",
+      children: [{
+        id: "1:0",
+        name: "Page",
+        type: "CANVAS",
+        children: [{
+          id: "46:12",
+          name: "PC-page",
+          type: "FRAME",
+          absoluteBoundingBox: { x: 0, y: 0, width: 1440, height: 900 },
+          children: [{
+            id: "192:180",
+            name: "Hero heading",
+            type: "TEXT",
+            characters: "1からはじまる信頼の道\n0からの挑戦",
+            textAutoResize: "WIDTH_AND_HEIGHT",
+            absoluteBoundingBox: { x: 119, y: 470, width: 832, height: 324 },
+            style: {
+              fontFamily: "Noto Serif JP",
+              fontSize: 64,
+              fontWeight: 400,
+              lineHeightPx: 108,
+            },
+            characterStyleOverrides: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+            styleOverrideTable: {
+              "1": { fontSize: 96 },
+            },
+          }],
+        }],
+      }],
+    },
+  };
+
+  const result = await convertFile(file);
+  const heading = result.elementorTemplate.content[0]?.elements[0];
+  const editor = String(heading?.settings.editor);
+
+  assert.match(editor, /font-size:6\.667vw[^>]*line-height:1\.125/);
+  assert.match(editor, /font-size:4\.444vw[^>]*line-height:1\.688/);
+  assert.doesNotMatch(editor, /font-size:6\.667vw[^>]*line-height:1\.688/);
+  assert.match(result.previewHtml, /font-size:6\.667vw[^>]*line-height:1\.125/);
+});
+
 test("mobile containers preserve their Figma width across Elementor breakpoints", async () => {
   const file: MockFigmaFile = {
     document: {
