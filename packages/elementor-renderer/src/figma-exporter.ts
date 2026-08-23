@@ -619,16 +619,15 @@ function looseRootContactFormNode(root: FigmaNode): FigmaNode | null {
   const rootBounds = root.absoluteBoundingBox;
   if (!rootBounds) return null;
   const children = root.children ?? [];
-  const directTexts = children
-    .filter((child) => child.type === "TEXT" && child.characters?.trim() && child.absoluteBoundingBox);
-  const copy = directTexts.map((child) => child.characters?.trim() ?? "");
-  if (!looksLikeContactFormCopy(copy)) return null;
-  const startNode = directTexts.find((child) =>
+  const formTexts = contactFormTexts(root);
+  const copy = formTexts.map((child) => child.characters?.trim() ?? "");
+  if (!looksLikeContactFormCopy(copy) || contactFieldPlans(formTexts).length < 4) return null;
+  const startNode = formTexts.find((child) =>
     /^(?:お問い合わせ項目|企業名|会社名|お名前|氏名|ご担当者(?:様)?)$/i.test(
       child.characters?.trim() ?? "",
     ),
   );
-  const endNode = directTexts
+  const endNode = formTexts
     .filter((child) => /^(?:送る|送信|submit)$/i.test(child.characters?.trim() ?? ""))
     .sort((left, right) =>
       (right.absoluteBoundingBox?.y ?? 0) - (left.absoluteBoundingBox?.y ?? 0)
@@ -646,9 +645,17 @@ function looseRootContactFormNode(root: FigmaNode): FigmaNode | null {
     const bounds = child.absoluteBoundingBox;
     if (child.visible === false || !bounds) return false;
     const centerY = bounds.y + bounds.height / 2;
-    return centerY >= startY && centerY <= endY;
+    if (centerY < startY || centerY > endY) return false;
+    const nestedTexts = child.type === "TEXT" ? [child] : contactFormTexts(child);
+    const nestedCenters = nestedTexts
+      .map((text) => text.absoluteBoundingBox)
+      .filter((textBounds): textBounds is FigmaBounds => Boolean(textBounds))
+      .map((textBounds) => textBounds.y + textBounds.height / 2);
+    return bounds.height <= (endY - startY) * 1.25
+      || (nestedCenters.length > 0
+        && nestedCenters.every((nestedCenter) => nestedCenter >= startY && nestedCenter <= endY));
   });
-  if (formChildren.length < 8) return null;
+  if (!formChildren.length) return null;
   return {
     id: `${root.id}:figmapress-contact-form`,
     name: "{wp:form} inferred loose contact form",

@@ -1587,13 +1587,13 @@ test("root-level corporate inquiry fields become complete responsive forms", asy
         children: (() => {
           const mobile = formRoot("40:2", "SP お問い合わせ", 2000, 440);
           const nestedMobileFields = mobile.children ?? [];
-          mobile.children = [{
-            id: "40:2:generic-form",
-            name: "Group 400",
+          mobile.children = nestedMobileFields.map((child, index) => ({
+            id: `40:2:generic-field:${index}`,
+            name: `Group ${400 + index}`,
             type: "GROUP",
-            absoluteBoundingBox: { x: 2000, y: 90, width: 440, height: 1030 },
-            children: nestedMobileFields,
-          }];
+            absoluteBoundingBox: child.absoluteBoundingBox,
+            children: [child],
+          }));
           return [
             formRoot("40:1", "PC お問い合わせ", 0, 1440),
             mobile,
@@ -1616,7 +1616,7 @@ test("root-level corporate inquiry fields become complete responsive forms", asy
   assert.equal(forms.length, 2);
   assert.deepEqual(
     forms.map((element) => element.settings.figmapress_node_id),
-    ["40:1:figmapress-contact-form", "40:2:generic-form"],
+    ["40:1:figmapress-contact-form", "40:2:figmapress-contact-form"],
   );
   const fields = forms[0]?.settings.fields as Array<{
     name: string;
