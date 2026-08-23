@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { z } from "zod";
 import type { MockFigmaFile } from "@figmapress/figma-parser";
 import {
+  FigmaElementorExporter,
   createFigmaMultiPagePlan,
   createFigmaSitePageTemplate,
 } from "@figmapress/elementor-renderer";
@@ -37,6 +38,17 @@ const PageKeysSchema = z.array(PageKeySchema).min(1).max(5).refine(
   (keys) => new Set(keys).size === keys.length,
   "ページ指定が重複しています。",
 );
+const CandidatePagesSchema = z.array(z.object({
+  key: z.string().regex(/^(?:home|[a-z0-9][a-z0-9-]{0,79})$/),
+  title: z.string().trim().min(1).max(160),
+  slug: z.string().trim().min(1).max(80),
+  frameId: z.string().regex(/^[0-9]+:[0-9]+$/),
+  hasDesktop: z.boolean(),
+  hasMobile: z.boolean(),
+}).strict()).min(1).max(2).refine(
+  (pages) => new Set(pages.map((page) => page.key)).size === pages.length,
+  "ページ指定が重複しています。",
+);
 const RequestSchema = z.discriminatedUnion("mode", [
   z.object({
     mode: z.literal("json"),
@@ -50,9 +62,14 @@ const RequestSchema = z.discriminatedUnion("mode", [
     fileKeyOrUrl: z.string().trim().min(6).max(500),
     token: z.string().trim().min(10).max(500).optional(),
     selectedFrameId: z.string().regex(/^[0-9]+:[0-9]+$/).optional(),
-    pageKeys: PageKeysSchema,
+    pageKeys: PageKeysSchema.optional(),
+    candidatePages: CandidatePagesSchema.optional(),
   }).strict(),
-]);
+]).refine(
+  (value) => value.mode === "json"
+    || Boolean(value.pageKeys) !== Boolean(value.candidatePages),
+  "ページ指定を1種類だけ選んでください。",
+);
 
 export async function POST(request: Request): Promise<Response> {
   try {
@@ -68,9 +85,10 @@ export async function POST(request: Request): Promise<Response> {
     let assets = {};
     let refreshedOAuthCookie: string | undefined;
     if (parsed.data.mode === "figma") {
+      const figmaRequest = parsed.data;
       const cookieStore = await cookies();
       let oauth = null;
-      if (!parsed.data.token) {
+      if (!figmaRequest.token) {
         try {
           oauth = await resolveFigmaOAuthAccess(
             cookieStore.get(FIGMA_OAUTH_SESSION_COOKIE)?.value,
@@ -82,7 +100,7 @@ export async function POST(request: Request): Promise<Response> {
           );
         }
       }
-      const token = parsed.data.token || oauth?.accessToken;
+      const token = figmaRequest.token || oauth?.accessToken;
       if (!token) {
         throw new RequestError(
           "Figmaアカウントを接続するか、Personal Access Tokenを入力してください。",
@@ -90,13 +108,54 @@ export async function POST(request: Request): Promise<Response> {
         );
       }
       refreshedOAuthCookie = oauth?.refreshedCookie;
+      if (figmaRequest.candidatePages) {
+        const pages = await Promise.all(figmaRequest.candidatePages.map(async (page) => {
+          const fetched = await fetchFigmaFile(
+            figmaRequest.fileKeyOrUrl,
+            token,
+            figmaRequest.token ? "pat" : "oauth",
+            page.frameId,
+            { includeVisualReferences: false },
+          );
+          return {
+            page,
+            elementorTemplate: new FigmaElementorExporter().toTemplate(
+              fetched.file,
+              page.title,
+              {
+                imageUrls: fetched.imageUrls,
+                renderedNodeUrls: fetched.renderedNodeUrls,
+              },
+            ),
+          };
+        }));
+        const responseBody = { ok: true, pages };
+        if (new TextEncoder().encode(JSON.stringify(responseBody)).byteLength > 4_000_000) {
+          throw new RequestError(
+            "複数ページの変換データが大きすぎます。ページを分けて再試行してください。",
+            413,
+          );
+        }
+        const response = jsonResponse(responseBody);
+        if (refreshedOAuthCookie) {
+          response.headers.append(
+            "Set-Cookie",
+            figmaOAuthCookie(
+              FIGMA_OAUTH_SESSION_COOKIE,
+              refreshedOAuthCookie,
+              new URL(request.url).protocol === "https:",
+            ),
+          );
+        }
+        return response;
+      }
       let fetched;
       try {
         fetched = await fetchFigmaFile(
           parsed.data.fileKeyOrUrl,
           token,
-          parsed.data.token ? "pat" : "oauth",
-          parsed.data.selectedFrameId,
+          figmaRequest.token ? "pat" : "oauth",
+          figmaRequest.selectedFrameId,
         );
       } catch (error) {
         if (error instanceof FigmaFrameSelectionRequired) {
@@ -138,7 +197,11 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const plan = createFigmaMultiPagePlan(file, title);
-    const pages = parsed.data.pageKeys.map((pageKey) => {
+    const pageKeys = parsed.data.pageKeys;
+    if (!pageKeys) {
+      throw new RequestError("複数ページ変換の入力内容を確認してください。", 422);
+    }
+    const pages = pageKeys.map((pageKey) => {
       const page = plan.pages.find((candidate) => candidate.key === pageKey);
       if (!page) {
         throw new RequestError(`「${pageKey}」に対応するFigmaセクションが見つかりません。`, 422);

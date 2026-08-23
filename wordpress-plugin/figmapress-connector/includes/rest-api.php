@@ -418,7 +418,7 @@ function figmapress_connector_rest_prepare_site( WP_REST_Request $request, $acto
     if (
         ! preg_match( figmapress_connector_site_base_key_pattern(), $site_key ) ||
         '' === $title || '' === $menu_name ||
-        count( $requested_pages ) < 2 || count( $requested_pages ) > 8
+        count( $requested_pages ) < 2 || count( $requested_pages ) > 20
     ) {
         return new WP_Error( 'figmapress_invalid_site', '複数ページの入力内容が無効です。', array( 'status' => 422 ) );
     }
@@ -435,7 +435,7 @@ function figmapress_connector_rest_prepare_site( WP_REST_Request $request, $acto
         $source_key = isset( $requested['sourceKey'] ) ? sanitize_text_field( $requested['sourceKey'] ) : '';
         $expected_source = 'home' === $key ? $site_key : $site_key . ':page:' . $key;
         if (
-            ! preg_match( '/^(?:home|thoughts|policies|activities|profile|contact)$/', $key ) ||
+            ! preg_match( '/^(?:home|[a-z0-9][a-z0-9-]{0,79})$/', $key ) ||
             isset( $seen[ $key ] ) || '' === $page_title || '' === $slug ||
             ! preg_match( figmapress_connector_site_source_key_pattern(), $source_key ) ||
             $source_key !== $expected_source

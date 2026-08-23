@@ -21,6 +21,7 @@ import {
   type ElementorVisualCorrection,
   type FigmaMultiPagePlan,
   type FigmaSitePageKey,
+  type FigmaSitePagePlan,
 } from "@figmapress/elementor-renderer";
 import {
   WordPressDirectError,
@@ -84,6 +85,7 @@ const CHUNKED_UPLOAD_CONNECTOR_VERSION = "0.16.17";
 const SMALL_CHUNK_UPLOAD_CONNECTOR_VERSION = "0.16.24";
 const FIGMA_HEADER_MEDIA_CONNECTOR_VERSION = "0.16.18";
 const MULTI_PAGE_CONNECTOR_VERSION = "0.17.18";
+const FIGMA_PAGE_SET_CONNECTOR_VERSION = "0.17.28";
 
 function safeWordPressSiteBridgeUrl(baseUrl: string): string {
   try {
@@ -858,12 +860,16 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     wpStatus?.connectorVersion,
     FIGMA_HEADER_MEDIA_CONNECTOR_VERSION,
   );
+  const multiPagePlan = output?.multiPagePlan;
+  const requiredMultiPageConnectorVersion = multiPagePlan?.pages.some((page) => page.frameId)
+    ? FIGMA_PAGE_SET_CONNECTOR_VERSION
+    : MULTI_PAGE_CONNECTOR_VERSION;
   const connectorSupportsMultiPage = wpStatus?.siteBuild
     ? wpStatus.siteBuild.pages
       && wpStatus.siteBuild.menus
       && wpStatus.siteBuild.bridge === true
+      && versionAtLeast(wpStatus?.connectorVersion, requiredMultiPageConnectorVersion)
     : versionAtLeast(wpStatus?.connectorVersion, MULTI_PAGE_CONNECTOR_VERSION);
-  const multiPagePlan = output?.multiPagePlan;
   const multiPageAvailable = wpTarget === "elementor"
     && Boolean(conversionSourceKey)
     && Boolean(multiPagePlan && multiPagePlan.pages.length > 1);
@@ -1525,8 +1531,8 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   }
 
   async function fetchMultiPageTemplates(
-    pageKeys: Array<Exclude<FigmaSitePageKey, "home">>,
-  ): Promise<Map<Exclude<FigmaSitePageKey, "home">, ElementorTemplate>> {
+    pages: FigmaSitePagePlan[],
+  ): Promise<Map<FigmaSitePageKey, ElementorTemplate>> {
     let baseBody: Record<string, unknown>;
     if (mode === "figma") {
       const authentication = resolveFigmaRequestAuthentication(
@@ -1554,28 +1560,51 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       };
     }
     type PageTemplateEntry = {
-        page: { key: Exclude<FigmaSitePageKey, "home"> };
+        page: { key: FigmaSitePageKey };
         elementorTemplate: ElementorTemplate;
     };
     const requestBatch = async (
-      keys: Array<Exclude<FigmaSitePageKey, "home">>,
+      requestedPages: FigmaSitePagePlan[],
     ): Promise<PageTemplateEntry[]> => {
+      const candidateMode = requestedPages.every((page) => page.frameId);
       const response = await fetch("/api/convert/page", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...baseBody, pageKeys: keys }),
+        body: JSON.stringify({
+          ...baseBody,
+          ...(candidateMode
+            ? {
+                candidatePages: requestedPages.map((page) => ({
+                  key: page.key,
+                  title: page.title,
+                  slug: page.slug,
+                  frameId: page.frameId,
+                  hasDesktop: page.hasDesktop,
+                  hasMobile: page.hasMobile,
+                })),
+              }
+            : { pageKeys: requestedPages.map((page) => page.key) }),
+        }),
       });
-      if (response.status === 413 && keys.length > 1) {
-        const middle = Math.ceil(keys.length / 2);
+      if (response.status === 413 && requestedPages.length > 1) {
+        const middle = Math.ceil(requestedPages.length / 2);
         return [
-          ...await requestBatch(keys.slice(0, middle)),
-          ...await requestBatch(keys.slice(middle)),
+          ...await requestBatch(requestedPages.slice(0, middle)),
+          ...await requestBatch(requestedPages.slice(middle)),
         ];
       }
       const data = await readApi<{ ok: true; pages: PageTemplateEntry[] }>(response);
       return data.pages;
     };
-    const entries = await requestBatch(pageKeys);
+    const candidateMode = pages.every((page) => page.frameId);
+    const entries: PageTemplateEntry[] = [];
+    if (candidateMode) {
+      for (let index = 0; index < pages.length; index += 2) {
+        entries.push(...await requestBatch(pages.slice(index, index + 2)));
+      }
+    } else {
+      entries.push(...await requestBatch(pages));
+    }
     return new Map(entries.map((entry) => [entry.page.key, entry.elementorTemplate]));
   }
 
@@ -1588,7 +1617,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       throw new Error("複数ページ化できるFigma URLとセクションを確認してください。");
     }
     if (!connectorSupportsMultiPage) {
-      throw new Error(`複数ページ自動構築にはConnector v${MULTI_PAGE_CONNECTOR_VERSION}以上が必要です。`);
+      throw new Error(`複数ページ自動構築にはConnector v${requiredMultiPageConnectorVersion}以上が必要です。`);
     }
     const siteInput = {
       siteKey: conversionSourceKey,
@@ -1610,21 +1639,20 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       throw new Error("画像保存を再開するページを確認できませんでした。サイト一式を再実行してください。");
     }
     const startIndex = resumeAfterIndex + 1;
-    const sectionPageKeys = plan.pages
+    const sectionPages = plan.pages
       .slice(startIndex)
-      .map((page) => page.key)
-      .filter((key): key is Exclude<FigmaSitePageKey, "home"> => key !== "home");
+      .filter((page) => page.key !== "home");
     // Prefer the already-loaded target-origin iframe. Older Connector versions
     // keep the submit-gesture popup fallback for backwards compatibility.
     const siteBridge = credentials.connectorToken
       ? openWordPressSiteBridge(credentials.baseUrl)
       : null;
-    let sectionTemplates: Map<Exclude<FigmaSitePageKey, "home">, ElementorTemplate>;
+      let sectionTemplates: Map<FigmaSitePageKey, ElementorTemplate>;
     let prepared: BrowserPreparedSiteResult;
     try {
       setWpSiteProgress("Figmaから各ページの編集データを準備しています…");
-      sectionTemplates = sectionPageKeys.length > 0
-        ? await fetchMultiPageTemplates(sectionPageKeys)
+      sectionTemplates = sectionPages.length > 0
+        ? await fetchMultiPageTemplates(sectionPages)
         : new Map();
       setWpSiteProgress("下書きページと未割り当てメニューを準備しています…");
       const prepareThroughProxy = async (): Promise<BrowserPreparedSiteResult> => {
@@ -2379,7 +2407,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.26.37 live</span>
+          <span className="status-pill"><i /> v0.26.38 live</span>
         </nav>
       </header>
 
@@ -3298,7 +3326,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
               )}
               {wpStatus && wpTarget === "elementor" && wpBuildMode === "site" && wpStatus.connectorInstalled && !connectorSupportsMultiPage && (
                 <div className="alert alert--error" role="alert">
-                  複数ページとWordPressメニューの自動構築にはConnector v{MULTI_PAGE_CONNECTOR_VERSION}以上が必要です。<a href="/downloads/figmapress-connector.zip" download>最新版ZIPをダウンロード</a>して更新し、再診断してください。
+                  複数ページとWordPressメニューの自動構築にはConnector v{requiredMultiPageConnectorVersion}以上が必要です。<a href="/downloads/figmapress-connector.zip" download>最新版ZIPをダウンロード</a>して更新し、再診断してください。
                 </div>
               )}
               {wpBuildMode === "site" && wpStatus && connectorToken && wordpressSiteBridgeUrl && (
@@ -3548,7 +3576,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.26.37</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.26.38</span></div>
       </footer>
     </main>
   );

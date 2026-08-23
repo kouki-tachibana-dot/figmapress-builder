@@ -59,7 +59,7 @@ export interface CreateElementorDraftInput {
 }
 
 export interface PrepareSitePageInput {
-  key: "home" | "thoughts" | "policies" | "activities" | "profile" | "contact";
+  key: string;
   title: string;
   slug: string;
   sourceKey: string;

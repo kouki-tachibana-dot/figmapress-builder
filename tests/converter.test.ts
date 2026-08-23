@@ -1585,3 +1585,37 @@ test("Figma Auto Layout becomes normal-flow Elementor Flexbox with a quality rep
     "pass",
   );
 });
+
+test("business-site menu labels become editable page links", async () => {
+  const file: MockFigmaFile = {
+    document: {
+      id: "0:0",
+      name: "Corporate site",
+      type: "DOCUMENT",
+      children: [{
+        id: "1:0",
+        name: "Page",
+        type: "CANVAS",
+        children: [{
+          id: "2:0",
+          name: "PC-page",
+          type: "FRAME",
+          absoluteBoundingBox: { x: 0, y: 0, width: 1440, height: 900 },
+          children: [{
+            id: "3:0",
+            name: "会社案内",
+            type: "TEXT",
+            characters: "会社案内",
+            absoluteBoundingBox: { x: 1100, y: 40, width: 120, height: 28 },
+            style: { fontSize: 16, fontWeight: 600 },
+          }],
+        }],
+      }],
+    },
+  };
+  const result = await convertFile(file);
+  const menuText = result.elementorTemplate.content[0]?.elements.find(
+    (element) => element.settings.figmapress_node_id === "3:0",
+  );
+  assert.match(String(menuText?.settings.editor), /href="#company"/);
+});

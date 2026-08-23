@@ -117,6 +117,13 @@ export async function POST(request: Request): Promise<Response> {
         fetched.imageUrls,
         fetched.warnings,
         fetched.renderedNodeUrls,
+        parsed.data.selectedFrameId
+          ? {
+              candidates: fetched.pageCandidates,
+              selectedFrameId: parsed.data.selectedFrameId,
+              siteTitle: fetched.fileName,
+            }
+          : null,
       );
       visualReferences = fetched.visualReferences;
     } else {
@@ -148,9 +155,20 @@ export async function POST(request: Request): Promise<Response> {
             document: pruneFigmaDocumentToFrames(file.document, frameIds),
           };
         }
-        output = await convertFile(file, {
-          pageTitle: selectedPageTitle,
-        });
+        output = await convertFile(
+          file,
+          { pageTitle: selectedPageTitle },
+          {},
+          [],
+          {},
+          parsed.data.selectedFrameId
+            ? {
+                candidates,
+                selectedFrameId: parsed.data.selectedFrameId,
+                siteTitle: file.document?.name || selectedPageTitle || "FigmaPress Site",
+              }
+            : null,
+        );
       } catch (error) {
         const message = error instanceof Error ? error.message : "Figma JSONを変換できませんでした。";
         throw new RequestError(message, 422);

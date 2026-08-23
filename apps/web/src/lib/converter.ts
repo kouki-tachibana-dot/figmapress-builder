@@ -26,6 +26,8 @@ import {
   type FigmaMultiPagePlan,
 } from "@figmapress/elementor-renderer";
 import { tokensToThemeJson } from "@figmapress/token-pipeline";
+import type { FigmaPageCandidate } from "./figma-frame-selection";
+import { createCandidateFigmaMultiPagePlan } from "./figma-site-plan";
 
 export interface ConversionOutput {
   blueprint: SiteBlueprint;
@@ -49,6 +51,11 @@ export async function convertFile(
   imageUrls: Record<string, string> = {},
   initialWarnings: string[] = [],
   renderedNodeUrls: Record<string, string> = {},
+  sourcePages: {
+    candidates: FigmaPageCandidate[];
+    selectedFrameId: string;
+    siteTitle: string;
+  } | null = null,
 ): Promise<ConversionOutput> {
   const fidelityLayout = hasFigmaLayout(file);
   const responsiveFidelityLayout = fidelityLayout && hasFigmaResponsiveLayout(file);
@@ -115,7 +122,11 @@ export async function convertFile(
     previewHtml: fidelityPreview ?? (page ? renderPreviewPage(page) : ""),
     qualityReport,
     multiPagePlan: fidelityLayout
-      ? createFigmaMultiPagePlan(
+      ? createCandidateFigmaMultiPagePlan(
+          sourcePages?.candidates ?? [],
+          sourcePages?.selectedFrameId ?? "",
+          sourcePages?.siteTitle ?? page?.title ?? blueprint.site.name,
+        ) ?? createFigmaMultiPagePlan(
           file,
           page?.title ?? blueprint.site.name,
           page?.slug ?? "/",

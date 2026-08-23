@@ -18,6 +18,7 @@ export interface FigmaFetchResult {
   file: MockFigmaFile;
   fileName: string;
   pageTitle: string;
+  pageCandidates: FigmaPageCandidate[];
   imageUrls: Record<string, string>;
   renderedNodeUrls: Record<string, string>;
   visualReferences: FigmaVisualReferences;
@@ -552,6 +553,7 @@ export async function fetchFigmaFile(
   token: string,
   authentication: "pat" | "oauth" = "pat",
   selectedFrameId?: string,
+  options: { includeVisualReferences?: boolean } = {},
 ): Promise<FigmaFetchResult> {
   const reference = extractFigmaReference(fileKeyOrUrl);
   const key = reference.fileKey;
@@ -592,6 +594,7 @@ export async function fetchFigmaFile(
   if (!isRecord(data) || !isRecord(data.document)) {
     throw new RequestError("Figmaファイルにdocumentデータがありません。", 422);
   }
+  let pageCandidates = discoverFigmaPageCandidates((data as RawFigmaFile).document);
 
   const warnings: string[] = reference.nodeId
     ? [`Figmaノード ${reference.nodeId} を変換対象として読み込みました。`]
@@ -601,9 +604,8 @@ export async function fetchFigmaFile(
     ? findNodeById((data as RawFigmaFile).document, reference.nodeId)
     : null;
   if (selectedFrameId) {
-    const pages = discoverFigmaPageCandidates((data as RawFigmaFile).document);
-    const frameIds = selectedFigmaFrameIds(pages, selectedFrameId);
-    const page = pages.find((candidate) =>
+    const frameIds = selectedFigmaFrameIds(pageCandidates, selectedFrameId);
+    const page = pageCandidates.find((candidate) =>
       candidate.id === selectedFrameId
       || candidate.desktop?.id === selectedFrameId
       || candidate.mobile?.id === selectedFrameId,
@@ -630,9 +632,9 @@ export async function fetchFigmaFile(
       if (companionResponse.ok) {
         const companionData = await readLimitedJson(companionResponse);
         if (isRecord(companionData) && isRecord(companionData.document)) {
-          const pages = discoverFigmaPageCandidates((companionData as RawFigmaFile).document);
-          const frameIds = selectedFigmaFrameIds(pages, selectedNode.id);
-          const page = pages.find((candidate) =>
+          pageCandidates = discoverFigmaPageCandidates((companionData as RawFigmaFile).document);
+          const frameIds = selectedFigmaFrameIds(pageCandidates, selectedNode.id);
+          const page = pageCandidates.find((candidate) =>
             candidate.desktop?.id === selectedNode?.id
             || candidate.mobile?.id === selectedNode?.id,
           );
@@ -655,19 +657,18 @@ export async function fetchFigmaFile(
       warnings.push("スマホ版フレームを追加取得できなかったため、選択した画面のみ変換しました。");
     }
   } else if (!selectedNode || selectedNode.type === "CANVAS" || selectedNode.type === "DOCUMENT") {
-    const pages = discoverFigmaPageCandidates((data as RawFigmaFile).document);
-    if (pages.length > 1) {
-      throw new FigmaFrameSelectionRequired(pages);
+    if (pageCandidates.length > 1) {
+      throw new FigmaFrameSelectionRequired(pageCandidates);
     }
-    if (pages.length === 1) {
-      const frameIds = selectedFigmaFrameIds(pages, pages[0].id);
+    if (pageCandidates.length === 1) {
+      const frameIds = selectedFigmaFrameIds(pageCandidates, pageCandidates[0].id);
       data = {
         ...data,
         document: pruneFigmaDocumentToFrames((data as RawFigmaFile).document, frameIds),
       };
-      pageTitle = pages[0].title;
+      pageTitle = pageCandidates[0].title;
       warnings.push(
-        `${pages[0].title}（${frameIds.length === 2 ? "PC・スマホ" : "1画面"}）を自動選択しました。`,
+        `${pageCandidates[0].title}（${frameIds.length === 2 ? "PC・スマホ" : "1画面"}）を自動選択しました。`,
       );
     }
   }
@@ -702,18 +703,21 @@ export async function fetchFigmaFile(
       requestInit(),
       warnings,
     ),
-    fetchVisualReferences(
-      key,
-      normalizedData.document,
-      requestInit(),
-      warnings,
-    ),
+    options.includeVisualReferences === false
+      ? Promise.resolve({})
+      : fetchVisualReferences(
+          key,
+          normalizedData.document,
+          requestInit(),
+          warnings,
+        ),
   ]);
 
   return {
     file: normalizeFigmaFile(normalizedData),
     fileName: typeof normalizedData.name === "string" ? normalizedData.name : "FigmaPress Page",
     pageTitle,
+    pageCandidates,
     imageUrls,
     renderedNodeUrls,
     visualReferences,
