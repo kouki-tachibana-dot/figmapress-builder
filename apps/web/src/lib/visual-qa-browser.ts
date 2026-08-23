@@ -167,18 +167,22 @@ function enforceElementorResponsiveVariant(
   variant: "desktop" | "mobile",
 ): void {
   const layouts = Array.from(
-    document.querySelectorAll<HTMLElement>(".figmapress-layout"),
+    document.querySelectorAll<HTMLElement>(
+      ".figmapress-layout, .figmapress-figma-preview",
+    ),
   );
   const hasResponsiveLayouts = layouts.some((layout) =>
     layout.classList.contains("figmapress-layout--desktop")
-    || layout.classList.contains("figmapress-layout--mobile"),
+    || layout.classList.contains("figmapress-layout--mobile")
+    || layout.classList.contains("figmapress-figma-preview--desktop")
+    || layout.classList.contains("figmapress-figma-preview--mobile"),
   );
   if (!hasResponsiveLayouts) return;
 
   layouts.forEach((layout) => {
-    const matchesVariant = layout.classList.contains(
-      `figmapress-layout--${variant}`,
-    );
+    const matchesVariant =
+      layout.classList.contains(`figmapress-layout--${variant}`)
+      || layout.classList.contains(`figmapress-figma-preview--${variant}`);
     layout.style.setProperty(
       "display",
       matchesVariant ? "var(--display, flex)" : "none",
@@ -314,8 +318,19 @@ export async function runVisualQa(
       throw new Error("生成ページの比較画面を準備できませんでした。");
     }
 
+    // Pin the target before assigning proxied media URLs. The source contains
+    // both PC and mobile trees; downloading the hidden tree doubled requests,
+    // exhausted the image budget and could starve the Figma reference itself.
+    enforceElementorResponsiveVariant(frameDocument, variant);
     frameDocument.querySelectorAll<HTMLImageElement>("img").forEach((image) => {
       image.removeAttribute("srcset");
+      const responsiveRoot = image.closest<HTMLElement>(
+        ".figmapress-layout, .figmapress-figma-preview",
+      );
+      if (responsiveRoot?.getAttribute("aria-hidden") === "true") {
+        image.removeAttribute("src");
+        return;
+      }
       // Elementor marks below-the-fold media as lazy. The comparison iframe is
       // intentionally positioned off screen, so those images would otherwise
       // never become viewport candidates and html2canvas would capture blanks.
@@ -324,6 +339,10 @@ export async function runVisualQa(
       if (source) image.src = proxiedImageUrl(source);
     });
     frameDocument.querySelectorAll<HTMLElement>("[style]").forEach((element) => {
+      const responsiveRoot = element.closest<HTMLElement>(
+        ".figmapress-layout, .figmapress-figma-preview",
+      );
+      if (responsiveRoot?.getAttribute("aria-hidden") === "true") return;
       const rawStyle = element.getAttribute("style");
       if (rawStyle?.includes("url(")) {
         element.setAttribute("style", rewriteCssUrls(rawStyle));

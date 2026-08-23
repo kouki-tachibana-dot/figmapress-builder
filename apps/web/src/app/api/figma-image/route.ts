@@ -18,7 +18,10 @@ export async function GET(request: Request): Promise<Response> {
   const startedAt = Date.now();
   let sourceHost = "unknown";
   try {
-    enforceRateLimit("figma-image", clientIp(request), 180, 10 * 60_000);
+    // One responsive long page can legitimately contain close to 100 visible
+    // assets. Allow several QA passes while host allowlisting, byte limits and
+    // upstream timeouts continue to bound abuse.
+    enforceRateLimit("figma-image", clientIp(request), 600, 10 * 60_000);
 
     const source = safeFigmaAssetUrl(new URL(request.url).searchParams.get("url") ?? "");
     if (!source) {
@@ -58,7 +61,7 @@ export async function GET(request: Request): Promise<Response> {
 
     return new Response(limitedStream, {
       headers: {
-        "Cache-Control": "private, no-store, max-age=0",
+        "Cache-Control": "private, max-age=300",
         "Content-Security-Policy": "default-src 'none'; sandbox",
         "Content-Type": contentType,
         "Cross-Origin-Resource-Policy": "same-origin",
