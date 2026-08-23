@@ -3,6 +3,12 @@ import type {
   FigmaStylesShape,
   MockFigmaFile,
 } from "@figmapress/figma-parser";
+import {
+  discoverFigmaPageCandidates,
+  pruneFigmaDocumentToFrames,
+  selectedFigmaFrameIds,
+  type FigmaPageCandidate,
+} from "./figma-frame-selection";
 import { RequestError } from "./request-security";
 
 const FIGMA_FILE_KEY = /^[A-Za-z0-9_-]{6,160}$/;
@@ -11,10 +17,21 @@ const MAX_FIGMA_RESPONSE_BYTES = 24_000_000;
 export interface FigmaFetchResult {
   file: MockFigmaFile;
   fileName: string;
+  pageTitle: string;
   imageUrls: Record<string, string>;
   renderedNodeUrls: Record<string, string>;
   visualReferences: FigmaVisualReferences;
   warnings: string[];
+}
+
+export class FigmaFrameSelectionRequired extends Error {
+  readonly candidates: FigmaPageCandidate[];
+
+  constructor(candidates: FigmaPageCandidate[]) {
+    super("このFigmaページには複数のWebページ候補があります。");
+    this.name = "FigmaFrameSelectionRequired";
+    this.candidates = candidates;
+  }
 }
 
 export interface FigmaVisualReference {
@@ -487,6 +504,7 @@ export async function fetchFigmaFile(
   fileKeyOrUrl: string,
   token: string,
   authentication: "pat" | "oauth" = "pat",
+  selectedFrameId?: string,
 ): Promise<FigmaFetchResult> {
   const reference = extractFigmaReference(fileKeyOrUrl);
   const key = reference.fileKey;
@@ -507,7 +525,7 @@ export async function fetchFigmaFile(
   let fileResponse: Response;
   try {
     const query = new URLSearchParams({ depth: "12" });
-    if (reference.nodeId) query.set("ids", reference.nodeId);
+    if (reference.nodeId && !selectedFrameId) query.set("ids", reference.nodeId);
     fileResponse = await fetch(
       `https://api.figma.com/v1/files/${encodeURIComponent(key)}?${query.toString()}`,
       requestInit(),
@@ -531,10 +549,31 @@ export async function fetchFigmaFile(
   const warnings: string[] = reference.nodeId
     ? [`Figmaノード ${reference.nodeId} を変換対象として読み込みました。`]
     : [];
-  const selectedNode = reference.nodeId
+  let pageTitle = typeof data.name === "string" ? data.name : "FigmaPress Page";
+  let selectedNode = reference.nodeId
     ? findNodeById((data as RawFigmaFile).document, reference.nodeId)
     : null;
-  if (selectedNode && responsiveFrameKind(selectedNode)) {
+  if (selectedFrameId) {
+    const pages = discoverFigmaPageCandidates((data as RawFigmaFile).document);
+    const frameIds = selectedFigmaFrameIds(pages, selectedFrameId);
+    const page = pages.find((candidate) =>
+      candidate.id === selectedFrameId
+      || candidate.desktop?.id === selectedFrameId
+      || candidate.mobile?.id === selectedFrameId,
+    );
+    if (!frameIds.length || !page) {
+      throw new RequestError("選択したFigmaページが見つかりません。候補を読み直してください。", 422);
+    }
+    data = {
+      ...data,
+      document: pruneFigmaDocumentToFrames((data as RawFigmaFile).document, frameIds),
+    };
+    selectedNode = findNodeById((data as RawFigmaFile).document, selectedFrameId);
+    pageTitle = page.title;
+    warnings.push(
+      `${page.title}（${frameIds.length === 2 ? "PC・スマホ" : "1画面"}）だけを変換対象にしました。`,
+    );
+  } else if (selectedNode && responsiveFrameKind(selectedNode)) {
     try {
       const companionQuery = new URLSearchParams({ depth: "12" });
       const companionResponse = await fetch(
@@ -544,15 +583,45 @@ export async function fetchFigmaFile(
       if (companionResponse.ok) {
         const companionData = await readLimitedJson(companionResponse);
         if (isRecord(companionData) && isRecord(companionData.document)) {
-          const roots = responsivePageRoots((companionData as RawFigmaFile).document);
-          if (roots.desktop && roots.mobile) {
-            data = companionData;
-            warnings.push("同じFigmaページのPC版とスマホ版を自動検出しました。");
+          const pages = discoverFigmaPageCandidates((companionData as RawFigmaFile).document);
+          const frameIds = selectedFigmaFrameIds(pages, selectedNode.id);
+          const page = pages.find((candidate) =>
+            candidate.desktop?.id === selectedNode?.id
+            || candidate.mobile?.id === selectedNode?.id,
+          );
+          if (frameIds.length) {
+            data = {
+              ...companionData,
+              document: pruneFigmaDocumentToFrames(
+                (companionData as RawFigmaFile).document,
+                frameIds,
+              ),
+            };
+            pageTitle = page?.title || pageTitle;
+            if (frameIds.length === 2) {
+              warnings.push("同じWebページのPC版とスマホ版を内容と配置から自動検出しました。");
+            }
           }
         }
       }
     } catch {
       warnings.push("スマホ版フレームを追加取得できなかったため、選択した画面のみ変換しました。");
+    }
+  } else if (!selectedNode || selectedNode.type === "CANVAS" || selectedNode.type === "DOCUMENT") {
+    const pages = discoverFigmaPageCandidates((data as RawFigmaFile).document);
+    if (pages.length > 1) {
+      throw new FigmaFrameSelectionRequired(pages);
+    }
+    if (pages.length === 1) {
+      const frameIds = selectedFigmaFrameIds(pages, pages[0].id);
+      data = {
+        ...data,
+        document: pruneFigmaDocumentToFrames((data as RawFigmaFile).document, frameIds),
+      };
+      pageTitle = pages[0].title;
+      warnings.push(
+        `${pages[0].title}（${frameIds.length === 2 ? "PC・スマホ" : "1画面"}）を自動選択しました。`,
+      );
     }
   }
   const normalizedData = data as RawFigmaFile;
@@ -597,6 +666,7 @@ export async function fetchFigmaFile(
   return {
     file: normalizeFigmaFile(normalizedData),
     fileName: typeof normalizedData.name === "string" ? normalizedData.name : "FigmaPress Page",
+    pageTitle,
     imageUrls,
     renderedNodeUrls,
     visualReferences,

@@ -9,8 +9,14 @@ import {
 } from "@/lib/figma-oauth";
 import {
   fetchFigmaFile,
+  FigmaFrameSelectionRequired,
   type FigmaVisualReferences,
 } from "@/lib/figma-api";
+import {
+  discoverFigmaPageCandidates,
+  pruneFigmaDocumentToFrames,
+  selectedFigmaFrameIds,
+} from "@/lib/figma-frame-selection";
 import {
   RequestError,
   clientIp,
@@ -30,6 +36,7 @@ const RequestSchema = z.discriminatedUnion("mode", [
       mode: z.literal("json"),
       data: z.unknown(),
       pageTitle: z.string().trim().max(160).optional(),
+      selectedFrameId: z.string().regex(/^[0-9]+:[0-9]+$/).optional(),
     })
     .strict(),
   z
@@ -37,6 +44,7 @@ const RequestSchema = z.discriminatedUnion("mode", [
       mode: z.literal("figma"),
       fileKeyOrUrl: z.string().trim().min(6).max(500),
       token: z.string().trim().min(10).max(500).optional(),
+      selectedFrameId: z.string().regex(/^[0-9]+:[0-9]+$/).optional(),
     })
     .strict(),
 ]);
@@ -76,14 +84,36 @@ export async function POST(request: Request): Promise<Response> {
         );
       }
       refreshedOAuthCookie = oauth?.refreshedCookie;
-      const fetched = await fetchFigmaFile(
-        parsed.data.fileKeyOrUrl,
-        token,
-        parsed.data.token ? "pat" : "oauth",
-      );
+      let fetched;
+      try {
+        fetched = await fetchFigmaFile(
+          parsed.data.fileKeyOrUrl,
+          token,
+          parsed.data.token ? "pat" : "oauth",
+          parsed.data.selectedFrameId,
+        );
+      } catch (error) {
+        if (!(error instanceof FigmaFrameSelectionRequired)) throw error;
+        const response = jsonResponse({
+          ok: true,
+          selectionRequired: true,
+          candidates: error.candidates,
+        });
+        if (refreshedOAuthCookie) {
+          response.headers.append(
+            "Set-Cookie",
+            figmaOAuthCookie(
+              FIGMA_OAUTH_SESSION_COOKIE,
+              refreshedOAuthCookie,
+              new URL(request.url).protocol === "https:",
+            ),
+          );
+        }
+        return response;
+      }
       output = await convertFile(
         fetched.file,
-        { siteName: fetched.fileName, pageTitle: fetched.fileName },
+        { siteName: fetched.fileName, pageTitle: fetched.pageTitle },
         fetched.imageUrls,
         fetched.warnings,
         fetched.renderedNodeUrls,
@@ -91,8 +121,35 @@ export async function POST(request: Request): Promise<Response> {
       visualReferences = fetched.visualReferences;
     } else {
       try {
-        output = await convertFile(parsed.data.data as MockFigmaFile, {
-          pageTitle: parsed.data.pageTitle || undefined,
+        let file = parsed.data.data as MockFigmaFile;
+        const candidates = discoverFigmaPageCandidates(file.document);
+        let selectedPageTitle = parsed.data.pageTitle || undefined;
+        if (candidates.length > 1 && !parsed.data.selectedFrameId) {
+          return jsonResponse({
+            ok: true,
+            selectionRequired: true,
+            candidates,
+          });
+        }
+        if (candidates.length) {
+          const selectedId = parsed.data.selectedFrameId || candidates[0]?.id || "";
+          const frameIds = selectedFigmaFrameIds(candidates, selectedId);
+          const selectedPage = candidates.find((candidate) =>
+            candidate.id === selectedId
+            || candidate.desktop?.id === selectedId
+            || candidate.mobile?.id === selectedId,
+          );
+          if (!frameIds.length) {
+            throw new RequestError("選択したFigmaページが見つかりません。", 422);
+          }
+          selectedPageTitle = selectedPage?.title || selectedPageTitle;
+          file = {
+            ...file,
+            document: pruneFigmaDocumentToFrames(file.document, frameIds),
+          };
+        }
+        output = await convertFile(file, {
+          pageTitle: selectedPageTitle,
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : "Figma JSONを変換できませんでした。";

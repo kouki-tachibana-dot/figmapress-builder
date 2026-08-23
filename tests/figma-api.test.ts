@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { collectRenderedNodeIds, fetchFigmaFile } from "../apps/web/src/lib/figma-api.ts";
+import {
+  collectRenderedNodeIds,
+  fetchFigmaFile,
+  FigmaFrameSelectionRequired,
+} from "../apps/web/src/lib/figma-api.ts";
 
 test("real Figma file shape is normalized into parser tokens", async (context) => {
   const requested: string[] = [];
@@ -270,6 +274,87 @@ test("selected responsive page frame also fetches its device companion", async (
   assert.ok(result.warnings.some((warning) => warning.includes("PC版とスマホ版")));
   assert.equal(result.visualReferences.desktop?.nodeId, "46:12");
   assert.equal(result.visualReferences.mobile?.nodeId, "46:210");
+});
+
+test("whole Figma canvases require a page choice and then fetch only that PC/SP pair", async (context) => {
+  const frame = (
+    id: string,
+    name: string,
+    x: number,
+    width: number,
+    height: number,
+    heading: string,
+  ) => ({
+    id,
+    name,
+    type: "FRAME",
+    absoluteBoundingBox: { x, y: 0, width, height },
+    children: [{
+      id: `${id}:heading`,
+      name: "Heading",
+      type: "TEXT",
+      characters: heading,
+      absoluteBoundingBox: { x: x + 80, y: 180, width: Math.min(width - 120, 700), height: 70 },
+      style: { fontSize: width <= 768 ? 30 : 52 },
+    }],
+  });
+  context.mock.method(globalThis, "fetch", async (input) => {
+    const url = String(input);
+    if (url.includes("/v1/images/")) {
+      return Response.json({
+        images: {
+          "20:1": "https://s3-alpha-sig.figma.com/company-desktop.png",
+          "20:2": "https://s3-alpha-sig.figma.com/company-mobile.png",
+        },
+      });
+    }
+    if (url.endsWith("/images")) return Response.json({ images: {} });
+    return Response.json({
+      name: "株式会社建工101",
+      document: {
+        id: "0:0",
+        name: "Document",
+        type: "DOCUMENT",
+        children: [{
+          id: "0:1",
+          name: "Web",
+          type: "CANVAS",
+          children: [
+            frame("10:1", "PC-page", 0, 1440, 5200, "トップページ"),
+            frame("10:2", "SP-page", 1540, 390, 4600, "トップページ"),
+            frame("20:1", "PC-page", 2200, 1440, 4200, "会社案内"),
+            frame("20:2", "SP-page", 3740, 390, 3800, "会社案内"),
+          ],
+        }],
+      },
+    });
+  });
+
+  await assert.rejects(
+    fetchFigmaFile(
+      "https://www.figma.com/design/AbCdEf123456/Kenko?node-id=0-1",
+      "figd_test_token_value",
+    ),
+    (error) => {
+      assert.ok(error instanceof FigmaFrameSelectionRequired);
+      assert.deepEqual(error.candidates.map((candidate) => candidate.title), ["トップページ", "会社案内"]);
+      return true;
+    },
+  );
+
+  const selected = await fetchFigmaFile(
+    "https://www.figma.com/design/AbCdEf123456/Kenko?node-id=0-1",
+    "figd_test_token_value",
+    "pat",
+    "20:1",
+  );
+  assert.equal(selected.pageTitle, "会社案内");
+  assert.deepEqual(
+    selected.file.document.children?.[0]?.children?.map((node) => node.id),
+    ["20:1", "20:2"],
+  );
+  assert.equal(selected.visualReferences.desktop?.nodeId, "20:1");
+  assert.equal(selected.visualReferences.mobile?.nodeId, "20:2");
 });
 
 test("complex visual groups are rendered once while editable text stays native", () => {
