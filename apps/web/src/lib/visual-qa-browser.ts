@@ -417,7 +417,9 @@ export async function runVisualQa(
         frameDocument.defaultView?.getComputedStyle(element).display !== "none"
         && element.getBoundingClientRect().height > 0,
     );
-    const visiblePreview = visiblePreviews
+    const visiblePreview = visiblePreviews.find((element) =>
+      element.classList.contains("figmapress-exact-preview")
+    ) ?? visiblePreviews
       .slice()
       .sort(
         (left, right) =>
