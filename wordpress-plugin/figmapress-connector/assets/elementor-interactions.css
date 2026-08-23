@@ -224,6 +224,8 @@
 
 .figmapress-contact input[type="text"],
 .figmapress-contact input[type="email"],
+.figmapress-contact input[type="tel"],
+.figmapress-contact select,
 .figmapress-contact textarea {
     background: #fff;
     border: 1px solid #6c6c6c;
@@ -345,8 +347,10 @@
         font-size: min(18px, .938vw);
     }
 
-    .figmapress-contact input[type="text"],
-    .figmapress-contact input[type="email"] {
+.figmapress-contact input[type="text"],
+.figmapress-contact input[type="email"],
+.figmapress-contact input[type="tel"],
+.figmapress-contact select {
         min-height: min(51px, 2.656vw);
         padding: min(10px, .521vw) min(14px, .729vw);
     }
@@ -955,6 +959,7 @@ html {
 
 .figmapress-contact--fidelity .figmapress-contact__field > span,
 .figmapress-contact--fidelity .figmapress-contact__field > input,
+.figmapress-contact--fidelity .figmapress-contact__field > select,
 .figmapress-contact--fidelity .figmapress-contact__field > textarea {
     margin: 0;
     position: absolute;
@@ -969,6 +974,8 @@ html {
 
 .figmapress-contact--fidelity input[type="text"],
 .figmapress-contact--fidelity input[type="email"],
+.figmapress-contact--fidelity input[type="tel"],
+.figmapress-contact--fidelity select,
 .figmapress-contact--fidelity textarea {
     border-radius: min(5px, .261cqw);
     min-height: 0 !important;
@@ -986,7 +993,8 @@ html {
 }
 
 .figmapress-contact--fidelity fieldset legend,
-.figmapress-contact--fidelity .figmapress-contact__reply {
+.figmapress-contact--fidelity .figmapress-contact__reply,
+.figmapress-contact--fidelity .figmapress-contact__options {
     align-items: center;
     display: flex;
     float: none;
@@ -999,6 +1007,29 @@ html {
 
 .figmapress-contact--fidelity .figmapress-contact__reply {
     gap: min(8px, .417cqw);
+}
+
+.figmapress-contact__options {
+    align-items: center;
+    display: flex;
+    gap: min(24px, 1.25cqw);
+}
+
+.figmapress-contact__options label,
+.figmapress-contact__field--checkbox {
+    align-items: center;
+    display: flex;
+    gap: min(8px, .417cqw);
+}
+
+.figmapress-contact--fidelity .figmapress-contact__options label,
+.figmapress-contact--fidelity .figmapress-contact__field--checkbox {
+    position: relative;
+}
+
+.figmapress-contact--fidelity .figmapress-contact__field--checkbox > input {
+    height: min(22px, 1.146cqw);
+    width: min(22px, 1.146cqw);
 }
 
 .figmapress-contact--fidelity .figmapress-contact__reply input[type="radio"] {

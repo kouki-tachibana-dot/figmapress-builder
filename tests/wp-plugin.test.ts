@@ -180,7 +180,11 @@ test("Connector renders and localizes the Figma navigation CTA icon", async () =
 });
 
 test("public contact form verifies origin, token, rate limit, and stored widget", async () => {
-  const source = await readFile(contactPath, "utf8");
+  const [source, widgets, styles] = await Promise.all([
+    readFile(contactPath, "utf8"),
+    readFile(elementorWidgetsPath, "utf8"),
+    readFile(interactionStylePath, "utf8"),
+  ]);
   assert.match(source, /figmapress_connector_contact_same_origin/);
   assert.match(source, /hash_equals\( \$expected, \$token \)/);
   assert.match(source, /figmapress_connector_contact_rate_limit/);
@@ -189,6 +193,15 @@ test("public contact form verifies origin, token, rate limit, and stored widget"
   assert.match(source, /'permission_callback' => '__return_true'/);
   assert.doesNotMatch(source, /2 \* DAY_IN_SECONDS/);
   assert.match(source, /Full-page\s+\*\s+\/\/ caches|Full-page/);
+  assert.match(source, /\$dynamic_fields/);
+  assert.match(source, /array_slice\( \$settings\['fields'\], 0, 24 \)/);
+  assert.match(source, /'checkbox' === \$field_type/);
+  assert.match(source, /in_array\( \$value, \$options, true \)/);
+  assert.match(widgets, /'fields'/);
+  assert.match(widgets, /figmapress-contact__field--checkbox/);
+  assert.match(widgets, /figmapress-contact__options/);
+  assert.match(styles, /\.figmapress-contact__options/);
+  assert.match(styles, /input\[type="tel"\]/);
 });
 
 test("Connector reuses an existing Elementor draft for the same request identifier", async () => {

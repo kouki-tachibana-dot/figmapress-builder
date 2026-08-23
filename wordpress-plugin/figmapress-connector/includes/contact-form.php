@@ -58,22 +58,84 @@ function figmapress_connector_submit_contact( WP_REST_Request $request ) {
         return $rate_limited;
     }
 
-    $name       = sanitize_text_field( (string) $request->get_param( 'name' ) );
-    $email      = sanitize_email( (string) $request->get_param( 'email' ) );
-    $region     = sanitize_text_field( (string) $request->get_param( 'region' ) );
-    $message    = sanitize_textarea_field( (string) $request->get_param( 'message' ) );
-    $preference = 'no' === $request->get_param( 'reply_preference' ) ? 'no' : 'yes';
-    if ( '' === $name || ! is_email( $email ) || '' === $message ) {
-        return new WP_Error( 'figmapress_form_invalid', 'お名前、メールアドレス、内容を確認してください。', array( 'status' => 422 ) );
-    }
-    if (
-        figmapress_connector_text_length( $name ) > 120 || figmapress_connector_text_length( $email ) > 254 ||
-        figmapress_connector_text_length( $region ) > 160 || figmapress_connector_text_length( $message ) > 5000
-    ) {
-        return new WP_Error( 'figmapress_form_too_long', '入力内容が長すぎます。', array( 'status' => 422 ) );
+    $settings       = isset( $widget['settings'] ) && is_array( $widget['settings'] ) ? $widget['settings'] : array();
+    $dynamic_fields = isset( $settings['fields'] ) && is_array( $settings['fields'] ) ? array_slice( $settings['fields'], 0, 24 ) : array();
+    if ( $dynamic_fields ) {
+        $values      = array();
+        $body_lines  = array();
+        $email       = '';
+        $name        = '';
+        $seen_fields = array();
+        foreach ( $dynamic_fields as $definition ) {
+            if ( ! is_array( $definition ) ) {
+                continue;
+            }
+            $field_name = isset( $definition['name'] ) ? sanitize_key( $definition['name'] ) : '';
+            $field_type = isset( $definition['type'] ) ? sanitize_key( $definition['type'] ) : 'text';
+            if ( ! $field_name || isset( $seen_fields[ $field_name ] ) || ! in_array( $field_type, array( 'text', 'email', 'tel', 'textarea', 'radio', 'checkbox' ), true ) ) {
+                continue;
+            }
+            $seen_fields[ $field_name ] = true;
+            $label      = isset( $definition['label'] ) && '' !== $definition['label'] ? sanitize_text_field( $definition['label'] ) : $field_name;
+            $required   = 'yes' === ( isset( $definition['required'] ) ? $definition['required'] : '' );
+            $raw_value  = $request->get_param( $field_name );
+            if ( 'checkbox' === $field_type ) {
+                $value = $raw_value ? '同意する' : '';
+            } elseif ( 'textarea' === $field_type ) {
+                $value = sanitize_textarea_field( (string) $raw_value );
+            } elseif ( 'email' === $field_type ) {
+                $value = sanitize_email( (string) $raw_value );
+            } else {
+                $value = sanitize_text_field( (string) $raw_value );
+            }
+            if ( $required && '' === $value ) {
+                return new WP_Error( 'figmapress_form_invalid', $label . 'を確認してください。', array( 'status' => 422 ) );
+            }
+            if ( 'email' === $field_type && ( '' === $value || ! is_email( $value ) ) ) {
+                return new WP_Error( 'figmapress_form_invalid', 'メールアドレスを確認してください。', array( 'status' => 422 ) );
+            }
+            if ( 'radio' === $field_type && '' !== $value ) {
+                $options = preg_split( '/\r\n|\r|\n/', isset( $definition['options'] ) ? $definition['options'] : '' );
+                $options = array_values( array_filter( array_map( 'sanitize_text_field', is_array( $options ) ? $options : array() ) ) );
+                if ( ! in_array( $value, $options, true ) ) {
+                    return new WP_Error( 'figmapress_form_invalid', $label . 'を確認してください。', array( 'status' => 422 ) );
+                }
+            }
+            $maximum = 'textarea' === $field_type ? 5000 : ( 'email' === $field_type ? 254 : 500 );
+            if ( figmapress_connector_text_length( $value ) > $maximum ) {
+                return new WP_Error( 'figmapress_form_too_long', '入力内容が長すぎます。', array( 'status' => 422 ) );
+            }
+            $values[ $field_name ] = $value;
+            $body_lines[]          = $label . ': ' . ( '' === $value ? '（未入力）' : $value );
+            if ( 'email' === $field_type ) {
+                $email = $value;
+            }
+        }
+        if ( ! is_email( $email ) ) {
+            return new WP_Error( 'figmapress_form_invalid', 'メールアドレスを確認してください。', array( 'status' => 422 ) );
+        }
+        $name = isset( $values['name'] ) && '' !== $values['name']
+            ? $values['name']
+            : ( isset( $values['company'] ) && '' !== $values['company'] ? $values['company'] : 'お問い合わせ' );
+        $body = implode( "\n", $body_lines ) . "\n";
+    } else {
+        $name       = sanitize_text_field( (string) $request->get_param( 'name' ) );
+        $email      = sanitize_email( (string) $request->get_param( 'email' ) );
+        $region     = sanitize_text_field( (string) $request->get_param( 'region' ) );
+        $message    = sanitize_textarea_field( (string) $request->get_param( 'message' ) );
+        $preference = 'no' === $request->get_param( 'reply_preference' ) ? 'no' : 'yes';
+        if ( '' === $name || ! is_email( $email ) || '' === $message ) {
+            return new WP_Error( 'figmapress_form_invalid', 'お名前、メールアドレス、内容を確認してください。', array( 'status' => 422 ) );
+        }
+        if (
+            figmapress_connector_text_length( $name ) > 120 || figmapress_connector_text_length( $email ) > 254 ||
+            figmapress_connector_text_length( $region ) > 160 || figmapress_connector_text_length( $message ) > 5000
+        ) {
+            return new WP_Error( 'figmapress_form_too_long', '入力内容が長すぎます。', array( 'status' => 422 ) );
+        }
+        $body = "お名前: {$name}\nメールアドレス: {$email}\nお住まいの地域: {$region}\n返信希望: " . ( 'yes' === $preference ? '希望する' : '希望しない' ) . "\n\nご相談・ご意見の内容:\n{$message}\n";
     }
 
-    $settings  = isset( $widget['settings'] ) && is_array( $widget['settings'] ) ? $widget['settings'] : array();
     $recipient = isset( $settings['recipient'] ) ? sanitize_email( $settings['recipient'] ) : '';
     if ( ! is_email( $recipient ) ) {
         $recipient = sanitize_email( get_option( 'admin_email' ) );
@@ -83,7 +145,6 @@ function figmapress_connector_submit_contact( WP_REST_Request $request ) {
     }
 
     $subject = sprintf( '[%s] Webサイトからのお問い合わせ', wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ) );
-    $body    = "お名前: {$name}\nメールアドレス: {$email}\nお住まいの地域: {$region}\n返信希望: " . ( 'yes' === $preference ? '希望する' : '希望しない' ) . "\n\nご相談・ご意見の内容:\n{$message}\n";
     $headers = array( 'Reply-To: ' . $name . ' <' . $email . '>' );
     if ( ! wp_mail( $recipient, $subject, $body, $headers ) ) {
         return new WP_Error( 'figmapress_form_mail_failed', 'メールを送信できませんでした。サイト管理者へお問い合わせください。', array( 'status' => 500 ) );

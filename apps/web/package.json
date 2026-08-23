@@ -1,6 +1,6 @@
 {
   "name": "@figmapress/web",
-  "version": "0.26.64",
+  "version": "0.26.65",
   "private": true,
   "scripts": {
     "dev": "next dev",

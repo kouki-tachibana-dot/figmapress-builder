@@ -44,6 +44,7 @@ interface RenderContext {
   anchorSuffix: string;
   fallbackMenuTexts: FigmaNode[];
   navigationNode: FigmaNode | null;
+  contactFormNode: FigmaNode | null;
   anchorTargets: Map<string, SectionAnchor>;
   emittedAnchorIds: Set<string>;
 }
@@ -335,6 +336,7 @@ function createRenderContext(
     anchorSuffix,
     fallbackMenuTexts,
     navigationNode: findFigmaNavigationNode(root, fallbackMenuTexts),
+    contactFormNode: findFigmaContactFormNode(root),
     anchorTargets,
     emittedAnchorIds: new Set([`top${anchorSuffix}`]),
   };
@@ -392,10 +394,29 @@ function previewRoot(
 
 function rootRenderNodes(root: FigmaNode, context: RenderContext): FigmaNode[] {
   const children = root.children ?? [];
-  const navigation = context.navigationNode;
-  if (!navigation || children.some((child) => child.id === navigation.id)) return children;
-  const consumedIds = new Set((navigation.children ?? []).map((child) => child.id));
-  return [navigation, ...children.filter((child) => !consumedIds.has(child.id))];
+  const syntheticNodes = [context.navigationNode, context.contactFormNode]
+    .filter((node): node is FigmaNode => Boolean(
+      node && !children.some((child) => child.id === node.id),
+    ));
+  if (!syntheticNodes.length) return children;
+  const consumedByNode = syntheticNodes.map((node) => ({
+    node,
+    ids: new Set((node.children ?? []).map((child) => child.id)),
+  }));
+  const consumedIds = new Set(consumedByNode.flatMap(({ ids }) => [...ids]));
+  const insertions = new Map<number, FigmaNode[]>();
+  for (const entry of consumedByNode) {
+    const firstIndex = children.findIndex((child) => entry.ids.has(child.id));
+    const index = firstIndex >= 0 ? firstIndex : 0;
+    insertions.set(index, [...(insertions.get(index) ?? []), entry.node]);
+  }
+  const result: FigmaNode[] = [];
+  for (let index = 0; index < children.length; index += 1) {
+    result.push(...(insertions.get(index) ?? []));
+    const child = children[index];
+    if (child && !consumedIds.has(child.id)) result.push(child);
+  }
+  return result;
 }
 
 function renderElement(
@@ -571,6 +592,131 @@ function navigationElement(
   return widget(context.ids, node.id, "figmapress-nav", settings);
 }
 
+const CONTACT_EMAIL_LABEL = /(?:メールアドレス|e-?mail|^アドレス$)/i;
+const CONTACT_MESSAGE_LABEL = /(?:ご相談|ご意見|message|お問い合わせ内容|ご質問(?:の)?詳細)/i;
+const CONTACT_NAME_LABEL = /(?:お名前|氏名|name|企業名|会社名|ご担当者(?:様)?)/i;
+const CONTACT_FORM_NODE_NAME = /(?:\{wp:form\}|contact.?form|button.?cta|お問い合わせ)/i;
+
+function contactFormTexts(node: FigmaNode): FigmaNode[] {
+  return descendants(node)
+    .filter((child) => child.type === "TEXT" && child.characters?.trim() && child.absoluteBoundingBox)
+    .sort((left, right) => {
+      const y = (left.absoluteBoundingBox?.y ?? 0) - (right.absoluteBoundingBox?.y ?? 0);
+      return y || (left.absoluteBoundingBox?.x ?? 0) - (right.absoluteBoundingBox?.x ?? 0);
+    });
+}
+
+function looksLikeContactFormCopy(copy: string[]): boolean {
+  return copy.some((value) => CONTACT_EMAIL_LABEL.test(value))
+    && copy.some((value) => CONTACT_MESSAGE_LABEL.test(value))
+    && copy.some((value) => CONTACT_NAME_LABEL.test(value))
+    && copy.some((value) => /送る|送信|submit/i.test(value));
+}
+
+function looseRootContactFormNode(root: FigmaNode): FigmaNode | null {
+  const rootBounds = root.absoluteBoundingBox;
+  if (!rootBounds) return null;
+  const children = root.children ?? [];
+  const directTexts = children
+    .filter((child) => child.type === "TEXT" && child.characters?.trim() && child.absoluteBoundingBox);
+  const copy = directTexts.map((child) => child.characters?.trim() ?? "");
+  if (!looksLikeContactFormCopy(copy)) return null;
+  const startNode = directTexts.find((child) =>
+    /^(?:お問い合わせ項目|企業名|会社名|お名前|氏名|ご担当者(?:様)?)$/i.test(
+      child.characters?.trim() ?? "",
+    ),
+  );
+  const endNode = directTexts
+    .filter((child) => /^(?:送る|送信|submit)$/i.test(child.characters?.trim() ?? ""))
+    .sort((left, right) =>
+      (right.absoluteBoundingBox?.y ?? 0) - (left.absoluteBoundingBox?.y ?? 0)
+    )[0];
+  const startBounds = startNode?.absoluteBoundingBox;
+  const endBounds = endNode?.absoluteBoundingBox;
+  if (!startBounds || !endBounds || endBounds.y <= startBounds.y) return null;
+  const padding = Math.max(24, rootBounds.width * 0.035);
+  const startY = Math.max(rootBounds.y, startBounds.y - padding);
+  const endY = Math.min(
+    rootBounds.y + rootBounds.height,
+    endBounds.y + endBounds.height + padding,
+  );
+  const formChildren = children.filter((child) => {
+    const bounds = child.absoluteBoundingBox;
+    if (child.visible === false || !bounds) return false;
+    const centerY = bounds.y + bounds.height / 2;
+    return centerY >= startY && centerY <= endY;
+  });
+  if (formChildren.length < 8) return null;
+  return {
+    id: `${root.id}:figmapress-contact-form`,
+    name: "{wp:form} inferred loose contact form",
+    type: "FRAME",
+    absoluteBoundingBox: {
+      x: rootBounds.x,
+      y: startY,
+      width: rootBounds.width,
+      height: endY - startY,
+    },
+    children: formChildren,
+  };
+}
+
+/** Find one regular or root-level loose contact form for a responsive frame. */
+export function findFigmaContactFormNode(root: FigmaNode): FigmaNode | null {
+  const candidates = descendants(root)
+    .filter((node) => node.type !== "TEXT" && node.visible !== false && node.absoluteBoundingBox)
+    .filter((node) => CONTACT_FORM_NODE_NAME.test(node.name))
+    .filter((node) => looksLikeContactFormCopy(
+      contactFormTexts(node).map((child) => child.characters?.trim() ?? ""),
+    ))
+    .sort((left, right) => area(right) - area(left));
+  return candidates[0] ?? looseRootContactFormNode(root);
+}
+
+interface ContactFieldPlan {
+  name: string;
+  label: string;
+  type: "text" | "email" | "tel" | "textarea" | "radio" | "checkbox";
+  required: boolean;
+  options?: string[];
+  autocomplete?: string;
+  node: FigmaNode;
+}
+
+function contactFieldPlans(texts: FigmaNode[]): ContactFieldPlan[] {
+  const definitions: Array<{
+    name: string;
+    pattern: RegExp;
+    type: ContactFieldPlan["type"];
+    required: boolean;
+    options?: string[];
+    autocomplete?: string;
+  }> = [
+    { name: "inquiry_type", pattern: /^お問い合わせ項目$/, type: "radio", required: true, options: ["お問い合わせ", "資料請求"] },
+    { name: "company", pattern: /^(?:企業名|会社名)$/, type: "text", required: true, autocomplete: "organization" },
+    { name: "company_kana", pattern: /^読み方$/, type: "text", required: true },
+    { name: "name", pattern: /^(?:ご担当者様|お名前|氏名|name)$/i, type: "text", required: true, autocomplete: "name" },
+    { name: "name_kana", pattern: /^ふりがな$/, type: "text", required: true },
+    { name: "address", pattern: /^(?:ご住所|住所|お住まいの地域|地域|area)$/i, type: "text", required: true, autocomplete: "street-address" },
+    { name: "phone", pattern: /^(?:電話番号|電話|tel(?:ephone)?|phone)$/i, type: "tel", required: true, autocomplete: "tel" },
+    { name: "email", pattern: /^(?:メールアドレス|e-?mail|アドレス)$/i, type: "email", required: true, autocomplete: "email" },
+    { name: "source", pattern: /^HPを知られたキッカケ$/, type: "text", required: true },
+    { name: "message", pattern: /^(?:ご質問の詳細|ご相談・ご意見の内容|お問い合わせ内容|message)$/i, type: "textarea", required: false },
+    { name: "privacy_consent", pattern: /^【?個人情報の取扱い】?$/, type: "checkbox", required: true },
+  ];
+  return definitions.flatMap((definition) => {
+    const node = texts.find((candidate) => definition.pattern.test(candidate.characters?.trim() ?? ""));
+    if (!node) return [];
+    return [{
+      ...definition,
+      label: definition.name === "privacy_consent"
+        ? "個人情報の取扱いに同意する"
+        : node.characters?.trim() ?? definition.name,
+      node,
+    }];
+  });
+}
+
 function contactFormElement(
   node: FigmaNode,
   bounds: FigmaBounds,
@@ -578,27 +724,18 @@ function contactFormElement(
   parentNode: FigmaNode,
   context: RenderContext,
 ): ElementorElement | null {
-  const texts = descendants(node)
-    .filter((child) => child.type === "TEXT" && child.characters?.trim())
-    .sort((left, right) => {
-      const y = (left.absoluteBoundingBox?.y ?? 0) - (right.absoluteBoundingBox?.y ?? 0);
-      return y || (left.absoluteBoundingBox?.x ?? 0) - (right.absoluteBoundingBox?.x ?? 0);
-    });
+  const texts = contactFormTexts(node);
   const copy = texts.map((child) => child.characters?.trim() ?? "");
-  const looksLikeForm = copy.some((value) => /メールアドレス|e-?mail/i.test(value))
-    && copy.some((value) => /ご相談|ご意見|message|お問い合わせ内容/i.test(value))
-    && copy.some((value) => /お名前|氏名|name/i.test(value));
-  const explicitlyNamed = /(?:\{wp:form\}|contact.?form|button.?cta|お問い合わせ)/i.test(node.name);
-  if (!looksLikeForm || !explicitlyNamed) return null;
+  if (context.contactFormNode?.id !== node.id || !looksLikeContactFormCopy(copy)) return null;
 
   const exact = (pattern: RegExp, fallback: string): string =>
     copy.find((value) => pattern.test(value)) ?? fallback;
   const titleNode = texts.find((child) => /声を聞かせて|お問い合わせ|ご相談ください/.test(child.characters ?? ""));
   const title = titleNode?.characters?.trim() ?? "お問い合わせ";
-  const nameNode = texts.find((child) => /^(?:お名前|氏名|name)$/i.test(child.characters?.trim() ?? ""));
-  const emailNode = texts.find((child) => /メールアドレス|e-?mail/i.test(child.characters?.trim() ?? ""));
-  const regionNode = texts.find((child) => /お住まいの地域|地域|area/i.test(child.characters?.trim() ?? ""));
-  const messageNode = texts.find((child) => /ご相談・ご意見の内容|お問い合わせ内容|message/i.test(child.characters?.trim() ?? ""));
+  const nameNode = texts.find((child) => /^(?:ご担当者様|お名前|氏名|name|企業名|会社名)$/i.test(child.characters?.trim() ?? ""));
+  const emailNode = texts.find((child) => CONTACT_EMAIL_LABEL.test(child.characters?.trim() ?? ""));
+  const regionNode = texts.find((child) => /ご住所|住所|お住まいの地域|地域|area/i.test(child.characters?.trim() ?? ""));
+  const messageNode = texts.find((child) => CONTACT_MESSAGE_LABEL.test(child.characters?.trim() ?? ""));
   const replyNode = texts.find((child) => /^返信希望$/.test(child.characters?.trim() ?? ""));
   const replyYesNode = texts.find((child) => /^希望する$/.test(child.characters?.trim() ?? ""));
   const replyNoNode = texts.find((child) => /^希望しない$/.test(child.characters?.trim() ?? ""));
@@ -675,6 +812,10 @@ function contactFormElement(
     },
     control: relativeDesignBox(controlFor(labelNode)?.absoluteBoundingBox, bounds),
   });
+  const fields = contactFieldPlans(texts);
+  const fieldsGeometry = Object.fromEntries(
+    fields.map((field) => [field.name, fieldGeometry(field.node)]),
+  );
 
   const settings: ElementorSettings = {
     ...widgetPosition(node, bounds, parentBounds, parentNode),
@@ -682,10 +823,19 @@ function contactFormElement(
     figmapress_node_name: node.name,
     _element_id: anchorId("contact", context),
     title,
-    name_label: exact(/^(?:お名前|氏名|name)$/i, "お名前"),
-    email_label: exact(/メールアドレス|e-?mail/i, "メールアドレス"),
-    region_label: exact(/お住まいの地域|地域|area/i, "お住まいの地域"),
-    message_label: exact(/ご相談・ご意見の内容|お問い合わせ内容|message/i, "ご相談・ご意見の内容"),
+    fields: fields.map((field, index) => ({
+      _id: hashId(`${node.id}:contact-field:${field.name}:${index}`),
+      name: field.name,
+      label: field.label,
+      type: field.type,
+      required: field.required ? "yes" : "",
+      options: field.options?.join("\n") ?? "",
+      autocomplete: field.autocomplete ?? "",
+    })),
+    name_label: exact(/^(?:ご担当者様|お名前|氏名|name|企業名|会社名)$/i, "お名前"),
+    email_label: exact(CONTACT_EMAIL_LABEL, "メールアドレス"),
+    region_label: exact(/ご住所|住所|お住まいの地域|地域|area/i, "お住まいの地域"),
+    message_label: exact(CONTACT_MESSAGE_LABEL, "ご相談・ご意見の内容"),
     reply_label: exact(/返信希望/, "返信希望"),
     reply_yes_label: exact(/^希望する$/, "希望する"),
     reply_no_label: exact(/^希望しない$/, "希望しない"),
@@ -706,6 +856,7 @@ function contactFormElement(
         email: fieldGeometry(emailNode),
         region: fieldGeometry(regionNode),
         message: fieldGeometry(messageNode),
+        ...fieldsGeometry,
       },
       reply: {
         label: {

@@ -524,6 +524,72 @@ final class FigmaPress_Contact_Form_Widget extends FigmaPress_Widget_Base {
             'content',
             array( 'label' => esc_html__( 'フォーム', 'figmapress-connector' ) )
         );
+        $field_repeater = new \Elementor\Repeater();
+        $field_repeater->add_control(
+            'label',
+            array(
+                'label'   => esc_html__( 'ラベル', 'figmapress-connector' ),
+                'type'    => \Elementor\Controls_Manager::TEXT,
+                'default' => esc_html__( '入力項目', 'figmapress-connector' ),
+            )
+        );
+        $field_repeater->add_control(
+            'name',
+            array(
+                'label'   => esc_html__( '項目キー', 'figmapress-connector' ),
+                'type'    => \Elementor\Controls_Manager::TEXT,
+                'default' => 'field',
+            )
+        );
+        $field_repeater->add_control(
+            'type',
+            array(
+                'label'   => esc_html__( '入力形式', 'figmapress-connector' ),
+                'type'    => \Elementor\Controls_Manager::SELECT,
+                'default' => 'text',
+                'options' => array(
+                    'text'     => esc_html__( '1行テキスト', 'figmapress-connector' ),
+                    'email'    => esc_html__( 'メール', 'figmapress-connector' ),
+                    'tel'      => esc_html__( '電話番号', 'figmapress-connector' ),
+                    'textarea' => esc_html__( '複数行テキスト', 'figmapress-connector' ),
+                    'radio'    => esc_html__( 'ラジオボタン', 'figmapress-connector' ),
+                    'checkbox' => esc_html__( '同意チェック', 'figmapress-connector' ),
+                ),
+            )
+        );
+        $field_repeater->add_control(
+            'required',
+            array(
+                'label'        => esc_html__( '必須', 'figmapress-connector' ),
+                'type'         => \Elementor\Controls_Manager::SWITCHER,
+                'return_value' => 'yes',
+                'default'      => 'yes',
+            )
+        );
+        $field_repeater->add_control(
+            'options',
+            array(
+                'label'       => esc_html__( '選択肢', 'figmapress-connector' ),
+                'description' => esc_html__( 'ラジオボタンは1行に1項目を入力します。', 'figmapress-connector' ),
+                'type'        => \Elementor\Controls_Manager::TEXTAREA,
+            )
+        );
+        $field_repeater->add_control(
+            'autocomplete',
+            array(
+                'label' => esc_html__( '自動入力属性', 'figmapress-connector' ),
+                'type'  => \Elementor\Controls_Manager::TEXT,
+            )
+        );
+        $this->add_control(
+            'fields',
+            array(
+                'label'       => esc_html__( 'Figma入力項目', 'figmapress-connector' ),
+                'type'        => \Elementor\Controls_Manager::REPEATER,
+                'fields'      => $field_repeater->get_controls(),
+                'title_field' => '{{{ label }}}',
+            )
+        );
         $controls = array(
             'title'           => array( '見出し', 'お問い合わせ' ),
             'name_label'      => array( '名前ラベル', 'お名前' ),
@@ -617,11 +683,49 @@ final class FigmaPress_Contact_Form_Widget extends FigmaPress_Widget_Base {
                 <input type="hidden" name="rendered_at" value="<?php echo esc_attr( $rendered_at ); ?>">
                 <input type="hidden" name="form_token" value="<?php echo esc_attr( $token ); ?>">
                 <label class="figmapress-contact__honeypot" aria-hidden="true">Website<input type="text" name="website" tabindex="-1" autocomplete="off"></label>
+                <?php
+                $dynamic_fields = isset( $settings['fields'] ) && is_array( $settings['fields'] ) ? $settings['fields'] : array();
+                if ( $dynamic_fields ) :
+                    $seen_fields = array();
+                    foreach ( array_slice( $dynamic_fields, 0, 24 ) as $dynamic_field ) :
+                        if ( ! is_array( $dynamic_field ) ) {
+                            continue;
+                        }
+                        $field_name = isset( $dynamic_field['name'] ) ? sanitize_key( $dynamic_field['name'] ) : '';
+                        $field_type = isset( $dynamic_field['type'] ) ? sanitize_key( $dynamic_field['type'] ) : 'text';
+                        if ( ! $field_name || isset( $seen_fields[ $field_name ] ) || ! in_array( $field_type, array( 'text', 'email', 'tel', 'textarea', 'radio', 'checkbox' ), true ) ) {
+                            continue;
+                        }
+                        $seen_fields[ $field_name ] = true;
+                        $field_label    = isset( $dynamic_field['label'] ) && '' !== $dynamic_field['label'] ? $dynamic_field['label'] : $field_name;
+                        $field_required = 'yes' === ( isset( $dynamic_field['required'] ) ? $dynamic_field['required'] : '' );
+                        $required_attr  = $field_required ? ' required' : '';
+                        $label_style    = $fidelity ? ' style="' . esc_attr( figmapress_connector_geometry_style( $field_box( $field_name, 'label' ), true ) ) . '"' : '';
+                        $control_style  = $fidelity ? ' style="' . esc_attr( figmapress_connector_geometry_style( $field_box( $field_name, 'control' ) ) ) . '"' : '';
+                        $autocomplete   = isset( $dynamic_field['autocomplete'] ) ? preg_replace( '/[^a-z0-9 -]/', '', strtolower( $dynamic_field['autocomplete'] ) ) : '';
+                        if ( 'radio' === $field_type ) :
+                            $options = preg_split( '/\r\n|\r|\n/', isset( $dynamic_field['options'] ) ? $dynamic_field['options'] : '' );
+                            $options = array_values( array_filter( array_map( 'trim', is_array( $options ) ? $options : array() ) ) );
+                            if ( ! $options ) {
+                                continue;
+                            }
+                            ?>
+                            <fieldset class="figmapress-contact__field figmapress-contact__field--radio"><legend<?php echo $label_style; ?>><?php echo esc_html( $field_label ); ?></legend><span class="figmapress-contact__options"<?php echo $control_style; ?>><?php foreach ( array_slice( $options, 0, 12 ) as $option_index => $option ) : ?><label><input name="<?php echo esc_attr( $field_name ); ?>" type="radio" value="<?php echo esc_attr( $option ); ?>"<?php echo 0 === $option_index ? $required_attr : ''; ?>><span><?php echo esc_html( $option ); ?></span></label><?php endforeach; ?></span></fieldset>
+                        <?php elseif ( 'checkbox' === $field_type ) : ?>
+                            <label class="figmapress-contact__field figmapress-contact__field--checkbox"><input name="<?php echo esc_attr( $field_name ); ?>" type="checkbox" value="yes"<?php echo $required_attr . $control_style; ?>><span<?php echo $label_style; ?>><?php echo esc_html( $field_label ); ?></span></label>
+                        <?php elseif ( 'textarea' === $field_type ) : ?>
+                            <label class="figmapress-contact__field figmapress-contact__field--<?php echo esc_attr( $field_name ); ?>"><span<?php echo $label_style; ?>><?php echo esc_html( $field_label ); ?></span><textarea name="<?php echo esc_attr( $field_name ); ?>" maxlength="5000" rows="6"<?php echo $required_attr . $control_style; ?>></textarea></label>
+                        <?php else : ?>
+                            <label class="figmapress-contact__field figmapress-contact__field--<?php echo esc_attr( $field_name ); ?>"><span<?php echo $label_style; ?>><?php echo esc_html( $field_label ); ?></span><input name="<?php echo esc_attr( $field_name ); ?>" type="<?php echo esc_attr( $field_type ); ?>" maxlength="<?php echo 'email' === $field_type ? '254' : '500'; ?>"<?php echo $autocomplete ? ' autocomplete="' . esc_attr( $autocomplete ) . '"' : ''; ?><?php echo $required_attr . $control_style; ?>></label>
+                        <?php endif;
+                    endforeach;
+                else : ?>
                 <label class="figmapress-contact__field figmapress-contact__field--name"><span<?php echo $fidelity ? ' style="' . esc_attr( figmapress_connector_geometry_style( $field_box( 'name', 'label' ), true ) ) . '"' : ''; ?>><?php echo esc_html( $field( 'name_label', 'お名前' ) ); ?></span><input name="name" type="text" maxlength="120" autocomplete="name" required<?php echo $fidelity ? ' style="' . esc_attr( figmapress_connector_geometry_style( $field_box( 'name', 'control' ) ) ) . '"' : ''; ?>></label>
                 <label class="figmapress-contact__field figmapress-contact__field--email"><span<?php echo $fidelity ? ' style="' . esc_attr( figmapress_connector_geometry_style( $field_box( 'email', 'label' ), true ) ) . '"' : ''; ?>><?php echo esc_html( $field( 'email_label', 'メールアドレス' ) ); ?></span><input name="email" type="email" maxlength="254" autocomplete="email" required<?php echo $fidelity ? ' style="' . esc_attr( figmapress_connector_geometry_style( $field_box( 'email', 'control' ) ) ) . '"' : ''; ?>></label>
                 <label class="figmapress-contact__field figmapress-contact__field--region"><span<?php echo $fidelity ? ' style="' . esc_attr( figmapress_connector_geometry_style( $field_box( 'region', 'label' ), true ) ) . '"' : ''; ?>><?php echo esc_html( $field( 'region_label', 'お住まいの地域' ) ); ?></span><input name="region" type="text" maxlength="160" autocomplete="address-level1"<?php echo $fidelity ? ' style="' . esc_attr( figmapress_connector_geometry_style( $field_box( 'region', 'control' ) ) ) . '"' : ''; ?>></label>
                 <label class="figmapress-contact__field figmapress-contact__field--message"><span<?php echo $fidelity ? ' style="' . esc_attr( figmapress_connector_geometry_style( $field_box( 'message', 'label' ), true ) ) . '"' : ''; ?>><?php echo esc_html( $field( 'message_label', 'ご相談・ご意見の内容' ) ); ?></span><textarea name="message" maxlength="5000" rows="6" required<?php echo $fidelity ? ' style="' . esc_attr( figmapress_connector_geometry_style( $field_box( 'message', 'control' ) ) ) . '"' : ''; ?>></textarea></label>
                 <fieldset><legend<?php echo $fidelity && ! empty( $geometry['reply']['label'] ) ? ' style="' . esc_attr( figmapress_connector_geometry_style( $geometry['reply']['label'], true ) ) . '"' : ''; ?>><?php echo esc_html( $field( 'reply_label', '返信希望' ) ); ?></legend><label class="figmapress-contact__reply figmapress-contact__reply--yes"<?php echo $fidelity && ! empty( $geometry['reply']['yes'] ) ? ' style="' . esc_attr( figmapress_connector_geometry_style( $geometry['reply']['yes'], true ) ) . '"' : ''; ?>><input name="reply_preference" type="radio" value="yes" checked><span><?php echo esc_html( $field( 'reply_yes_label', '希望する' ) ); ?></span></label><label class="figmapress-contact__reply figmapress-contact__reply--no"<?php echo $fidelity && ! empty( $geometry['reply']['no'] ) ? ' style="' . esc_attr( figmapress_connector_geometry_style( $geometry['reply']['no'], true ) ) . '"' : ''; ?>><input name="reply_preference" type="radio" value="no"><span><?php echo esc_html( $field( 'reply_no_label', '希望しない' ) ); ?></span></label></fieldset>
+                <?php endif; ?>
                 <button type="submit"<?php echo $fidelity && ! empty( $geometry['button']['box'] ) ? ' style="' . esc_attr( figmapress_connector_geometry_style( $geometry['button']['box'], true ) ) . '"' : ''; ?>><?php echo esc_html( $field( 'button_text', '送信する' ) ); ?></button>
                 <p class="figmapress-contact__status" data-success="<?php echo esc_attr( $field( 'success_message', '送信しました。お問い合わせありがとうございます。' ) ); ?>" aria-live="polite"></p>
             </form>
