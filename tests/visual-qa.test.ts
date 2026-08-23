@@ -50,6 +50,7 @@ test("browser Visual QA waits for the srcdoc DOM separately from slow media", as
   assert.match(source, /renderedContentHeight\(visiblePreview\)/);
   assert.match(source, /bottom - rootRect\.top/);
   assert.match(source, /waitForImage\(image, 8_000\)/);
+  assert.match(source, /reference\.format === "jpg" \? 32 : 24/);
 });
 
 test("actual-page Visual QA refuses a misleading score when snapshot images are omitted", async () => {

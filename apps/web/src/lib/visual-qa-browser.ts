@@ -13,6 +13,7 @@ export interface VisualQaReference {
   url: string;
   width: number;
   height: number;
+  format: "png" | "jpg";
 }
 
 export interface VisualQaBrowserResult extends VisualQaMetrics {
@@ -258,6 +259,10 @@ export async function runVisualQa(
   variant: "desktop" | "mobile",
 ): Promise<VisualQaBrowserResult> {
   const { width, height } = captureSize(reference, variant);
+  // JPEG is the only Figma-supported reference format for very long pages.
+  // Ignore its small block/compression noise while keeping the stricter
+  // lossless threshold for ordinary PNG references.
+  const pixelThreshold = reference.format === "jpg" ? 32 : 24;
   const frame = document.createElement("iframe");
   frame.setAttribute("aria-hidden", "true");
   frame.setAttribute("sandbox", "allow-same-origin");
@@ -466,7 +471,7 @@ export async function runVisualQa(
       targetPixels.data,
       width,
       height,
-      24,
+      pixelThreshold,
       generatedHeight,
     );
     const sections = analyzeVisualRegions(
@@ -475,7 +480,7 @@ export async function runVisualQa(
       width,
       height,
       sectionRegions,
-      24,
+      pixelThreshold,
       8,
     ).slice(0, 6);
     const textNodes = analyzeVisualRegions(
@@ -484,7 +489,7 @@ export async function runVisualQa(
       width,
       height,
       textRegions,
-      24,
+      pixelThreshold,
       0,
       true,
     ).slice(0, 8);
@@ -494,7 +499,7 @@ export async function runVisualQa(
       width,
       height,
       visualRegions,
-      24,
+      pixelThreshold,
       0,
       true,
     ).slice(0, 8);
@@ -504,7 +509,7 @@ export async function runVisualQa(
       width,
       height,
       decorationRegions,
-      24,
+      pixelThreshold,
       0,
       true,
     ).slice(0, 8);

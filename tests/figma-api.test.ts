@@ -67,6 +67,7 @@ test("real Figma file shape is normalized into parser tokens", async (context) =
   assert.equal(result.file.styles?.spacing?.[0]?.size, "24px");
   assert.equal(result.visualReferences.desktop?.nodeId, "2:2");
   assert.equal(result.visualReferences.desktop?.url, "https://s3-alpha-sig.figma.com/reference.png");
+  assert.equal(result.visualReferences.desktop?.format, "png");
   assert.match(requested[0] ?? "", /ids=2%3A2/);
   assert.ok(requested.some((url) =>
     url.includes("/v1/images/")
@@ -145,7 +146,8 @@ test("long visual references skip lossless renders that exceed Figma's edge limi
     "figd_test_token_value",
   );
 
-  assert.equal(result.visualReferences.desktop?.height, 5375);
+  assert.equal(result.visualReferences.desktop?.height, 5372);
+  assert.equal(result.visualReferences.desktop?.format, "jpg");
   assert.ok(!requested.some((url) =>
     url.includes("/v1/images/") && url.includes("format=png"),
   ));
@@ -196,6 +198,7 @@ test("visual references fall back to JPEG when Figma rejects PNG", async (contex
   );
 
   assert.equal(result.visualReferences.desktop?.url, "https://s3-alpha-sig.figma.com/reference.jpg");
+  assert.equal(result.visualReferences.desktop?.format, "jpg");
   assert.ok(requested.some((url) => url.includes("format=png")));
   assert.ok(requested.some((url) => url.includes("format=jpg")));
 });
