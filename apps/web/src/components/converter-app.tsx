@@ -86,7 +86,7 @@ type OutputTarget = "gutenberg" | "elementor";
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
-const APP_RELEASE = "0.26.47";
+const APP_RELEASE = "0.26.48";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -329,10 +329,44 @@ interface FigmaFrameSelectionResult {
   candidates: FigmaPageCandidate[];
 }
 
-interface PreviewTextIntegrity {
-  source: string;
+interface PreviewTextCount {
   total: number;
   visible: number;
+}
+
+interface PreviewTextIntegrity extends PreviewTextCount {
+  source: string;
+  variants?: Partial<Record<"desktop" | "mobile", PreviewTextCount>>;
+}
+
+function countPaintedText(
+  document: Document,
+  boxes: HTMLElement[],
+): PreviewTextCount {
+  let visible = 0;
+  for (const box of boxes) {
+    const style = document.defaultView?.getComputedStyle(box);
+    const walker = document.createTreeWalker(
+      box,
+      document.defaultView?.NodeFilter.SHOW_TEXT ?? 4,
+    );
+    const textNodes: Text[] = [];
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (node.textContent?.trim()) textNodes.push(node as Text);
+    }
+    const everyTextRunPainted = style?.display !== "none"
+      && style?.visibility !== "hidden"
+      && Number.parseFloat(style?.opacity || "1") > 0
+      && textNodes.length > 0
+      && textNodes.every((node) => {
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        const rect = range.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      });
+    if (everyTextRunPainted) visible += 1;
+  }
+  return { total: boxes.length, visible };
 }
 
 function inspectPreviewTextIntegrity(
@@ -343,22 +377,56 @@ function inspectPreviewTextIntegrity(
   const boxes = Array.from(
     document.querySelectorAll<HTMLElement>('[data-figmapress-kind="text"]'),
   ).filter((element) => element.textContent?.trim());
-  let visible = 0;
-  for (const box of boxes) {
-    const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT);
-    const textNodes: Text[] = [];
-    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      if (node.textContent?.trim()) textNodes.push(node as Text);
+  const responsiveRoots = Array.from(
+    document.querySelectorAll<HTMLElement>(
+      ".figmapress-figma-preview--desktop, .figmapress-figma-preview--mobile",
+    ),
+  );
+  if (!responsiveRoots.length) return countPaintedText(document, boxes);
+
+  const originalDisplays = responsiveRoots.map((root) => ({
+    value: root.style.getPropertyValue("display"),
+    priority: root.style.getPropertyPriority("display"),
+  }));
+  const variants: NonNullable<PreviewTextIntegrity["variants"]> = {};
+  try {
+    for (const activeRoot of responsiveRoots) {
+      for (const root of responsiveRoots) {
+        root.style.setProperty(
+          "display",
+          root === activeRoot ? "block" : "none",
+          "important",
+        );
+      }
+      const variant = activeRoot.classList.contains(
+        "figmapress-figma-preview--mobile",
+      ) ? "mobile" : "desktop";
+      variants[variant] = countPaintedText(
+        document,
+        boxes.filter((box) => activeRoot.contains(box)),
+      );
     }
-    const everyTextRunPainted = textNodes.length > 0 && textNodes.every((node) => {
-      const range = document.createRange();
-      range.selectNodeContents(node);
-      const rect = range.getBoundingClientRect();
-      return rect.width > 0 && rect.height > 0;
+  } finally {
+    responsiveRoots.forEach((root, index) => {
+      const display = originalDisplays[index];
+      if (display.value) {
+        root.style.setProperty("display", display.value, display.priority);
+      } else {
+        root.style.removeProperty("display");
+      }
     });
-    if (everyTextRunPainted) visible += 1;
   }
-  return { total: boxes.length, visible };
+  const outsideRoots = boxes.filter(
+    (box) => !responsiveRoots.some((root) => root.contains(box)),
+  );
+  const outside = countPaintedText(document, outsideRoots);
+  const variantCounts = Object.values(variants);
+  return {
+    total: outside.total + variantCounts.reduce((sum, count) => sum + count.total, 0),
+    visible: outside.visible
+      + variantCounts.reduce((sum, count) => sum + count.visible, 0),
+    variants,
+  };
 }
 
 interface WordPressResult {
@@ -2772,6 +2840,12 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                 >
                   {previewTextIntegrityPassed ? "✓" : "!"}
                   {" "}文字表示 {currentPreviewTextIntegrity.visible}/{currentPreviewTextIntegrity.total}
+                  {currentPreviewTextIntegrity.variants?.desktop
+                    ? `（PC ${currentPreviewTextIntegrity.variants.desktop.visible}/${currentPreviewTextIntegrity.variants.desktop.total}`
+                    : ""}
+                  {currentPreviewTextIntegrity.variants?.mobile
+                    ? `・スマホ ${currentPreviewTextIntegrity.variants.mobile.visible}/${currentPreviewTextIntegrity.variants.mobile.total}）`
+                    : currentPreviewTextIntegrity.variants?.desktop ? "）" : ""}
                   {previewTextIntegrityPassed
                     ? " — 全テキストを実描画で確認"
                     : currentPreviewTextIntegrity.total === 0
