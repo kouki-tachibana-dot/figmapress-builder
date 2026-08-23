@@ -1424,7 +1424,7 @@ test("Figma carousel and prototype actions become editable functional widgets", 
   assert.match(String(email?.settings.editor), /href="mailto:hello@example\.com"/);
   assert.doesNotMatch(String(plainHeading?.settings.editor), /data-figmapress-functional-link/);
   assert.equal(result.qualityReport?.metrics.functionalWidgets.carousel, 1);
-  assert.equal(result.qualityReport?.metrics.functionalWidgets.links, 1);
+  assert.equal(result.qualityReport?.metrics.functionalWidgets.links, 2);
   assert.equal(result.qualityReport?.metrics.expectedFunctionalWidgets.carousel, 1);
   assert.equal(
     result.qualityReport?.checks.find((check) => check.id === "interactions")?.status,
@@ -1618,4 +1618,6 @@ test("business-site menu labels become editable page links", async () => {
     (element) => element.settings.figmapress_node_id === "3:0",
   );
   assert.match(String(menuText?.settings.editor), /href="#company"/);
+  assert.equal(result.qualityReport?.metrics.functionalWidgets.links, 1);
+  assert.equal(result.qualityReport?.metrics.navigationIntegrity.navigationLinks, 1);
 });
