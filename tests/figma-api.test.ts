@@ -107,7 +107,7 @@ test("Figma OAuth uses Bearer auth without exposing the token as a PAT header", 
   }
 });
 
-test("long visual references stay within Figma's raster edge limit", async (context) => {
+test("long visual references skip lossless renders that exceed Figma's edge limit", async (context) => {
   const requested: string[] = [];
   context.mock.method(globalThis, "fetch", async (input) => {
     const url = String(input);
@@ -145,11 +145,14 @@ test("long visual references stay within Figma's raster edge limit", async (cont
     "figd_test_token_value",
   );
 
-  assert.equal(result.visualReferences.desktop?.height, 4093);
+  assert.equal(result.visualReferences.desktop?.height, 5375);
+  assert.ok(!requested.some((url) =>
+    url.includes("/v1/images/") && url.includes("format=png"),
+  ));
   assert.ok(requested.some((url) =>
     url.includes("/v1/images/")
-    && url.includes("format=png")
-    && url.includes("scale=0.508"),
+    && url.includes("format=jpg")
+    && url.includes("scale=0.667"),
   ));
 });
 
