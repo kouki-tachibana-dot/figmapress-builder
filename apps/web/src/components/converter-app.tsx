@@ -80,6 +80,10 @@ import {
   WORDPRESS_SITE_BRIDGE_FRAME_ID,
   type WordPressSiteBridge,
 } from "@/lib/wordpress-site-bridge";
+import {
+  inspectFigmaSiteTemplates,
+  type FigmaSitePreflightReport,
+} from "@/lib/site-preflight";
 
 type SourceMode = "figma" | "json";
 type OutputTarget = "gutenberg" | "elementor";
@@ -87,7 +91,7 @@ type OutputTarget = "gutenberg" | "elementor";
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
-const APP_RELEASE = "0.26.59";
+const APP_RELEASE = "0.26.60";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -849,6 +853,10 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const [wpBuildMode, setWpBuildMode] = useState<"single" | "site">("single");
   const [wpSiteResult, setWpSiteResult] = useState<BrowserPreparedSiteResult | null>(null);
   const [wpSiteProgress, setWpSiteProgress] = useState("");
+  const [sitePreflightBusy, setSitePreflightBusy] = useState(false);
+  const [sitePreflightError, setSitePreflightError] = useState("");
+  const [sitePreflightResult, setSitePreflightResult] =
+    useState<FigmaSitePreflightReport | null>(null);
   const [wpVisualQaBusy, setWpVisualQaBusy] = useState(false);
   const [wpMediaBusy, setWpMediaBusy] = useState(false);
   const [wpVisualQaError, setWpVisualQaError] = useState("");
@@ -1039,7 +1047,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     && Boolean(conversionSourceKey)
     && Boolean(multiPagePlan && multiPagePlan.pages.length > 1);
   const multiPageBlocked = wpBuildMode === "site"
-    && (!multiPageAvailable || !connectorSupportsMultiPage);
+    && (!multiPageAvailable
+      || !connectorSupportsMultiPage
+      || sitePreflightResult?.pages !== multiPagePlan?.pages.length);
   const wordpressSiteBridgeUrl = connectorToken
     ? safeWordPressSiteBridgeUrl(baseUrl)
     : "";
@@ -1173,6 +1183,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     setWpResult(null);
     setWpSiteResult(null);
     setWpSiteProgress("");
+    setSitePreflightBusy(false);
+    setSitePreflightError("");
+    setSitePreflightResult(null);
     setWpBuildMode("single");
     setWpVisualQaBusy(false);
     setWpMediaBusy(false);
@@ -1800,6 +1813,31 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       entries.push(...await requestBatch(pages));
     }
     return new Map(entries.map((entry) => [entry.page.key, entry.elementorTemplate]));
+  }
+
+  async function verifyMultiPageTemplates(): Promise<void> {
+    const plan = output?.multiPagePlan;
+    if (!output || !plan || plan.pages.length < 2) {
+      setSitePreflightError("複数ページの構成がありません。Figmaからもう一度変換してください。");
+      return;
+    }
+    setSitePreflightBusy(true);
+    setSitePreflightError("");
+    setSitePreflightResult(null);
+    try {
+      const subpages = plan.pages.filter((page) => page.key !== "home");
+      const templates = await fetchMultiPageTemplates(subpages);
+      templates.set("home", output.elementorTemplate);
+      setSitePreflightResult(inspectFigmaSiteTemplates(plan, templates));
+    } catch (caught) {
+      setSitePreflightError(
+        caught instanceof Error
+          ? caught.message
+          : "全ページの事前検証を完了できませんでした。",
+      );
+    } finally {
+      setSitePreflightBusy(false);
+    }
   }
 
   async function createWordPressSiteDraft(
@@ -3474,6 +3512,26 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                         ))}
                       </ol>
                       <p>すべて下書きで作成します。メニューは未割り当てのため、公開中サイトには表示されません。再実行時は同じ下書きを更新します。</p>
+                      <button
+                        className="button button--dark"
+                        disabled={sitePreflightBusy}
+                        onClick={() => void verifyMultiPageTemplates()}
+                        type="button"
+                      >
+                        {sitePreflightBusy
+                          ? `${multiPagePlan.pages.length}ページを検証中…`
+                          : `全${multiPagePlan.pages.length}ページを事前検証`}
+                      </button>
+                      {sitePreflightResult && (
+                        <p role="status">
+                          ✓ {sitePreflightResult.pages}/{multiPagePlan.pages.length}ページ合格・PC/SP精密表示 {sitePreflightResult.exactPages}ページ・リンク {sitePreflightResult.links}件・移動先 {sitePreflightResult.destinations}ページ
+                        </p>
+                      )}
+                      {sitePreflightError && (
+                        <p className="alert alert--error" role="alert">
+                          {sitePreflightError}
+                        </p>
+                      )}
                     </div>
                   )}
                 </fieldset>
