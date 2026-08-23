@@ -1883,3 +1883,73 @@ test("cross-page Figma prototype links survive page pruning in Elementor and pre
   assert.match(result.previewHtml, /href="#figmapress-page-company"/);
   assert.equal(result.qualityReport?.metrics.navigationIntegrity.missingTargets, 0);
 });
+
+test("visible semantic page labels correct stale prototype wires and dates never become phone links", async () => {
+  const file: MockFigmaFile = {
+    document: {
+      id: "0:0",
+      name: "Stale menu wires",
+      type: "DOCUMENT",
+      children: [{
+        id: "1:0",
+        name: "Page",
+        type: "CANVAS",
+        children: [{
+          id: "10:1",
+          name: "PC ホーム",
+          type: "FRAME",
+          absoluteBoundingBox: { x: 0, y: 0, width: 1440, height: 900 },
+          children: [{
+            id: "10:2",
+            name: "Header/Menu-Item",
+            type: "FRAME",
+            absoluteBoundingBox: { x: 1000, y: 30, width: 150, height: 50 },
+            interactions: [{
+              actions: [{ type: "NODE", navigation: "NAVIGATE", destinationId: "20:1" }],
+            }],
+            children: [{
+              id: "10:3",
+              name: "Menu label",
+              type: "TEXT",
+              characters: "役員一覧",
+              absoluteBoundingBox: { x: 1010, y: 40, width: 120, height: 28 },
+              style: { fontSize: 16, fontWeight: 600 },
+            }],
+          }, {
+            id: "10:4",
+            name: "2026.03.24",
+            type: "TEXT",
+            characters: "2026.03.24",
+            absoluteBoundingBox: { x: 100, y: 300, width: 130, height: 28 },
+            style: { fontSize: 16, fontWeight: 400 },
+          }],
+        }],
+      }],
+    },
+  };
+  const candidate = (id: string, title: string) => ({
+    id: `${id}:1`, title, confidence: "content" as const,
+    desktop: {
+      id: `${id}:1`, name: `PC ${title}`, label: title,
+      width: 1440, height: 900, variant: "desktop" as const,
+    },
+    mobile: {
+      id: `${id}:2`, name: `SP ${title}`, label: title,
+      width: 440, height: 900, variant: "mobile" as const,
+    },
+  });
+  const result = await convertFile(file, {}, {}, [], {}, {
+    candidates: [
+      candidate("10", "ホーム"),
+      candidate("20", "お問い合わせ"),
+      candidate("30", "役員一覧"),
+    ],
+    selectedFrameId: "10:1",
+    siteTitle: "建工101",
+  });
+  const serialized = JSON.stringify(result.elementorTemplate);
+  assert.match(serialized, /#figmapress-page-officers/);
+  assert.doesNotMatch(serialized, /tel:20260324/);
+  assert.match(result.previewHtml, /href="#figmapress-page-officers"/);
+  assert.doesNotMatch(result.previewHtml, /href="tel:20260324"/);
+});
