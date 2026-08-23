@@ -26,7 +26,9 @@ test("single-line fixed Figma headings do not wrap into adjacent text", () => {
     },
   };
 
-  assert.equal(figmaTextShouldWrap(heading), false);
+  for (const textAutoResize of ["NONE", "HEIGHT", "WIDTH_AND_HEIGHT"] as const) {
+    assert.equal(figmaTextShouldWrap({ ...heading, textAutoResize }), false);
+  }
   assert.equal(
     figmaTextShouldWrap({
       ...heading,

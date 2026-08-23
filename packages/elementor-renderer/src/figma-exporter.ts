@@ -2371,10 +2371,6 @@ function textWordBreak(node: FigmaNode): "break-word" | "keep-all" {
 }
 
 export function figmaTextShouldWrap(node: FigmaNode): boolean {
-  if (node.textAutoResize === "HEIGHT" || node.textAutoResize === "TRUNCATE") {
-    return true;
-  }
-
   const bounds = node.absoluteBoundingBox;
   if (!bounds || node.type !== "TEXT" || !node.characters) return false;
   const style = node.style ?? {};
@@ -2382,24 +2378,31 @@ export function figmaTextShouldWrap(node: FigmaNode): boolean {
   const fontSize = textFontSize(style, runs, bounds);
   const lineHeight = textLineHeight(style, runs, fontSize);
   const explicitLines = node.characters.split("\n").length;
-  if (node.textAutoResize === "NONE") {
-    // A fixed Figma text box that is only one line tall is commonly used for
-    // art-directed headings. Browser wrapping inside that box creates an extra
-    // line which collides with the next absolutely positioned heading. Honor
-    // the one-line geometry; taller fixed boxes remain safely wrappable.
-    const tallestRunLineHeight = Math.max(
-      lineHeight,
-      ...runs.map((run) =>
-        positive(run.style.lineHeightPx)
-          ? run.style.lineHeightPx
-          : positive(run.style.fontSize)
-            ? run.style.fontSize * 1.25
-            : lineHeight,
-      ),
-    );
-    return explicitLines > 1 || bounds.height > tallestRunLineHeight * 1.4;
+  const tallestRunLineHeight = Math.max(
+    lineHeight,
+    ...runs.map((run) =>
+      positive(run.style.lineHeightPx)
+        ? run.style.lineHeightPx
+        : positive(run.style.fontSize)
+          ? run.style.fontSize * 1.25
+          : lineHeight,
+    ),
+  );
+  // Figma can label a text box HEIGHT, NONE or WIDTH_AND_HEIGHT depending on
+  // how its width was authored. The rendered bounds are the reliable signal:
+  // if the box is only one run-line tall and contains no explicit newline,
+  // browser fallback-font metrics must not create a second colliding line.
+  if (explicitLines === 1 && bounds.height <= tallestRunLineHeight * 1.4) {
+    return false;
   }
-  return bounds.height > lineHeight * (explicitLines + 0.4);
+  if (
+    node.textAutoResize === "HEIGHT"
+    || node.textAutoResize === "NONE"
+    || node.textAutoResize === "TRUNCATE"
+  ) {
+    return true;
+  }
+  return bounds.height > tallestRunLineHeight * (explicitLines + 0.4);
 }
 
 function textOverflow(node: FigmaNode): "hidden" | "visible" {
