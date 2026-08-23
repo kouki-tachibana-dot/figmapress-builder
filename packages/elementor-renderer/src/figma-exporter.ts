@@ -17,7 +17,19 @@ export interface FigmaRenderAssets {
   renderedNodeUrls?: Record<string, string>;
 }
 
-export type SectionAnchor = "thoughts" | "policies" | "activities" | "profile" | "contact";
+export type SectionAnchor =
+  | "thoughts"
+  | "policies"
+  | "activities"
+  | "profile"
+  | "company"
+  | "reasons"
+  | "services"
+  | "works"
+  | "demolition"
+  | "news"
+  | "officers"
+  | "contact";
 
 interface RenderContext {
   ids: ElementIdFactory;
@@ -1092,6 +1104,13 @@ function navigationMenuTexts(node: FigmaNode): FigmaNode[] {
 }
 
 function menuAnchor(label: string, context: RenderContext): string {
+  if (/会社案内|company|about/i.test(label)) return anchorHref("company", context);
+  if (/選ばれる理由|reasons?|strength/i.test(label)) return anchorHref("reasons", context);
+  if (/事業(?:内容|案内)|services?|business/i.test(label)) return anchorHref("services", context);
+  if (/施工事例|works?|projects?|construction/i.test(label)) return anchorHref("works", context);
+  if (/解体工事|demolition/i.test(label)) return anchorHref("demolition", context);
+  if (/お知らせ|news|topics?/i.test(label)) return anchorHref("news", context);
+  if (/役員一覧|officers?|executives?|board/i.test(label)) return anchorHref("officers", context);
   if (/想い|thought|message/i.test(label)) return anchorHref("thoughts", context);
   if (/政策|policy|policies/i.test(label)) return anchorHref("policies", context);
   if (/活動報告|activit|report/i.test(label)) return anchorHref("activities", context);
@@ -1209,6 +1228,7 @@ function functionalLink(
       && Boolean(
         email
         || phone
+        || /^(?:home|top|会社案内|選ばれる理由|事業(?:内容|案内)|施工事例|解体工事|役員一覧|お知らせ|お問い合わせ)$/i.test(copy)
         || /(?:こちら|(?:もっと)?見る|詳しく|トップへ|お問い合わせ|ご相談|送る|送信|プライバシー|→|＞|>)/i.test(copy),
       )
     );
@@ -1256,6 +1276,13 @@ function sectionAnchor(node: FigmaNode): string | null {
 
 export function sectionAnchorFromText(value: string): string | null {
   if (/トップ|page.?top|\btop\b/i.test(value)) return "top";
+  if (/会社案内|company|about/i.test(value)) return "company";
+  if (/選ばれる理由|reasons?|strength/i.test(value)) return "reasons";
+  if (/事業(?:内容|案内)|services?|business/i.test(value)) return "services";
+  if (/施工事例|works?|projects?|construction/i.test(value)) return "works";
+  if (/解体工事|demolition/i.test(value)) return "demolition";
+  if (/お知らせ|news|topics?/i.test(value)) return "news";
+  if (/役員一覧|officers?|executives?|board/i.test(value)) return "officers";
   if (/thought|message|想い|voice|現場の声/i.test(value)) return "thoughts";
   if (/policy|policies|政策/i.test(value)) return "policies";
   if (/activit|report|活動報告|news|results?|実績/i.test(value)) return "activities";
@@ -1274,6 +1301,20 @@ function sectionTextMatchesAnchor(value: string, anchor: SectionAnchor): boolean
       return /activit|report|活動報告|news|results?|実績/i.test(value);
     case "profile":
       return /profile|プロフィール/i.test(value);
+    case "company":
+      return /会社案内|company|about/i.test(value);
+    case "reasons":
+      return /選ばれる理由|reasons?|strength/i.test(value);
+    case "services":
+      return /事業(?:内容|案内)|services?|business/i.test(value);
+    case "works":
+      return /施工事例|works?|projects?|construction/i.test(value);
+    case "demolition":
+      return /解体工事|demolition/i.test(value);
+    case "news":
+      return /お知らせ|news|topics?/i.test(value);
+    case "officers":
+      return /役員一覧|officers?|executives?|board/i.test(value);
     case "contact":
       return /contact|問(?:い)?合わせ|問合|声を聞かせて|ご相談(?:はこちら|・ご意見|ください|$)/i.test(value);
   }
@@ -1286,7 +1327,20 @@ function sectionTextMatchesAnchor(value: string, anchor: SectionAnchor): boolean
  * inside a broader visual section.
  */
 export function discoverSectionAnchorTargets(root: FigmaNode): Map<string, SectionAnchor> {
-  const anchors: SectionAnchor[] = ["thoughts", "policies", "activities", "profile", "contact"];
+  const anchors: SectionAnchor[] = [
+    "thoughts",
+    "policies",
+    "activities",
+    "profile",
+    "company",
+    "reasons",
+    "services",
+    "works",
+    "demolition",
+    "news",
+    "officers",
+    "contact",
+  ];
   const candidates = new Map<SectionAnchor, Array<{
     id: string;
     score: number;

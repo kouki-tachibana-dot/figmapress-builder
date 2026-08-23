@@ -8,7 +8,7 @@ import {
 } from "./figma-exporter";
 import type { ElementorTemplate } from "./types";
 
-export type FigmaSitePageKey = "home" | SectionAnchor;
+export type FigmaSitePageKey = string;
 
 export interface FigmaSitePagePlan {
   key: FigmaSitePageKey;
@@ -16,6 +16,7 @@ export interface FigmaSitePagePlan {
   slug: string;
   hasDesktop: boolean;
   hasMobile: boolean;
+  frameId?: string;
 }
 
 export interface FigmaMultiPagePlan {
@@ -34,6 +35,13 @@ const pageDefinitions: Array<{
   title: string;
   slug: string;
 }> = [
+  { key: "company", title: "会社案内", slug: "company" },
+  { key: "reasons", title: "選ばれる理由", slug: "reasons" },
+  { key: "services", title: "事業内容", slug: "services" },
+  { key: "works", title: "施工事例", slug: "works" },
+  { key: "demolition", title: "解体工事", slug: "demolition" },
+  { key: "news", title: "お知らせ", slug: "news" },
+  { key: "officers", title: "役員一覧", slug: "officers" },
   { key: "thoughts", title: "想い", slug: "omoi" },
   { key: "policies", title: "政策", slug: "seisaku" },
   { key: "activities", title: "活動報告", slug: "katsudo" },
@@ -173,7 +181,7 @@ export function createFigmaSitePageTemplate(
     return new FigmaElementorExporter().toTemplate(file, page.title, assets);
   }
   return new FigmaElementorExporter().toTemplate(
-    createFigmaSectionFile(file, page.key),
+    createFigmaSectionFile(file, page.key as SectionAnchor),
     page.title,
     assets,
   );

@@ -100,7 +100,7 @@ export interface BrowserElementorDocumentResult {
   revisionId?: number | null;
 }
 
-export type BrowserSitePageKey = "home" | "thoughts" | "policies" | "activities" | "profile" | "contact";
+export type BrowserSitePageKey = string;
 
 export interface BrowserSitePrepareInput {
   siteKey: string;
