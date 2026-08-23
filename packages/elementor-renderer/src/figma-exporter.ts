@@ -396,7 +396,9 @@ function rootRenderNodes(root: FigmaNode, context: RenderContext): FigmaNode[] {
   const children = root.children ?? [];
   const syntheticNodes = [context.navigationNode, context.contactFormNode]
     .filter((node): node is FigmaNode => Boolean(
-      node && !children.some((child) => child.id === node.id),
+      node && !children.some((child) =>
+        child.id === node.id || descendants(child).some((nested) => nested.id === node.id)
+      ),
     ));
   if (!syntheticNodes.length) return children;
   const consumedByNode = syntheticNodes.map((node) => ({
@@ -665,12 +667,24 @@ function looseRootContactFormNode(root: FigmaNode): FigmaNode | null {
 export function findFigmaContactFormNode(root: FigmaNode): FigmaNode | null {
   const candidates = descendants(root)
     .filter((node) => node.type !== "TEXT" && node.visible !== false && node.absoluteBoundingBox)
-    .filter((node) => CONTACT_FORM_NODE_NAME.test(node.name))
-    .filter((node) => looksLikeContactFormCopy(
-      contactFormTexts(node).map((child) => child.characters?.trim() ?? ""),
-    ))
-    .sort((left, right) => area(right) - area(left));
-  return candidates[0] ?? looseRootContactFormNode(root);
+    .flatMap((node) => {
+      const texts = contactFormTexts(node);
+      const copy = texts.map((child) => child.characters?.trim() ?? "");
+      if (!looksLikeContactFormCopy(copy)) return [];
+      return [{
+        node,
+        fieldCount: contactFieldPlans(texts).length,
+        explicitlyNamed: CONTACT_FORM_NODE_NAME.test(node.name),
+      }];
+    })
+    .sort((left, right) =>
+      right.fieldCount - left.fieldCount
+      || Number(right.explicitlyNamed) - Number(left.explicitlyNamed)
+      || (left.explicitlyNamed && right.explicitlyNamed
+        ? area(right.node) - area(left.node)
+        : area(left.node) - area(right.node))
+    );
+  return candidates[0]?.node ?? looseRootContactFormNode(root);
 }
 
 interface ContactFieldPlan {
