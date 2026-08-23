@@ -41,6 +41,8 @@ export interface FigmaVisualReference {
   url: string;
   width: number;
   height: number;
+  sourceWidth: number;
+  sourceHeight: number;
   format: "png" | "jpg";
 }
 
@@ -527,6 +529,8 @@ async function fetchVisualReferences(
           1,
           Math.round(renderedWidth * (bounds.height / bounds.width)),
         ),
+        sourceWidth: Math.max(1, Math.round(bounds.width)),
+        sourceHeight: Math.max(1, Math.round(bounds.height)),
         format: renderedFormat,
       };
     }));

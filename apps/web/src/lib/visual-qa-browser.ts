@@ -13,6 +13,8 @@ export interface VisualQaReference {
   url: string;
   width: number;
   height: number;
+  sourceWidth: number;
+  sourceHeight: number;
   format: "png" | "jpg";
 }
 
@@ -237,8 +239,8 @@ function captureSize(
   captureScale: number;
 } {
   const preferredWidth = variant === "mobile" ? 440 : 800;
-  const renderWidth = Math.max(1, Math.round(reference.width));
-  const renderHeight = Math.max(1, Math.round(reference.height));
+  const renderWidth = Math.max(1, Math.round(reference.sourceWidth));
+  const renderHeight = Math.max(1, Math.round(reference.sourceHeight));
   let width = Math.max(1, Math.round(Math.min(reference.width, preferredWidth)));
   let height = Math.max(1, Math.round(width * (reference.height / reference.width)));
   if (width * height > MAX_CAPTURE_PIXELS) {
