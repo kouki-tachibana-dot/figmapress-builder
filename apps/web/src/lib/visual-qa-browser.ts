@@ -208,7 +208,7 @@ async function loadReferenceImage(url: string): Promise<HTMLImageElement> {
   await new Promise<void>((resolve, reject) => {
     const timeout = window.setTimeout(
       () => reject(new Error("Figma基準画像の読み込みがタイムアウトしました。")),
-      15_000,
+      45_000,
     );
     image.addEventListener("load", () => {
       window.clearTimeout(timeout);
@@ -436,20 +436,25 @@ export async function runVisualQa(
           .slice(0, 24)
       : [];
 
-    const targetCanvas = await html2canvas(frameDocument.documentElement, {
-      allowTaint: false,
-      backgroundColor: "#ffffff",
-      height,
-      logging: false,
-      scale: 1,
-      useCORS: true,
-      width,
-      windowHeight: height,
-      windowWidth: width,
-      x: 0,
-      y: 0,
-    });
-    const referenceImage = await loadReferenceImage(reference.url);
+    // Long Figma references can take several seconds to traverse the image
+    // proxy. Load the reference while html2canvas renders the generated page
+    // so network latency does not unnecessarily extend the QA run.
+    const [targetCanvas, referenceImage] = await Promise.all([
+      html2canvas(frameDocument.documentElement, {
+        allowTaint: false,
+        backgroundColor: "#ffffff",
+        height,
+        logging: false,
+        scale: 1,
+        useCORS: true,
+        width,
+        windowHeight: height,
+        windowWidth: width,
+        x: 0,
+        y: 0,
+      }),
+      loadReferenceImage(reference.url),
+    ]);
     const referenceCanvas = document.createElement("canvas");
     referenceCanvas.width = width;
     referenceCanvas.height = height;
