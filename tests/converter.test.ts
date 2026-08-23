@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import mockFigma from "../examples/mock-figma.json";
 import { convertFile } from "../apps/web/src/lib/converter.ts";
-import { figmaTextShouldWrap } from "../packages/elementor-renderer/src/figma-exporter.ts";
+import {
+  figmaRotationShouldApply,
+  figmaTextShouldWrap,
+} from "../packages/elementor-renderer/src/figma-exporter.ts";
 import type { FigmaNode, MockFigmaFile } from "@figmapress/figma-parser";
 
 test("single-line fixed Figma headings do not wrap into adjacent text", () => {
@@ -36,6 +39,28 @@ test("single-line fixed Figma headings do not wrap into adjacent text", () => {
       name: "Fixed paragraph",
       absoluteBoundingBox: { x: 20, y: 700, width: 387, height: 140 },
     }),
+    true,
+  );
+});
+
+test("full-bleed rotated section backgrounds do not rotate their bounding box twice", () => {
+  const sectionBackground: FigmaNode = {
+    id: "topics-bg",
+    name: "Rectangle 47",
+    type: "RECTANGLE",
+    rotation: 3.142,
+    absoluteBoundingBox: { x: 0, y: 696, width: 440, height: 605 },
+    fills: [{ type: "SOLID", color: { r: 0.173, g: 0.173, b: 0.173 } }],
+  };
+  const pageBounds = { x: 0, y: 0, width: 440, height: 5390 };
+
+  assert.equal(figmaRotationShouldApply(sectionBackground, pageBounds), false);
+  assert.equal(
+    figmaRotationShouldApply({
+      ...sectionBackground,
+      id: "accent",
+      absoluteBoundingBox: { x: 40, y: 696, width: 220, height: 80 },
+    }, pageBounds),
     true,
   );
 });

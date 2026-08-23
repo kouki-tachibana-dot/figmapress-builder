@@ -440,7 +440,7 @@ function renderElement(
     elType: "container",
     isInner: true,
     settings: {
-      ...baseContainerSettings(node, context),
+      ...baseContainerSettings(node, context, parentBounds),
       ...containerPosition(node, bounds, parentBounds, parentNode, context),
       figmapress_node_id: node.id,
       figmapress_node_name: node.name,
@@ -1482,7 +1482,7 @@ function textElement(
   };
   applyTypographyFlags(settings, style);
   applyEffects(settings, node);
-  applyRotation(settings, node);
+  applyRotation(settings, node, parentBounds);
 
   const content = richRuns.map((run) => runHtml(run, context)).join("").replace(/\n/g, "<br>");
   const action = functionalLink(node, context);
@@ -1529,11 +1529,15 @@ function imageElement(
   const imageManifest = asset.rendered ? null : figmaImageManifest(asset.paint);
   if (imageManifest) settings.figmapress_image = imageManifest;
   applyEffects(settings, node, "image");
-  applyRotation(settings, node);
+  applyRotation(settings, node, parentBounds);
   return widget(context.ids, node.id, "image", settings);
 }
 
-function baseContainerSettings(node: FigmaNode, context: RenderContext): ElementorSettings {
+function baseContainerSettings(
+  node: FigmaNode,
+  context: RenderContext,
+  parentBounds?: FigmaBounds,
+): ElementorSettings {
   const bounds = node.absoluteBoundingBox;
   const autoLayout = isAutoLayout(node);
   const settings: ElementorSettings = {
@@ -1601,7 +1605,7 @@ function baseContainerSettings(node: FigmaNode, context: RenderContext): Element
   }
   settings.border_radius = radiusDimensions(node, context);
   applyEffects(settings, node, "container");
-  applyRotation(settings, node);
+  applyRotation(settings, node, parentBounds);
   if (bounds && node === context.root) settings.min_height = canvasSize(bounds.height, context);
   return settings;
 }
@@ -1701,11 +1705,11 @@ function previewNode(
     const imageManifest = asset.rendered ? null : figmaImageManifest(asset.paint);
     if (imageManifest) {
       if (imageManifest.mode === "tile") {
-        return `<div aria-label="${escapeAttribute(node.name)}" ${attributes} data-figmapress-kind="visual" data-figmapress-image-mode="tile" data-figmapress-image-source="native" style="${position};background-image:url(&quot;${escapeAttribute(asset.url)}&quot;);background-position:0 0;background-repeat:repeat;background-size:${round((imageManifest.scalingFactor ?? 1) * 100)}% auto;overflow:hidden;${previewRadius(node)}${previewTransform(node)}${previewEffects(node)}"></div>`;
+        return `<div aria-label="${escapeAttribute(node.name)}" ${attributes} data-figmapress-kind="visual" data-figmapress-image-mode="tile" data-figmapress-image-source="native" style="${position};background-image:url(&quot;${escapeAttribute(asset.url)}&quot;);background-position:0 0;background-repeat:repeat;background-size:${round((imageManifest.scalingFactor ?? 1) * 100)}% auto;overflow:hidden;${previewRadius(node)}${previewTransform(node, parentBounds)}${previewEffects(node)}"></div>`;
       }
-      return `<div aria-label="${escapeAttribute(node.name)}" ${attributes} data-figmapress-kind="visual" data-figmapress-image-mode="${imageManifest.mode}" data-figmapress-image-source="native" style="${position};overflow:hidden;${previewRadius(node)}${previewTransform(node)}${previewEffects(node)}"><img alt="${escapeAttribute(node.name)}" src="${escapeAttribute(asset.url)}" style="display:block;height:100%;max-width:none;object-fit:${imageObjectFit(asset)};object-position:center center;width:100%;${previewImagePaint(imageManifest)}" /></div>`;
+      return `<div aria-label="${escapeAttribute(node.name)}" ${attributes} data-figmapress-kind="visual" data-figmapress-image-mode="${imageManifest.mode}" data-figmapress-image-source="native" style="${position};overflow:hidden;${previewRadius(node)}${previewTransform(node, parentBounds)}${previewEffects(node)}"><img alt="${escapeAttribute(node.name)}" src="${escapeAttribute(asset.url)}" style="display:block;height:100%;max-width:none;object-fit:${imageObjectFit(asset)};object-position:center center;width:100%;${previewImagePaint(imageManifest)}" /></div>`;
     }
-    return `<img alt="${escapeAttribute(node.name)}" ${attributes} data-figmapress-kind="visual" data-figmapress-image-source="${asset.rendered ? "rendered" : "native"}" src="${escapeAttribute(asset.url)}" style="${position};object-fit:${imageObjectFit(asset)};object-position:center center;${previewRadius(node)}${previewTransform(node)}${previewEffects(node)}" />`;
+    return `<img alt="${escapeAttribute(node.name)}" ${attributes} data-figmapress-kind="visual" data-figmapress-image-source="${asset.rendered ? "rendered" : "native"}" src="${escapeAttribute(asset.url)}" style="${position};object-fit:${imageObjectFit(asset)};object-position:center center;${previewRadius(node)}${previewTransform(node, parentBounds)}${previewEffects(node)}" />`;
   }
 
   const backgroundPaint = ownImagePaint(node);
@@ -1734,12 +1738,12 @@ function previewNode(
       .map((run) => runHtml(run, context))
       .join("")
       .replace(/\n/g, "<br>");
-    return `<div ${attributes} data-figmapress-kind="text" style="${position};box-sizing:border-box;color:${escapeAttribute(solidColor(style.fills ?? node.fills) ?? "#111111")};display:flex;flex-direction:column;font-family:${escapeAttribute(cssFont(style.fontFamily))};font-size:calc(var(--figma-unit) * ${round(fontSize)});font-style:${style.italic ? "italic" : "normal"};font-weight:${round(style.fontWeight ?? 400)};hyphens:none;justify-content:${textVerticalAlign(style.textAlignVertical)};letter-spacing:calc(var(--figma-unit) * ${round(style.letterSpacing ?? 0)});line-break:strict;line-height:${round(textLineHeight(style, runs, fontSize) / fontSize)};max-width:100%;overflow:${textOverflow(node)};overflow-wrap:${textOverflowWrap(node)};text-align:${textAlign(style.textAlignHorizontal)};text-decoration:${textDecoration(style.textDecoration)};text-orientation:mixed;text-transform:${textTransform(style.textCase)};white-space:${textWhiteSpace(node)};word-break:${textWordBreak(node)};writing-mode:horizontal-tb;${previewTransform(node)}${previewEffects(node)}"><span style="display:block;font-size:0;line-height:0;max-width:100%">${content}</span></div>`;
+    return `<div ${attributes} data-figmapress-kind="text" style="${position};box-sizing:border-box;color:${escapeAttribute(solidColor(style.fills ?? node.fills) ?? "#111111")};display:flex;flex-direction:column;font-family:${escapeAttribute(cssFont(style.fontFamily))};font-size:calc(var(--figma-unit) * ${round(fontSize)});font-style:${style.italic ? "italic" : "normal"};font-weight:${round(style.fontWeight ?? 400)};hyphens:none;justify-content:${textVerticalAlign(style.textAlignVertical)};letter-spacing:calc(var(--figma-unit) * ${round(style.letterSpacing ?? 0)});line-break:strict;line-height:${round(textLineHeight(style, runs, fontSize) / fontSize)};max-width:100%;overflow:${textOverflow(node)};overflow-wrap:${textOverflowWrap(node)};text-align:${textAlign(style.textAlignHorizontal)};text-decoration:${textDecoration(style.textDecoration)};text-orientation:mixed;text-transform:${textTransform(style.textCase)};white-space:${textWhiteSpace(node)};word-break:${textWordBreak(node)};writing-mode:horizontal-tb;${previewTransform(node, parentBounds)}${previewEffects(node)}"><span style="display:block;font-size:0;line-height:0;max-width:100%">${content}</span></div>`;
   }
 
   const children = (node.children ?? []).map((child) => previewNode(child, bounds, node, context)).join("");
   if (!children && !background && !border) return "";
-  return `<div aria-label="${escapeAttribute(node.name)}" ${attributes} data-figmapress-kind="container" style="${position};${previewAutoLayout(node)}${background}${border}${previewRadius(node)}${overflow}${previewTransform(node)}${previewEffects(node)}">${children}</div>`;
+  return `<div aria-label="${escapeAttribute(node.name)}" ${attributes} data-figmapress-kind="container" style="${position};${previewAutoLayout(node)}${background}${border}${previewRadius(node)}${overflow}${previewTransform(node, parentBounds)}${previewEffects(node)}">${children}</div>`;
 }
 
 function previewNodeAttributes(node: FigmaNode): string {
@@ -2209,10 +2213,34 @@ function applyTypographyFlags(settings: ElementorSettings, style: FigmaTypeStyle
   if (decoration !== "none") settings.typography_text_decoration = decoration;
 }
 
-function applyRotation(settings: ElementorSettings, node: FigmaNode): void {
-  if (!node.rotation || Math.abs(node.rotation) < 0.001) return;
+export function figmaRotationShouldApply(
+  node: FigmaNode,
+  parentBounds?: FigmaBounds,
+): boolean {
+  if (!node.rotation || Math.abs(node.rotation) < 0.001) return false;
+  const bounds = node.absoluteBoundingBox;
+  if (!bounds || !parentBounds) return true;
+  const edgeTolerance = parentBounds.width * 0.02;
+  const fullBleedSolidRectangle = node.type === "RECTANGLE"
+    && Math.abs(node.rotation) <= 5
+    && Boolean(solidColor(node.fills))
+    && bounds.width >= parentBounds.width * 0.98
+    && bounds.x <= parentBounds.x + edgeTolerance
+    && bounds.x + bounds.width >= parentBounds.x + parentBounds.width - edgeTolerance;
+  // Figma's absoluteBoundingBox already encloses these clipped, full-bleed
+  // section backgrounds. Rotating that axis-aligned box again creates white
+  // triangles and diagonal section gaps that are absent from the Figma render.
+  return !fullBleedSolidRectangle;
+}
+
+function applyRotation(
+  settings: ElementorSettings,
+  node: FigmaNode,
+  parentBounds?: FigmaBounds,
+): void {
+  if (!figmaRotationShouldApply(node, parentBounds)) return;
   settings._transform_rotate_popover = "transform";
-  settings._transform_rotateZ_effect = size(node.rotation, "deg");
+  settings._transform_rotateZ_effect = size(node.rotation ?? 0, "deg");
 }
 
 function figmaEffects(node: FigmaNode): FigmaEffectsManifest | null {
@@ -2518,8 +2546,10 @@ function dimensions(
   };
 }
 
-function previewTransform(node: FigmaNode): string {
-  const rotation = node.rotation ? ` rotate(${round(node.rotation)}deg)` : "";
+function previewTransform(node: FigmaNode, parentBounds?: FigmaBounds): string {
+  const rotation = figmaRotationShouldApply(node, parentBounds)
+    ? ` rotate(${round(node.rotation ?? 0)}deg)`
+    : "";
   return `--figmapress-qa-global-transform:translate(0px,0px);--figmapress-qa-runtime-global-transform:translate(0px,0px);--figmapress-qa-local-transform:translate(0px,0px);--figmapress-qa-runtime-local-transform:translate(0px,0px);--figmapress-qa-geometry-transform:translate(0px,0px) scale(1,1);--figmapress-qa-runtime-geometry-transform:translate(0px,0px) scale(1,1);transform:var(--figmapress-qa-global-transform) var(--figmapress-qa-runtime-global-transform) var(--figmapress-qa-local-transform) var(--figmapress-qa-runtime-local-transform) var(--figmapress-qa-geometry-transform) var(--figmapress-qa-runtime-geometry-transform)${rotation};transform-origin:center;`;
 }
 
