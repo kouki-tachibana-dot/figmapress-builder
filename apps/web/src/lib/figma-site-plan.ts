@@ -61,22 +61,17 @@ function uniqueSlug(base: string, used: Set<string>): string {
  */
 export function createCandidateFigmaMultiPagePlan(
   candidates: FigmaPageCandidate[],
-  selectedFrameId: string,
+  _selectedFrameId: string,
   siteTitle: string,
 ): FigmaMultiPagePlan | null {
   const paired = candidates.filter((candidate) => candidate.desktop && candidate.mobile);
   const eligible = (paired.length >= 2 ? paired : candidates).slice(0, 20);
   if (eligible.length < 2) return null;
 
-  const selected = eligible.find((candidate) =>
-    candidate.id === selectedFrameId
-    || candidate.desktop?.id === selectedFrameId
-    || candidate.mobile?.id === selectedFrameId,
-  ) ?? eligible[0];
-  const ordered = [
-    selected,
-    ...eligible.filter((candidate) => candidate.id !== selected.id),
-  ];
+  // Candidate order follows the Figma canvas page order. Keep the first full
+  // PC/SP pair as Home even when a user previews another page immediately
+  // before switching to site mode; preview state must never rewrite topology.
+  const ordered = eligible;
   const used = new Set<string>(["home"]);
   return {
     title: siteTitle,
