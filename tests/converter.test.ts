@@ -1851,6 +1851,139 @@ test("business-site menu labels become editable page links", async () => {
   assert.equal(result.qualityReport?.metrics.navigationIntegrity.navigationLinks, 1);
 });
 
+test("generic corporate header groups become one desktop and mobile navigation widget", async () => {
+  const label = (
+    id: string,
+    characters: string,
+    x: number,
+    y: number,
+  ): FigmaNode => ({
+    id,
+    name: characters,
+    type: "TEXT",
+    characters,
+    absoluteBoundingBox: { x, y, width: 105, height: 24 },
+    style: { fontSize: 15, fontWeight: 600 },
+  });
+  const desktopLabels = [
+    ["HOME", 410],
+    ["会社案内", 530],
+    ["選ばれる理由", 650],
+    ["事業案内", 790],
+    ["施工事例", 910],
+    ["解体工事", 1030],
+    ["お知らせ", 1150],
+    ["役員一覧", 1270],
+  ] as const;
+  const file: MockFigmaFile = {
+    document: {
+      id: "0:0",
+      name: "建工101 generic layers",
+      type: "DOCUMENT",
+      children: [{
+        id: "1:0",
+        name: "Page",
+        type: "CANVAS",
+        children: [{
+          id: "10:1",
+          name: "PC ホーム",
+          type: "FRAME",
+          absoluteBoundingBox: { x: 0, y: 0, width: 1440, height: 1400 },
+          children: [{
+            id: "10:header",
+            name: "Group 85",
+            type: "FRAME",
+            absoluteBoundingBox: { x: 0, y: 0, width: 1440, height: 96 },
+            fills: [{ type: "SOLID", color: { r: 1, g: 1, b: 1 } }],
+            children: [{
+              id: "10:logo",
+              name: "Vector 12",
+              type: "RECTANGLE",
+              absoluteBoundingBox: { x: 28, y: 18, width: 210, height: 58 },
+              fills: [{ type: "SOLID", color: { r: 0.1, g: 0.1, b: 0.1 } }],
+            }, ...desktopLabels.map(([characters, x], index) =>
+              label(`10:menu:${index}`, characters, x, 36)
+            )],
+          }, {
+            id: "10:hero",
+            name: "Group 84",
+            type: "FRAME",
+            absoluteBoundingBox: { x: 0, y: 96, width: 1440, height: 500 },
+            children: [label("10:hero:title", "選ばれる理由", 120, 240)],
+          }, {
+            id: "10:footer",
+            name: "Group 900",
+            type: "FRAME",
+            absoluteBoundingBox: { x: 0, y: 1180, width: 1440, height: 220 },
+            children: desktopLabels.slice(0, 4).map(([characters, x], index) =>
+              label(`10:footer:${index}`, characters, x, 1240)
+            ),
+          }],
+        }, {
+          id: "10:2",
+          name: "SP ホーム",
+          type: "FRAME",
+          absoluteBoundingBox: { x: 2000, y: 0, width: 440, height: 1000 },
+          children: [{
+            id: "10:mobile-header",
+            name: "Group 85",
+            type: "FRAME",
+            absoluteBoundingBox: { x: 2000, y: 0, width: 440, height: 72 },
+            fills: [{ type: "SOLID", color: { r: 1, g: 1, b: 1 } }],
+            children: [{
+              id: "10:mobile-logo",
+              name: "Vector 12",
+              type: "RECTANGLE",
+              absoluteBoundingBox: { x: 2018, y: 15, width: 150, height: 42 },
+              fills: [{ type: "SOLID", color: { r: 0.1, g: 0.1, b: 0.1 } }],
+            }, ...[0, 1, 2].map((index): FigmaNode => ({
+              id: `10:hamburger:${index}`,
+              name: `Line ${index + 1}`,
+              type: "LINE",
+              absoluteBoundingBox: { x: 2388, y: 24 + index * 9, width: 28, height: 1 },
+              strokes: [{ type: "SOLID", color: { r: 0.1, g: 0.1, b: 0.1 } }],
+            }))],
+          }, {
+            id: "10:mobile-body",
+            name: "Group 84",
+            type: "FRAME",
+            absoluteBoundingBox: { x: 2000, y: 72, width: 440, height: 928 },
+            children: [label("10:mobile-title", "会社案内", 2020, 180)],
+          }],
+        }],
+      }],
+    },
+  };
+
+  const result = await convertFile(file);
+  const elements: typeof result.elementorTemplate.content = [];
+  const visit = (items: typeof result.elementorTemplate.content): void => {
+    for (const item of items) {
+      elements.push(item);
+      visit(item.elements);
+    }
+  };
+  visit(result.elementorTemplate.content);
+  const navigation = elements.filter((element) => element.widgetType === "figmapress-nav");
+  assert.equal(navigation.length, 2);
+  assert.deepEqual(
+    navigation.map((element) => element.settings.figmapress_node_id),
+    ["10:header", "10:mobile-header"],
+  );
+  assert.equal((navigation[0]?.settings.items as Array<unknown>).length, 8);
+  assert.equal((navigation[1]?.settings.items as Array<unknown>).length, 8);
+  assert.equal(
+    elements.filter((element) => element.settings.figmapress_node_id === "10:footer")[0]?.widgetType,
+    undefined,
+  );
+  assert.equal(result.qualityReport?.metrics.expectedFunctionalWidgets.navigation, 2);
+  assert.equal(result.qualityReport?.metrics.functionalWidgets.navigation, 2);
+  assert.equal(
+    result.qualityReport?.checks.find((check) => check.id === "interactions")?.status,
+    "pass",
+  );
+});
+
 test("cross-page Figma prototype links survive page pruning in Elementor and preview", async () => {
   const actionRoot = (
     id: string,

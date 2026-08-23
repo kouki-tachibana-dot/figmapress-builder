@@ -96,7 +96,7 @@ type PageTemplateEntry = {
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
-const APP_RELEASE = "0.26.62";
+const APP_RELEASE = "0.26.63";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -3572,7 +3572,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                       </button>
                       {sitePreflightResult && (
                         <p role="status">
-                          ✓ {sitePreflightResult.pages}/{multiPagePlan.pages.length}ページ合格・PC/SP精密表示 {sitePreflightResult.exactPages}ページ・リンク {sitePreflightResult.links}件・移動先 {sitePreflightResult.destinations}ページ
+                          ✓ {sitePreflightResult.pages}/{multiPagePlan.pages.length}ページ合格・PC/SP精密表示 {sitePreflightResult.exactPages}ページ・実動メニュー {sitePreflightResult.navigationPages}ページ/{sitePreflightResult.navigationWidgets}個・リンク {sitePreflightResult.links}件・移動先 {sitePreflightResult.destinations}ページ・フォーム {sitePreflightResult.contactForms}個
                         </p>
                       )}
                       {sitePreflightError && (
