@@ -549,6 +549,9 @@ function countFunctionalWidgets(elements: ElementorElement[]): {
     for (const item of items) {
       if (item.widgetType === "figmapress-nav") result.navigation += 1;
       if (item.widgetType === "figmapress-link") result.links += 1;
+      if (item.widgetType === "text-editor" && typeof item.settings.editor === "string") {
+        result.links += (item.settings.editor.match(/data-figmapress-functional-link/g) ?? []).length;
+      }
       if (item.widgetType === "figmapress-carousel") result.carousel += 1;
       if (item.widgetType === "figmapress-contact-form") result.contactForm += 1;
       if (item.widgetType === "figmapress-accordion") result.accordion += 1;
@@ -642,6 +645,11 @@ function inspectNavigationIntegrity(elements: ElementorElement[]): {
         }
         recordUrl(item.settings.cta_url);
         recordUrl(item.settings.home_url);
+      }
+      if (item.widgetType === "text-editor" && typeof item.settings.editor === "string") {
+        for (const match of item.settings.editor.matchAll(/href=["'](#[A-Za-z][\w:-]*)["']/g)) {
+          targets.push(match[1].slice(1));
+        }
       }
       visit(item.elements);
     }
