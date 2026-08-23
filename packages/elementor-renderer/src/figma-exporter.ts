@@ -43,7 +43,7 @@ interface RenderContext {
   variant: "single" | "desktop" | "mobile";
   anchorSuffix: string;
   fallbackMenuTexts: FigmaNode[];
-  navigationNodeId: string | null;
+  navigationNode: FigmaNode | null;
   anchorTargets: Map<string, SectionAnchor>;
   emittedAnchorIds: Set<string>;
 }
@@ -334,7 +334,7 @@ function createRenderContext(
     variant,
     anchorSuffix,
     fallbackMenuTexts,
-    navigationNodeId: findFigmaNavigationNode(root, fallbackMenuTexts)?.id ?? null,
+    navigationNode: findFigmaNavigationNode(root, fallbackMenuTexts),
     anchorTargets,
     emittedAnchorIds: new Set([`top${anchorSuffix}`]),
   };
@@ -346,7 +346,7 @@ function renderRootElement(
   visibility: ElementorSettings,
 ): ElementorElement {
   const rootBounds = context.rootBounds;
-  const children = (root.children ?? [])
+  const children = rootRenderNodes(root, context)
     .map((node) => renderElement(node, rootBounds, root, context))
     .filter((element): element is ElementorElement => element !== null)
     .map((element) => ({
@@ -387,7 +387,15 @@ function previewRoot(
   const background = gradient
     ? `background-image:${escapeAttribute(gradient)};`
     : `background:${escapeAttribute(solidColor(root.fills) ?? "#FFFFFF")};`;
-  return `<div class="figmapress-figma-preview${className}" data-figmapress-layout="${context.variant}" style="--figma-unit:calc(100cqw / ${round(rootBounds.width)});aspect-ratio:${round(rootBounds.width)}/${round(rootBounds.height)};${background}${previewAutoLayout(root)}${previewEffects(root)}">${(root.children ?? []).map((node) => previewNode(node, rootBounds, root, context)).join("")}</div>`;
+  return `<div class="figmapress-figma-preview${className}" data-figmapress-layout="${context.variant}" style="--figma-unit:calc(100cqw / ${round(rootBounds.width)});aspect-ratio:${round(rootBounds.width)}/${round(rootBounds.height)};${background}${previewAutoLayout(root)}${previewEffects(root)}">${rootRenderNodes(root, context).map((node) => previewNode(node, rootBounds, root, context)).join("")}</div>`;
+}
+
+function rootRenderNodes(root: FigmaNode, context: RenderContext): FigmaNode[] {
+  const children = root.children ?? [];
+  const navigation = context.navigationNode;
+  if (!navigation || children.some((child) => child.id === navigation.id)) return children;
+  const consumedIds = new Set((navigation.children ?? []).map((child) => child.id));
+  return [navigation, ...children.filter((child) => !consumedIds.has(child.id))];
 }
 
 function renderElement(
@@ -465,7 +473,7 @@ function navigationElement(
 ): ElementorElement | null {
   const localMenuTexts = navigationMenuTexts(node);
   const menuTexts = localMenuTexts.length >= 2 ? localMenuTexts : context.fallbackMenuTexts;
-  if (context.navigationNodeId !== node.id || menuTexts.length < 2) return null;
+  if (context.navigationNode?.id !== node.id || menuTexts.length < 2) return null;
 
   const navigationVisuals = descendants(node)
     .filter((child) => child.absoluteBoundingBox && visualUrl(child, context.assets))
@@ -1158,6 +1166,45 @@ function looksLikeTopNavigationGeometry(node: FigmaNode, root: FigmaNode): boole
     && bounds.height <= shallowLimit;
 }
 
+function looseRootNavigationNode(
+  root: FigmaNode,
+  fallbackMenuTexts: FigmaNode[],
+): FigmaNode | null {
+  const rootBounds = root.absoluteBoundingBox;
+  if (!rootBounds || fallbackMenuTexts.length < 2) return null;
+  const headerHeight = Math.min(
+    rootBounds.width <= 767 ? 104 : 180,
+    Math.max(72, rootBounds.width * (rootBounds.width <= 767 ? 0.22 : 0.125)),
+  );
+  const headerBottom = rootBounds.y + headerHeight;
+  const topChildren = (root.children ?? []).filter((child) => {
+    const bounds = child.absoluteBoundingBox;
+    if (child.visible === false || !bounds) return false;
+    return bounds.y < headerBottom
+      && bounds.y + bounds.height <= rootBounds.y + headerHeight * 1.65
+      && bounds.height <= headerHeight * 1.5;
+  });
+  const localMenuTexts = topChildren.filter(isNavigationText);
+  const visualEvidence = topChildren.filter((child) => child.type !== "TEXT").length;
+  const inferredDesktop = localMenuTexts.length >= 3;
+  const inferredCollapsed = localMenuTexts.length < 2
+    && fallbackMenuTexts.length >= 3
+    && visualEvidence >= 2;
+  if (!(inferredDesktop || inferredCollapsed)) return null;
+  return {
+    id: `${root.id}:figmapress-navigation`,
+    name: "{wp:nav} inferred loose header",
+    type: "FRAME",
+    absoluteBoundingBox: {
+      x: rootBounds.x,
+      y: rootBounds.y,
+      width: rootBounds.width,
+      height: headerHeight,
+    },
+    children: topChildren,
+  };
+}
+
 /**
  * Find one outer header/navigation container without requiring designers to
  * rename Figma groups. Corporate files commonly use names such as `Group 85`;
@@ -1196,7 +1243,7 @@ export function findFigmaNavigationNode(
     })
     .filter((entry): entry is { node: FigmaNode; score: number; area: number } => Boolean(entry))
     .sort((left, right) => right.score - left.score || right.area - left.area);
-  return candidates[0]?.node ?? null;
+  return candidates[0]?.node ?? looseRootNavigationNode(root, fallbackMenuTexts);
 }
 
 function menuAnchor(label: string, context: RenderContext): string {

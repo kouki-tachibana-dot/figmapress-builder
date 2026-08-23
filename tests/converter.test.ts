@@ -1984,6 +1984,114 @@ test("generic corporate header groups become one desktop and mobile navigation w
   );
 });
 
+test("ungrouped root-level corporate headers are synthesized without duplicating loose labels", async () => {
+  const label = (
+    id: string,
+    characters: string,
+    x: number,
+    y: number,
+  ): FigmaNode => ({
+    id,
+    name: characters,
+    type: "TEXT",
+    characters,
+    absoluteBoundingBox: { x, y, width: 110, height: 24 },
+    style: { fontSize: 15, fontWeight: 600 },
+  });
+  const menuLabels = ["HOME", "会社案内", "選ばれる理由", "事業案内", "施工事例"];
+  const file: MockFigmaFile = {
+    document: {
+      id: "0:0",
+      name: "建工101 loose header",
+      type: "DOCUMENT",
+      children: [{
+        id: "1:0",
+        name: "Page",
+        type: "CANVAS",
+        children: [{
+          id: "20:1",
+          name: "PC ホーム",
+          type: "FRAME",
+          absoluteBoundingBox: { x: 0, y: 0, width: 1440, height: 1300 },
+          children: [{
+            id: "20:logo",
+            name: "logo 1",
+            type: "RECTANGLE",
+            absoluteBoundingBox: { x: 24, y: 20, width: 220, height: 54 },
+            fills: [{ type: "SOLID", color: { r: 0.12, g: 0.12, b: 0.12 } }],
+          }, ...menuLabels.map((characters, index) =>
+            label(`20:menu:${index}`, characters, 500 + index * 140, 36)
+          ), {
+            id: "20:hero",
+            name: "Hero image",
+            type: "RECTANGLE",
+            absoluteBoundingBox: { x: 0, y: 96, width: 1440, height: 680 },
+            fills: [{ type: "SOLID", color: { r: 0.8, g: 0.8, b: 0.8 } }],
+          }, {
+            id: "20:footer",
+            name: "Group 256",
+            type: "FRAME",
+            absoluteBoundingBox: { x: 0, y: 1100, width: 1440, height: 200 },
+            children: menuLabels.map((characters, index) =>
+              label(`20:footer:${index}`, characters, 100 + index * 180, 1160)
+            ),
+          }],
+        }, {
+          id: "20:2",
+          name: "SP ホーム",
+          type: "FRAME",
+          absoluteBoundingBox: { x: 2000, y: 0, width: 440, height: 1000 },
+          children: [{
+            id: "20:mobile-logo",
+            name: "logo 1",
+            type: "RECTANGLE",
+            absoluteBoundingBox: { x: 2018, y: 14, width: 150, height: 42 },
+            fills: [{ type: "SOLID", color: { r: 0.12, g: 0.12, b: 0.12 } }],
+          }, ...[0, 1, 2].map((index): FigmaNode => ({
+            id: `20:mobile-line:${index}`,
+            name: `Line ${index + 1}`,
+            type: "LINE",
+            absoluteBoundingBox: { x: 2388, y: 23 + index * 9, width: 28, height: 1 },
+            strokes: [{ type: "SOLID", color: { r: 0.12, g: 0.12, b: 0.12 } }],
+          })), {
+            id: "20:mobile-hero",
+            name: "Hero image",
+            type: "RECTANGLE",
+            absoluteBoundingBox: { x: 2000, y: 72, width: 440, height: 500 },
+            fills: [{ type: "SOLID", color: { r: 0.8, g: 0.8, b: 0.8 } }],
+          }],
+        }],
+      }],
+    },
+  };
+
+  const result = await convertFile(file);
+  const elements: typeof result.elementorTemplate.content = [];
+  const visit = (items: typeof result.elementorTemplate.content): void => {
+    for (const item of items) {
+      elements.push(item);
+      visit(item.elements);
+    }
+  };
+  visit(result.elementorTemplate.content);
+  const navigation = elements.filter((element) => element.widgetType === "figmapress-nav");
+  assert.equal(navigation.length, 2);
+  assert.deepEqual(
+    navigation.map((element) => element.settings.figmapress_node_id),
+    ["20:1:figmapress-navigation", "20:2:figmapress-navigation"],
+  );
+  assert.equal((navigation[0]?.settings.items as Array<unknown>).length, 5);
+  assert.equal((navigation[1]?.settings.items as Array<unknown>).length, 5);
+  assert.equal(
+    elements.some((element) => element.settings.figmapress_node_id === "20:menu:1"),
+    false,
+  );
+  assert.ok(elements.some((element) => element.settings.figmapress_node_id === "20:hero"));
+  assert.ok(elements.some((element) => element.settings.figmapress_node_id === "20:footer"));
+  assert.equal(result.qualityReport?.metrics.expectedFunctionalWidgets.navigation, 2);
+  assert.equal(result.qualityReport?.metrics.functionalWidgets.navigation, 2);
+});
+
 test("cross-page Figma prototype links survive page pruning in Elementor and preview", async () => {
   const actionRoot = (
     id: string,
