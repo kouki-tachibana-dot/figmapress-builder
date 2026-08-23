@@ -96,7 +96,7 @@ type PageTemplateEntry = {
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
-const APP_RELEASE = "0.26.61";
+const APP_RELEASE = "0.26.62";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -1775,7 +1775,8 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       requestedPages: FigmaSitePagePlan[],
     ): Promise<PageTemplateEntry[]> => {
       const candidateMode = requestedPages.every((page) => page.frameId);
-      for (let attempt = 0; attempt < 3; attempt += 1) {
+      const maxAttempts = candidateMode ? 4 : 3;
+      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
         const response = await fetch("/api/convert/page", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1812,8 +1813,18 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
             ...await requestBatch(requestedPages.slice(middle)),
           ];
         }
-        if ([429, 502, 503, 504].includes(response.status) && attempt < 2) {
-          await new Promise((resolve) => window.setTimeout(resolve, 4_000 * (attempt + 1)));
+        if (
+          [429, 502, 503, 504].includes(response.status)
+          && attempt < maxAttempts - 1
+        ) {
+          if (onPage && requestedPages[0]) {
+            setSitePreflightProgress(
+              `${1 + sitePreflightTemplates.current.size}/${output?.multiPagePlan?.pages.length ?? "?"}ページを確認済み・「${requestedPages[0].title}」を自動再取得中`,
+            );
+          }
+          await new Promise((resolve) =>
+            window.setTimeout(resolve, 12_000 * (attempt + 1)),
+          );
           continue;
         }
         const data = await readApi<{ ok: true; pages: PageTemplateEntry[] }>(response);
