@@ -337,7 +337,7 @@ a { color: inherit; }
 .visual-qa-correction-summary .actual-visual-qa-details ul { color: #b9d7cc; font-size: 8px; line-height: 1.55; padding-left: 18px; }
 .visual-qa-progress { align-items: center; background: #15343f; border-radius: 14px; color: #b8c8cd; display: flex; font-size: 11px; gap: 10px; margin-top: 24px; padding: 18px; }
 .visual-qa-progress .spinner { border-color: rgba(255,255,255,.22); border-top-color: var(--lime); }
-.visual-qa-results { display: grid; gap: 15px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 28px; }
+.visual-qa-results { display: grid; gap: 15px; grid-template-columns: 1fr; margin-top: 28px; }
 .visual-qa-result { background: #f8faf8; border: 1px solid #d9e1de; border-top: 4px solid #f3a749; border-radius: 16px; color: var(--ink); overflow: hidden; padding: 22px; }
 .visual-qa-result.is-pass { border-top-color: #9bcb4b; }
 .visual-qa-result.is-fail { border-top-color: var(--coral); }
@@ -381,6 +381,12 @@ a { color: inherit; }
 .visual-qa-diff { border-top: 1px solid #dce4e1; margin-top: 17px; padding-top: 13px; }
 .visual-qa-diff summary { color: #365a69; cursor: pointer; font-size: 9px; font-weight: 800; }
 .visual-qa-diff img { background: #fff; border: 1px solid #d3ddda; border-radius: 8px; display: block; height: auto; margin-top: 12px; width: 100%; }
+.visual-qa-comparison { border-top: 1px solid #dce4e1; margin-top: 17px; padding-top: 13px; }
+.visual-qa-comparison summary { color: #264f60; cursor: pointer; font-size: 10px; font-weight: 900; }
+.visual-qa-comparison > div { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 12px; }
+.visual-qa-comparison figure { margin: 0; min-width: 0; }
+.visual-qa-comparison figcaption { background: #264f60; border-radius: 7px 7px 0 0; color: #fff; font-size: 9px; font-weight: 800; padding: 7px 9px; }
+.visual-qa-comparison img { background: #fff; border: 1px solid #d3ddda; border-radius: 0 0 7px 7px; display: block; height: auto; width: 100%; }
 
 .wordpress-card { margin: 22px auto 0; max-width: 1260px; padding: clamp(25px, 4vw, 42px); }
 .wordpress-card__intro { align-items: center; display: flex; gap: 18px; margin-bottom: 28px; }
@@ -512,6 +518,7 @@ footer > div:last-child a, footer > div:last-child span { color: #83969d; font-s
   .output-card { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
   .download-list { border-left: 1px solid #e1e5e2; border-top: 0; margin: 0; padding: 0 0 0 22px; }
   .visual-qa-results { grid-template-columns: 1fr; }
+  .visual-qa-comparison > div { grid-template-columns: 1fr; }
   .form-grid--three { grid-template-columns: 1fr 1fr; }
   .form-grid--three .field:first-child { grid-column: 1 / -1; }
 }
