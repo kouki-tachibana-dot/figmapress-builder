@@ -25,7 +25,7 @@ function exactPreviewRoot(
   const modifier = variant === "mobile"
     ? " figmapress-figma-preview--mobile"
     : " figmapress-figma-preview--desktop";
-  return `<div class="figmapress-figma-preview figmapress-exact-preview${modifier}" data-figmapress-layout="${variant}" style="aspect-ratio:${reference.width}/${reference.height};background:#fff"><img alt="${escapeAttribute(`${reference.name} ${variant === "mobile" ? "スマホ" : "PC"}精密表示`)}" data-figmapress-kind="visual" data-figmapress-exact-snapshot="true" src="${escapeAttribute(reference.url)}" style="display:block;height:100%;object-fit:fill;width:100%" /></div>`;
+  return `<div class="figmapress-figma-preview figmapress-exact-preview${modifier}" data-figmapress-layout="${variant}" style="aspect-ratio:${reference.width}/${reference.height};background:#fff"><img alt="${escapeAttribute(`${reference.name} ${variant === "mobile" ? "スマホ" : "PC"}精密表示`)}" data-figmapress-kind="visual" data-figmapress-exact-snapshot="true" data-figmapress-reference-node-id="${escapeAttribute(reference.nodeId)}" src="${escapeAttribute(reference.url)}" style="display:block;height:100%;object-fit:fill;width:100%" /></div>`;
 }
 
 function exactImageWidget(

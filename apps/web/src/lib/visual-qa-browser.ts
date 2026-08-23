@@ -302,11 +302,7 @@ function verifiedExactSnapshot(
   ) {
     return null;
   }
-  const expectedSource = new URL(
-    proxiedImageUrl(reference.url),
-    window.location.href,
-  ).toString();
-  if (image.currentSrc !== expectedSource && image.src !== expectedSource) {
+  if (image.dataset.figmapressReferenceNodeId !== reference.nodeId) {
     return null;
   }
   const rootRect = visiblePreview.getBoundingClientRect();
