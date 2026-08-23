@@ -43,6 +43,7 @@ interface RenderContext {
   variant: "single" | "desktop" | "mobile";
   anchorSuffix: string;
   fallbackMenuTexts: FigmaNode[];
+  navigationNodeId: string | null;
   anchorTargets: Map<string, SectionAnchor>;
   emittedAnchorIds: Set<string>;
 }
@@ -226,7 +227,7 @@ export class FigmaElementorExporter {
     }
 
     const ids = new ElementIdFactory();
-    const fallbackMenuTexts = navigationMenuTexts(root);
+    const fallbackMenuTexts = findFigmaNavigationMenuTexts(root);
     const responsive = Boolean(roots.mobile?.absoluteBoundingBox);
     const content: ElementorElement[] = [
       renderRootElement(
@@ -286,7 +287,7 @@ export function renderFigmaPreview(
   const rootBounds = root?.absoluteBoundingBox;
   if (!root || !rootBounds) return null;
   const ids = new ElementIdFactory();
-  const fallbackMenuTexts = navigationMenuTexts(root);
+  const fallbackMenuTexts = findFigmaNavigationMenuTexts(root);
   const responsive = Boolean(roots.mobile?.absoluteBoundingBox);
   const desktop = previewRoot(
     root,
@@ -333,6 +334,7 @@ function createRenderContext(
     variant,
     anchorSuffix,
     fallbackMenuTexts,
+    navigationNodeId: findFigmaNavigationNode(root, fallbackMenuTexts)?.id ?? null,
     anchorTargets,
     emittedAnchorIds: new Set([`top${anchorSuffix}`]),
   };
@@ -463,8 +465,7 @@ function navigationElement(
 ): ElementorElement | null {
   const localMenuTexts = navigationMenuTexts(node);
   const menuTexts = localMenuTexts.length >= 2 ? localMenuTexts : context.fallbackMenuTexts;
-  const explicitlyNamed = /(?:\{wp:nav\}|header.*(?:sec|section)|navigation)/i.test(node.name);
-  if (!explicitlyNamed || menuTexts.length < 2) return null;
+  if (context.navigationNodeId !== node.id || menuTexts.length < 2) return null;
 
   const navigationVisuals = descendants(node)
     .filter((child) => child.absoluteBoundingBox && visualUrl(child, context.assets))
@@ -1095,16 +1096,107 @@ function isInsideInteractionBounds(node: FigmaNode, interaction: FigmaBounds): b
     && centerY >= interaction.y && centerY <= interaction.y + interaction.height;
 }
 
+const NAVIGATION_NODE_NAME = /(?:\{wp:nav\}|header.*(?:sec|section)|navigation)/i;
+const NAVIGATION_TEXT_NAME = /(?:menu.?item|nav.?item|メニュー)/i;
+const SEMANTIC_NAVIGATION_LABEL = /^(?:home|top|ホーム|トップ|会社案内|選ばれる理由|事業(?:内容|案内)|施工事例|解体工事|役員一覧|お知らせ|お問い合わせ|想い|政策|活動報告|プロフィール|company|about|reasons?|strength|services?|business|works?|projects?|construction|demolition|news|topics?|officers?|executives?|board|thoughts?|polic(?:y|ies)|activit(?:y|ies)|reports?|profile|contact)$/i;
+
+function navigationTextKey(node: FigmaNode): string {
+  const copy = node.characters?.trim() ?? "";
+  return sectionAnchorFromText(copy) ?? copy.toLocaleLowerCase();
+}
+
+function isNavigationText(node: FigmaNode): boolean {
+  const copy = node.characters?.trim() ?? "";
+  return node.type === "TEXT"
+    && Boolean(copy)
+    && Boolean(node.absoluteBoundingBox)
+    && (NAVIGATION_TEXT_NAME.test(node.name) || SEMANTIC_NAVIGATION_LABEL.test(copy));
+}
+
 function navigationMenuTexts(node: FigmaNode): FigmaNode[] {
+  const seen = new Set<string>();
   return descendants(node)
-    .filter((child) => child.type === "TEXT" && /(?:menu.?item|nav.?item|メニュー)/i.test(child.name))
-    .filter((child) => child.characters?.trim() && child.absoluteBoundingBox)
+    .filter(isNavigationText)
     .sort((left, right) => {
       const y = (left.absoluteBoundingBox?.y ?? 0) - (right.absoluteBoundingBox?.y ?? 0);
       return Math.abs(y) > 12
         ? y
         : (left.absoluteBoundingBox?.x ?? 0) - (right.absoluteBoundingBox?.x ?? 0);
+    })
+    .filter((child) => {
+      const key = navigationTextKey(child);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
     });
+}
+
+export function findFigmaNavigationMenuTexts(root: FigmaNode): FigmaNode[] {
+  const rootBounds = root.absoluteBoundingBox;
+  if (!rootBounds) return navigationMenuTexts(root);
+  const topLimit = rootBounds.y + Math.min(320, Math.max(96, rootBounds.width * 0.28));
+  const topTextIds = new Set(
+    descendants(root)
+      .filter(isNavigationText)
+      .filter((child) => (child.absoluteBoundingBox?.y ?? Number.POSITIVE_INFINITY) < topLimit)
+      .map((child) => child.id),
+  );
+  return navigationMenuTexts(root).filter((child) => topTextIds.has(child.id));
+}
+
+function looksLikeTopNavigationGeometry(node: FigmaNode, root: FigmaNode): boolean {
+  const bounds = node.absoluteBoundingBox;
+  const rootBounds = root.absoluteBoundingBox;
+  if (!bounds || !rootBounds || node.id === root.id) return false;
+  const topOffset = bounds.y - rootBounds.y;
+  const widthRatio = bounds.width / rootBounds.width;
+  const shallowLimit = Math.min(320, Math.max(96, rootBounds.width * 0.28));
+  return topOffset >= -2
+    && topOffset <= Math.min(120, rootBounds.width * 0.1)
+    && widthRatio >= 0.68
+    && bounds.height >= 32
+    && bounds.height <= shallowLimit;
+}
+
+/**
+ * Find one outer header/navigation container without requiring designers to
+ * rename Figma groups. Corporate files commonly use names such as `Group 85`;
+ * position, geometry and visible page labels are therefore first-class clues.
+ */
+export function findFigmaNavigationNode(
+  root: FigmaNode,
+  fallbackMenuTexts: FigmaNode[] = findFigmaNavigationMenuTexts(root),
+): FigmaNode | null {
+  const rootBounds = root.absoluteBoundingBox;
+  if (!rootBounds || fallbackMenuTexts.length < 2) return null;
+  const candidates = descendants(root)
+    .filter((node) => node.visible !== false && node.absoluteBoundingBox)
+    .map((node) => {
+      const bounds = node.absoluteBoundingBox as FigmaBounds;
+      const localMenuTexts = navigationMenuTexts(node);
+      const explicitlyNamed = NAVIGATION_NODE_NAME.test(node.name);
+      const topGeometry = looksLikeTopNavigationGeometry(node, root);
+      const descendantsCount = descendants(node).filter((child) => child.visible !== false).length;
+      const inferredDesktop = topGeometry && localMenuTexts.length >= 3;
+      const inferredCollapsed = topGeometry
+        && localMenuTexts.length < 2
+        && fallbackMenuTexts.length >= 3
+        && descendantsCount >= 2;
+      if (!(explicitlyNamed || inferredDesktop || inferredCollapsed)) return null;
+      if (!explicitlyNamed && !topGeometry) return null;
+      const widthRatio = bounds.width / rootBounds.width;
+      const topOffset = Math.max(0, bounds.y - rootBounds.y);
+      const score = (explicitlyNamed ? 1_000 : 0)
+        + localMenuTexts.length * 80
+        + widthRatio * 100
+        + Math.min(40, descendantsCount * 2)
+        - topOffset
+        - Math.abs(bounds.height - Math.min(120, rootBounds.width * 0.09)) * 0.08;
+      return { node, score, area: bounds.width * bounds.height };
+    })
+    .filter((entry): entry is { node: FigmaNode; score: number; area: number } => Boolean(entry))
+    .sort((left, right) => right.score - left.score || right.area - left.area);
+  return candidates[0]?.node ?? null;
 }
 
 function menuAnchor(label: string, context: RenderContext): string {

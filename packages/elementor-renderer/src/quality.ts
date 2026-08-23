@@ -2,7 +2,12 @@ import type {
   FigmaNode,
   MockFigmaFile,
 } from "@figmapress/figma-parser";
-import { figmaTextShouldWrap, findFigmaResponsiveRoots } from "./figma-exporter";
+import {
+  figmaTextShouldWrap,
+  findFigmaNavigationMenuTexts,
+  findFigmaNavigationNode,
+  findFigmaResponsiveRoots,
+} from "./figma-exporter";
 import type { FigmaRenderAssets } from "./figma-exporter";
 import type {
   ElementorElement,
@@ -578,6 +583,7 @@ function countExpectedFunctionalWidgets(roots: FigmaNode[]): {
   accordion: number;
 } {
   const result = { navigation: 0, carousel: 0, contactForm: 0, accordion: 0 };
+  const fallbackMenuTexts = roots[0] ? findFigmaNavigationMenuTexts(roots[0]) : [];
   const countOutermostMatches = (
     root: FigmaNode,
     matches: (node: FigmaNode) => boolean,
@@ -595,13 +601,7 @@ function countExpectedFunctionalWidgets(roots: FigmaNode[]): {
     return count;
   };
   for (const root of roots) {
-    result.navigation += countOutermostMatches(root, (node) => {
-      if (!/(?:\{wp:nav\}|header.*(?:sec|section)|navigation)/i.test(node.name)) return false;
-      const menuLabels = [node, ...nodeDescendants(node)]
-        .filter((child) => child.type === "TEXT" && child.characters?.trim())
-        .filter((child) => /想い|政策|活動報告|プロフィール|thought|polic|activit|profile/i.test(child.characters ?? ""));
-      return menuLabels.length >= 2;
-    });
+    result.navigation += findFigmaNavigationNode(root, fallbackMenuTexts) ? 1 : 0;
     result.carousel += countOutermostMatches(root, (node) =>
       /(?:\{wp:carousel\}|carousel|slider|スライダー|カルーセル)/i.test(node.name)
       && !/(?:item|prev|previous|next|arrow|dot|項目|前へ|次へ)/i.test(node.name)
