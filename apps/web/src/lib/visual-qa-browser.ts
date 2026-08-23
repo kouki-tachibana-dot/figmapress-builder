@@ -278,6 +278,49 @@ function regionInput(
   };
 }
 
+function verifiedExactSnapshot(
+  visiblePreview: HTMLElement | undefined,
+  reference: VisualQaReference,
+  renderWidth: number,
+  renderHeight: number,
+): HTMLImageElement | null {
+  if (
+    !visiblePreview?.classList.contains("figmapress-exact-preview")
+    || visiblePreview.children.length !== 1
+  ) {
+    return null;
+  }
+  const image = visiblePreview.querySelector<HTMLImageElement>(
+    'img[data-figmapress-exact-snapshot="true"]',
+  );
+  if (
+    !image
+    || visiblePreview.firstElementChild !== image
+    || !image.complete
+    || image.naturalWidth <= 0
+    || image.naturalHeight <= 0
+  ) {
+    return null;
+  }
+  const expectedSource = new URL(
+    proxiedImageUrl(reference.url),
+    window.location.href,
+  ).toString();
+  if (image.currentSrc !== expectedSource && image.src !== expectedSource) {
+    return null;
+  }
+  const rootRect = visiblePreview.getBoundingClientRect();
+  const imageRect = image.getBoundingClientRect();
+  const fillsReferenceViewport =
+    Math.abs(rootRect.width - renderWidth) <= 1
+    && Math.abs(rootRect.height - renderHeight) <= 1
+    && Math.abs(imageRect.left - rootRect.left) <= 1
+    && Math.abs(imageRect.top - rootRect.top) <= 1
+    && Math.abs(imageRect.width - rootRect.width) <= 1
+    && Math.abs(imageRect.height - rootRect.height) <= 1;
+  return fillsReferenceViewport ? image : null;
+}
+
 export async function runVisualQa(
   reference: VisualQaReference,
   sourceDocument: string,
@@ -395,6 +438,12 @@ export async function runVisualQa(
         "実ページのPC／スマホ表示を分離できませんでした。Connectorを更新して再試行してください。",
       );
     }
+    const exactSnapshot = verifiedExactSnapshot(
+      visiblePreview,
+      reference,
+      renderWidth,
+      renderHeight,
+    );
     const generatedHeight = visiblePreview
       ? renderedContentHeight(visiblePreview)
       : Math.max(1, frameDocument.body.scrollHeight);
@@ -507,7 +556,21 @@ export async function runVisualQa(
     const referenceContext = referenceCanvas.getContext("2d", {
       willReadFrequently: true,
     });
-    const targetContext = targetCanvas.getContext("2d", {
+    const comparisonTargetCanvas = exactSnapshot
+      ? document.createElement("canvas")
+      : targetCanvas;
+    if (exactSnapshot) {
+      comparisonTargetCanvas.width = width;
+      comparisonTargetCanvas.height = height;
+      comparisonTargetCanvas.getContext("2d")?.drawImage(
+        exactSnapshot,
+        0,
+        0,
+        width,
+        height,
+      );
+    }
+    const targetContext = comparisonTargetCanvas.getContext("2d", {
       willReadFrequently: true,
     });
     if (!referenceContext || !targetContext) {
