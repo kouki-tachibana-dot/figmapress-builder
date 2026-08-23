@@ -25,7 +25,7 @@ function exactPreviewRoot(
   const modifier = variant === "mobile"
     ? " figmapress-figma-preview--mobile"
     : " figmapress-figma-preview--desktop";
-  return `<div class="figmapress-figma-preview figmapress-exact-preview${modifier}" data-figmapress-layout="${variant}" style="aspect-ratio:${reference.width}/${reference.height};background:#fff"><img alt="${escapeAttribute(`${reference.name} ${variant === "mobile" ? "スマホ" : "PC"}精密表示`)}" data-figmapress-kind="visual" data-figmapress-exact-snapshot="true" data-figmapress-reference-node-id="${escapeAttribute(reference.nodeId)}" src="${escapeAttribute(reference.url)}" style="display:block;height:100%;object-fit:fill;width:100%" /></div>`;
+  return `<div class="figmapress-figma-preview figmapress-exact-preview${modifier}" data-figmapress-layout="${variant}" style="aspect-ratio:${reference.width}/${reference.height};background:#fff"><img alt="" aria-hidden="true" data-figmapress-kind="visual" data-figmapress-exact-snapshot="true" data-figmapress-reference-node-id="${escapeAttribute(reference.nodeId)}" src="${escapeAttribute(reference.url)}" style="display:block;height:100%;object-fit:fill;width:100%" /></div>`;
 }
 
 function exactImageWidget(
@@ -129,7 +129,7 @@ export function applyExactVisualPresentation(
 
   return {
     ...output,
-    previewHtml: `<div class="figmapress-exact-stack">${exactPreview}<div class="figmapress-exact-editable-source" aria-hidden="true">${nativePreview}</div></div>`,
+    previewHtml: `<div class="figmapress-exact-stack">${exactPreview}<div class="figmapress-exact-interaction-layer">${nativePreview}</div></div>`,
     elementorTemplate: {
       ...output.elementorTemplate,
       page_settings: {

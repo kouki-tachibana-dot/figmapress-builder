@@ -15,6 +15,10 @@ import type {
 export interface FigmaRenderAssets {
   imageUrls?: Record<string, string>;
   renderedNodeUrls?: Record<string, string>;
+  /** Prototype destinations outside the currently converted PC/SP pair. */
+  linkTargets?: Record<string, string>;
+  /** Semantic page keys used by inferred menus and CTAs in a multi-page site. */
+  pageTargets?: Record<string, string>;
 }
 
 export type SectionAnchor =
@@ -1133,6 +1137,8 @@ function anchorId(value: string, context: RenderContext): string {
 }
 
 function anchorHref(value: string, context: RenderContext): string {
+  const pageTarget = context.assets.pageTargets?.[value];
+  if (pageTarget) return pageTarget;
   return `#${anchorId(value, context)}`;
 }
 
@@ -1202,6 +1208,14 @@ function functionalLink(
           if (anchor) {
             return {
               url: anchorHref(anchor, context),
+              label: actionLabel(node),
+              external: false,
+            };
+          }
+          const crossPageUrl = context.assets.linkTargets?.[action.destinationId]?.trim();
+          if (crossPageUrl) {
+            return {
+              url: crossPageUrl,
               label: actionLabel(node),
               external: false,
             };
@@ -1528,6 +1542,11 @@ function imageElement(
   }
   const imageManifest = asset.rendered ? null : figmaImageManifest(asset.paint);
   if (imageManifest) settings.figmapress_image = imageManifest;
+  const action = functionalLink(node, context);
+  if (action) {
+    settings.link_to = "custom";
+    settings.link = elementorUrl(action);
+  }
   applyEffects(settings, node, "image");
   applyRotation(settings, node, parentBounds);
   return widget(context.ids, node.id, "image", settings);
@@ -1705,11 +1724,11 @@ function previewNode(
     const imageManifest = asset.rendered ? null : figmaImageManifest(asset.paint);
     if (imageManifest) {
       if (imageManifest.mode === "tile") {
-        return `<div aria-label="${escapeAttribute(node.name)}" ${attributes} data-figmapress-kind="visual" data-figmapress-image-mode="tile" data-figmapress-image-source="native" style="${position};background-image:url(&quot;${escapeAttribute(asset.url)}&quot;);background-position:0 0;background-repeat:repeat;background-size:${round((imageManifest.scalingFactor ?? 1) * 100)}% auto;overflow:hidden;${previewRadius(node)}${previewTransform(node, parentBounds)}${previewEffects(node)}"></div>`;
+        return previewActionWrapper(`<div aria-label="${escapeAttribute(node.name)}" ${attributes} data-figmapress-kind="visual" data-figmapress-image-mode="tile" data-figmapress-image-source="native" style="${position};background-image:url(&quot;${escapeAttribute(asset.url)}&quot;);background-position:0 0;background-repeat:repeat;background-size:${round((imageManifest.scalingFactor ?? 1) * 100)}% auto;overflow:hidden;${previewRadius(node)}${previewTransform(node, parentBounds)}${previewEffects(node)}"></div>`, node, functionalLink(node, context));
       }
-      return `<div aria-label="${escapeAttribute(node.name)}" ${attributes} data-figmapress-kind="visual" data-figmapress-image-mode="${imageManifest.mode}" data-figmapress-image-source="native" style="${position};overflow:hidden;${previewRadius(node)}${previewTransform(node, parentBounds)}${previewEffects(node)}"><img alt="${escapeAttribute(node.name)}" src="${escapeAttribute(asset.url)}" style="display:block;height:100%;max-width:none;object-fit:${imageObjectFit(asset)};object-position:center center;width:100%;${previewImagePaint(imageManifest)}" /></div>`;
+      return previewActionWrapper(`<div aria-label="${escapeAttribute(node.name)}" ${attributes} data-figmapress-kind="visual" data-figmapress-image-mode="${imageManifest.mode}" data-figmapress-image-source="native" style="${position};overflow:hidden;${previewRadius(node)}${previewTransform(node, parentBounds)}${previewEffects(node)}"><img alt="${escapeAttribute(node.name)}" src="${escapeAttribute(asset.url)}" style="display:block;height:100%;max-width:none;object-fit:${imageObjectFit(asset)};object-position:center center;width:100%;${previewImagePaint(imageManifest)}" /></div>`, node, functionalLink(node, context));
     }
-    return `<img alt="${escapeAttribute(node.name)}" ${attributes} data-figmapress-kind="visual" data-figmapress-image-source="${asset.rendered ? "rendered" : "native"}" src="${escapeAttribute(asset.url)}" style="${position};object-fit:${imageObjectFit(asset)};object-position:center center;${previewRadius(node)}${previewTransform(node, parentBounds)}${previewEffects(node)}" />`;
+    return previewActionWrapper(`<img alt="${escapeAttribute(node.name)}" ${attributes} data-figmapress-kind="visual" data-figmapress-image-source="${asset.rendered ? "rendered" : "native"}" src="${escapeAttribute(asset.url)}" style="${position};object-fit:${imageObjectFit(asset)};object-position:center center;${previewRadius(node)}${previewTransform(node, parentBounds)}${previewEffects(node)}" />`, node, functionalLink(node, context));
   }
 
   const backgroundPaint = ownImagePaint(node);
@@ -1738,12 +1757,25 @@ function previewNode(
       .map((run) => runHtml(run, context))
       .join("")
       .replace(/\n/g, "<br>");
-    return `<div ${attributes} data-figmapress-kind="text" style="${position};box-sizing:border-box;color:${escapeAttribute(solidColor(style.fills ?? node.fills) ?? "#111111")};display:flex;flex-direction:column;font-family:${escapeAttribute(cssFont(style.fontFamily))};font-size:calc(var(--figma-unit) * ${round(fontSize)});font-style:${style.italic ? "italic" : "normal"};font-weight:${round(style.fontWeight ?? 400)};hyphens:none;justify-content:${textVerticalAlign(style.textAlignVertical)};letter-spacing:calc(var(--figma-unit) * ${round(style.letterSpacing ?? 0)});line-break:strict;line-height:${round(textLineHeight(style, runs, fontSize) / fontSize)};max-width:100%;overflow:${textOverflow(node)};overflow-wrap:${textOverflowWrap(node)};text-align:${textAlign(style.textAlignHorizontal)};text-decoration:${textDecoration(style.textDecoration)};text-orientation:mixed;text-transform:${textTransform(style.textCase)};white-space:${textWhiteSpace(node)};word-break:${textWordBreak(node)};writing-mode:horizontal-tb;${previewTransform(node, parentBounds)}${previewEffects(node)}"><span style="display:block;font-size:0;line-height:0;max-width:100%">${content}</span></div>`;
+    return previewActionWrapper(`<div ${attributes} data-figmapress-kind="text" style="${position};box-sizing:border-box;color:${escapeAttribute(solidColor(style.fills ?? node.fills) ?? "#111111")};display:flex;flex-direction:column;font-family:${escapeAttribute(cssFont(style.fontFamily))};font-size:calc(var(--figma-unit) * ${round(fontSize)});font-style:${style.italic ? "italic" : "normal"};font-weight:${round(style.fontWeight ?? 400)};hyphens:none;justify-content:${textVerticalAlign(style.textAlignVertical)};letter-spacing:calc(var(--figma-unit) * ${round(style.letterSpacing ?? 0)});line-break:strict;line-height:${round(textLineHeight(style, runs, fontSize) / fontSize)};max-width:100%;overflow:${textOverflow(node)};overflow-wrap:${textOverflowWrap(node)};text-align:${textAlign(style.textAlignHorizontal)};text-decoration:${textDecoration(style.textDecoration)};text-orientation:mixed;text-transform:${textTransform(style.textCase)};white-space:${textWhiteSpace(node)};word-break:${textWordBreak(node)};writing-mode:horizontal-tb;${previewTransform(node, parentBounds)}${previewEffects(node)}"><span style="display:block;font-size:0;line-height:0;max-width:100%">${content}</span></div>`, node, functionalLink(node, context));
   }
 
   const children = (node.children ?? []).map((child) => previewNode(child, bounds, node, context)).join("");
-  if (!children && !background && !border) return "";
-  return `<div aria-label="${escapeAttribute(node.name)}" ${attributes} data-figmapress-kind="container" style="${position};${previewAutoLayout(node)}${background}${border}${previewRadius(node)}${overflow}${previewTransform(node, parentBounds)}${previewEffects(node)}">${children}</div>`;
+  const action = functionalLink(node, context);
+  if (!children && !background && !border && !action) return "";
+  const link = action
+    ? `<a data-figmapress-preview-link href="${escapeAttribute(action.url)}" aria-label="${escapeAttribute(action.label)}"${action.external ? ' target="_blank" rel="noopener noreferrer"' : ""} style="display:block;inset:0;position:absolute;z-index:20"></a>`
+    : "";
+  return `<div aria-label="${escapeAttribute(node.name)}" ${attributes} data-figmapress-kind="container" style="${position};${previewAutoLayout(node)}${background}${border}${previewRadius(node)}${overflow}${previewTransform(node, parentBounds)}${previewEffects(node)}">${children}${link}</div>`;
+}
+
+function previewActionWrapper(
+  content: string,
+  node: FigmaNode,
+  action: FunctionalLink | null,
+): string {
+  if (!action) return content;
+  return `<a data-figmapress-preview-link href="${escapeAttribute(action.url)}" aria-label="${escapeAttribute(action.label || node.name)}"${action.external ? ' target="_blank" rel="noopener noreferrer"' : ""} style="display:contents">${content}</a>`;
 }
 
 function previewNodeAttributes(node: FigmaNode): string {

@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createCandidateFigmaMultiPagePlan } from "../apps/web/src/lib/figma-site-plan";
+import {
+  createCandidateFigmaMultiPagePlan,
+  createCandidatePageLinkTargets,
+} from "../apps/web/src/lib/figma-site-plan";
 import type { FigmaPageCandidate } from "../apps/web/src/lib/figma-frame-selection";
 
 function paired(id: number, title: string): FigmaPageCandidate {
@@ -77,4 +80,20 @@ test("unpaired component scraps are excluded when complete page pairs exist", ()
   ];
   const plan = createCandidateFigmaMultiPagePlan(candidates, "10:1", "建工101");
   assert.deepEqual(plan?.pages.map((page) => page.key), ["home", "company"]);
+});
+
+test("prototype destinations keep stable logical links for every PC and SP frame", () => {
+  const candidates = [
+    paired(10, "ホーム"),
+    paired(20, "会社案内"),
+    paired(30, "お問い合わせ"),
+  ];
+  const plan = createCandidateFigmaMultiPagePlan(candidates, "10:2", "建工101");
+  const targets = createCandidatePageLinkTargets(candidates, plan);
+  assert.equal(targets["10:1"], "#figmapress-page-home");
+  assert.equal(targets["10:2"], "#figmapress-page-home");
+  assert.equal(targets["20:1"], "#figmapress-page-company");
+  assert.equal(targets["20:2"], "#figmapress-page-company");
+  assert.equal(targets["30:1"], "#figmapress-page-contact");
+  assert.equal(targets["30:2"], "#figmapress-page-contact");
 });

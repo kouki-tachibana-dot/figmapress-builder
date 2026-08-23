@@ -3,8 +3,10 @@ import { z } from "zod";
 import type { MockFigmaFile } from "@figmapress/figma-parser";
 import {
   FigmaElementorExporter,
+  createFigmaQualityReport,
   createFigmaMultiPagePlan,
   createFigmaSitePageTemplate,
+  type FigmaMultiPagePlan,
 } from "@figmapress/elementor-renderer";
 import {
   FIGMA_OAUTH_SESSION_COOKIE,
@@ -20,6 +22,10 @@ import {
   pruneFigmaDocumentToFrames,
   selectedFigmaFrameIds,
 } from "@/lib/figma-frame-selection";
+import {
+  createCandidatePageLinkTargets,
+  createSemanticPageLinkTargets,
+} from "@/lib/figma-site-plan";
 import {
   RequestError,
   clientIp,
@@ -38,16 +44,21 @@ const PageKeysSchema = z.array(PageKeySchema).min(1).max(5).refine(
   (keys) => new Set(keys).size === keys.length,
   "ページ指定が重複しています。",
 );
-const CandidatePagesSchema = z.array(z.object({
+const CandidatePageSchema = z.object({
   key: z.string().regex(/^(?:home|[a-z0-9][a-z0-9-]{0,79})$/),
   title: z.string().trim().min(1).max(160),
   slug: z.string().trim().min(1).max(80),
   frameId: z.string().regex(/^[0-9]+:[0-9]+$/),
   hasDesktop: z.boolean(),
   hasMobile: z.boolean(),
-}).strict()).min(1).max(2).refine(
+}).strict();
+const CandidatePagesSchema = z.array(CandidatePageSchema).min(1).max(2).refine(
   (pages) => new Set(pages.map((page) => page.key)).size === pages.length,
   "ページ指定が重複しています。",
+);
+const SitePagesSchema = z.array(CandidatePageSchema).min(2).max(20).refine(
+  (pages) => new Set(pages.map((page) => page.key)).size === pages.length,
+  "サイト内のページ指定が重複しています。",
 );
 const RequestSchema = z.discriminatedUnion("mode", [
   z.object({
@@ -64,6 +75,7 @@ const RequestSchema = z.discriminatedUnion("mode", [
     selectedFrameId: z.string().regex(/^[0-9]+:[0-9]+$/).optional(),
     pageKeys: PageKeysSchema.optional(),
     candidatePages: CandidatePagesSchema.optional(),
+    sitePages: SitePagesSchema.optional(),
   }).strict(),
 ]).refine(
   (value) => value.mode === "json"
@@ -117,16 +129,34 @@ export async function POST(request: Request): Promise<Response> {
             page.frameId,
             { includeVisualReferences: false },
           );
+          const sitePages = figmaRequest.sitePages ?? figmaRequest.candidatePages ?? [];
+          const sitePlan: FigmaMultiPagePlan = {
+            title: fetched.fileName,
+            menuName: `${fetched.fileName}｜FigmaPress`,
+            pages: sitePages,
+          };
+          const assets = {
+            imageUrls: fetched.imageUrls,
+            renderedNodeUrls: fetched.renderedNodeUrls,
+            linkTargets: createCandidatePageLinkTargets(
+              fetched.pageCandidates,
+              sitePlan,
+            ),
+            pageTargets: createSemanticPageLinkTargets(sitePlan),
+          };
+          const elementorTemplate = new FigmaElementorExporter().toTemplate(
+            fetched.file,
+            page.title,
+            assets,
+          );
           return {
             page,
-            elementorTemplate: new FigmaElementorExporter().toTemplate(
+            elementorTemplate,
+            linkIntegrity: createFigmaQualityReport(
               fetched.file,
-              page.title,
-              {
-                imageUrls: fetched.imageUrls,
-                renderedNodeUrls: fetched.renderedNodeUrls,
-              },
-            ),
+              elementorTemplate,
+              assets,
+            ).metrics.navigationIntegrity,
           };
         }));
         const responseBody = { ok: true, pages };

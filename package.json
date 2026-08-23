@@ -1,6 +1,6 @@
 {
   "name": "figmapress-builder",
-  "version": "0.26.54",
+  "version": "0.26.55",
   "private": true,
   "packageManager": "npm@10.9.4",
   "engines": {
@@ -17,6 +17,8 @@
     "start:web": "npm run start --workspace=@figmapress/web",
     "lint": "npm run lint --workspace=@figmapress/web",
     "test": "tsx --test tests/*.test.ts",
+    "test:links": "tsx --test tests/figma-site-plan.test.ts tests/multipage.test.ts",
+    "test:product": "npm test && npm run typecheck && npm run lint && npm run build:web",
     "generate:blueprint": "tsx scripts/generate-blueprint.ts",
     "render:blocks": "tsx scripts/render-blocks.ts",
     "generate:theme": "tsx scripts/generate-theme.ts",
