@@ -1214,8 +1214,16 @@ function functionalLink(
           }
           const crossPageUrl = context.assets.linkTargets?.[action.destinationId]?.trim();
           if (crossPageUrl) {
+            const semanticTargetKey = sectionAnchorFromText(actionLabel(node));
+            const semanticTarget = semanticTargetKey
+              ? context.assets.pageTargets?.[semanticTargetKey]?.trim()
+              : "";
             return {
-              url: crossPageUrl,
+              // Business-site files often contain stale prototype wires after
+              // a menu label is renamed. A known visible page label is safer
+              // than a conflicting frame ID; generic CTAs still use the
+              // explicit Figma destination.
+              url: semanticTarget || crossPageUrl,
               label: actionLabel(node),
               external: false,
             };
@@ -1235,7 +1243,10 @@ function functionalLink(
       .join(" ");
   const description = `${node.name} ${copy}`.trim();
   const email = description.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0];
-  const phone = description.match(/(?:\+?\d[\d\s().-]{8,}\d)/)?.[0];
+  const phoneSource = /(?:tel(?:ephone)?|phone|電話)/i.test(node.name)
+    ? description
+    : copy;
+  const phone = phoneSource.match(/(?:\+?\d[\d\s().-]{8,}\d)/)?.[0];
   const explicitlyActionable = /(?:button|cta|link|card|電話|メール|privacy|トップ|menu.?item|nav.?item)/i.test(node.name)
     || (
       node.type === "TEXT"
