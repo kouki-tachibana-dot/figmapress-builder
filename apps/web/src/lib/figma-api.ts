@@ -452,33 +452,46 @@ async function fetchVisualReferences(
     const rendered = await Promise.all(roots.map(async (node) => {
       const bounds = node.absoluteBoundingBox;
       if (!bounds) return null;
-      // Browser Visual QA compares desktop pages at 800px and mobile pages at
-      // 440px. Ask Figma for a lossless reference at that same width so the
-      // score measures layout differences instead of JPEG compression and a
-      // second resampling pass. Keeping the rendered reference below four
-      // million pixels also bounds download size for very long pages.
-      const preferredWidth = bounds.width <= 768 ? 440 : 800;
-      const widthScale = Math.min(1, preferredWidth / bounds.width);
-      const pixelScale = Math.min(
+      const mobileFrame = bounds.width <= 768;
+      const losslessWidthScale = Math.min(
+        1,
+        (mobileFrame ? 440 : 800) / bounds.width,
+      );
+      const losslessPixelScale = Math.min(
         1,
         Math.sqrt(4_000_000 / (bounds.width * bounds.height)),
       );
-      // Figma refuses some lossless renders whose longest edge exceeds its
-      // raster limit even when their total pixel count is modest.
-      const dimensionScale = Math.min(
-        1,
-        4_096 / Math.max(bounds.width, bounds.height),
-      );
-      const scale = Math.max(
+      const losslessScale = Math.max(
         0.01,
-        Math.min(widthScale, pixelScale, dimensionScale),
+        Math.min(losslessWidthScale, losslessPixelScale),
       );
-      const requestScale = Math.round(scale * 1_000) / 1_000;
+      const losslessLongestEdge = Math.max(bounds.width, bounds.height)
+        * losslessScale;
+      const jpegScale = Math.max(
+        0.01,
+        Math.min(
+          1,
+          (mobileFrame ? 440 : 960) / bounds.width,
+          Math.sqrt(8_000_000 / (bounds.width * bounds.height)),
+        ),
+      );
+      const attempts: Array<{ format: "png" | "jpg"; scale: number }> = [];
+      // Figma currently rejects lossless renders whose longest edge exceeds
+      // 4096px even when the total pixel count is small. Long pages go
+      // directly through the proven JPEG path instead of consuming a failed
+      // render request and then hitting the API rate limit on the fallback.
+      if (losslessLongestEdge <= 4_096) {
+        attempts.push({ format: "png", scale: losslessScale });
+      }
+      attempts.push({ format: "jpg", scale: jpegScale });
+
       let image: string | null = null;
-      for (const format of ["png", "jpg"] as const) {
+      let renderedScale = 1;
+      for (const attempt of attempts) {
+        const requestScale = Math.round(attempt.scale * 1_000) / 1_000;
         const query = new URLSearchParams({
           ids: node.id,
-          format,
+          format: attempt.format,
           scale: String(requestScale),
           use_absolute_bounds: "true",
         });
@@ -492,6 +505,7 @@ async function fetchVisualReferences(
         const candidate = data.images[node.id];
         if (typeof candidate === "string") {
           image = candidate;
+          renderedScale = requestScale;
           break;
         }
       }
@@ -500,8 +514,8 @@ async function fetchVisualReferences(
         nodeId: node.id,
         name: node.name,
         url: image,
-        width: Math.max(1, Math.round(bounds.width * requestScale)),
-        height: Math.max(1, Math.round(bounds.height * requestScale)),
+        width: Math.max(1, Math.round(bounds.width * renderedScale)),
+        height: Math.max(1, Math.round(bounds.height * renderedScale)),
       };
     }));
     const references = new Map(
