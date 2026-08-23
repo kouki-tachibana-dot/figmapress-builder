@@ -86,7 +86,7 @@ type OutputTarget = "gutenberg" | "elementor";
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
-const APP_RELEASE = "0.26.48";
+const APP_RELEASE = "0.26.49";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -337,6 +337,23 @@ interface PreviewTextCount {
 interface PreviewTextIntegrity extends PreviewTextCount {
   source: string;
   variants?: Partial<Record<"desktop" | "mobile", PreviewTextCount>>;
+}
+
+type VisualQaCorrectionKind =
+  | "wholePage"
+  | "section"
+  | "text"
+  | "media"
+  | "decoration";
+
+function initialVisualQaCorrectionAttempts(): Record<VisualQaCorrectionKind, boolean> {
+  return {
+    wholePage: false,
+    section: false,
+    text: false,
+    media: false,
+    decoration: false,
+  };
 }
 
 function countPaintedText(
@@ -870,6 +887,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const [visualQaBaselineScores, setVisualQaBaselineScores] = useState<
     Partial<Record<"desktop" | "mobile", number>>
   >({});
+  const [visualQaCorrectionAttempts, setVisualQaCorrectionAttempts] = useState(
+    initialVisualQaCorrectionAttempts,
+  );
   const [draftRequestId, setDraftRequestId] = useState("");
   const [conversionSourceKey, setConversionSourceKey] = useState<string | undefined>();
   const [baseUrl, setBaseUrl] = useState("");
@@ -1034,16 +1054,20 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const visualQaBlocksDraft = visualQaGate.blocksDraft;
   const visualQaCorrectionCandidates = safeVisualCorrections(visualQaResults);
   const visualQaSectionCorrectionCandidates =
-    visualQaCorrectionCandidates.length > 0 && visualQaCorrections.length === 0
+    visualQaCorrectionCandidates.length > 0
+      && visualQaCorrections.length === 0
+      && !visualQaCorrectionAttempts.wholePage
       ? []
       : safeSectionVisualCorrections(visualQaResults);
   const visualQaTextGeometryCorrectionCandidates =
     (
       visualQaCorrectionCandidates.length > 0
       && visualQaCorrections.length === 0
+      && !visualQaCorrectionAttempts.wholePage
     ) || (
       visualQaSectionCorrectionCandidates.length > 0
       && visualQaSectionCorrections.length === 0
+      && !visualQaCorrectionAttempts.section
     )
       ? []
       : safeTextGeometryCorrections(visualQaResults);
@@ -1051,12 +1075,15 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     (
       visualQaCorrectionCandidates.length > 0
       && visualQaCorrections.length === 0
+      && !visualQaCorrectionAttempts.wholePage
     ) || (
       visualQaSectionCorrectionCandidates.length > 0
       && visualQaSectionCorrections.length === 0
+      && !visualQaCorrectionAttempts.section
     ) || (
       visualQaTextGeometryCorrectionCandidates.length > 0
       && visualQaTextGeometryCorrections.length === 0
+      && !visualQaCorrectionAttempts.text
     )
       ? []
       : safeMediaGeometryCorrections(visualQaResults);
@@ -1064,21 +1091,32 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     (
       visualQaCorrectionCandidates.length > 0
       && visualQaCorrections.length === 0
+      && !visualQaCorrectionAttempts.wholePage
     ) || (
       visualQaSectionCorrectionCandidates.length > 0
       && visualQaSectionCorrections.length === 0
+      && !visualQaCorrectionAttempts.section
     ) || (
       visualQaTextGeometryCorrectionCandidates.length > 0
       && visualQaTextGeometryCorrections.length === 0
+      && !visualQaCorrectionAttempts.text
     ) || (
       visualQaMediaGeometryCorrectionCandidates.length > 0
       && visualQaMediaGeometryCorrections.length === 0
+      && !visualQaCorrectionAttempts.media
     )
       ? []
       : safeDecorationGeometryCorrections(visualQaResults);
 
   function updateFigmaToken(value: string) {
     writeFigmaToken(value);
+  }
+
+  function markVisualQaCorrectionAttempt(kind: VisualQaCorrectionKind) {
+    setVisualQaCorrectionAttempts((current) => ({
+      ...current,
+      [kind]: true,
+    }));
   }
 
   function changeSourceMode(nextMode: SourceMode) {
@@ -1150,6 +1188,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     setVisualQaMediaGeometryCorrections([]);
     setVisualQaDecorationGeometryCorrections([]);
     setVisualQaBaselineScores({});
+    setVisualQaCorrectionAttempts(initialVisualQaCorrectionAttempts());
 
     try {
       let body: Record<string, unknown>;
@@ -2275,6 +2314,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     if (
       !output
       || visualQaBusy
+      || visualQaCorrectionAttempts.wholePage
       || visualQaCorrections.length > 0
       || !visualQaCorrectionCandidates.length
     ) {
@@ -2282,6 +2322,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     }
 
     const baselineOutput = output;
+    markVisualQaCorrectionAttempt("wholePage");
     const baselineResults = visualQaResults;
     const corrections = visualQaCorrectionCandidates;
     const correctedOutput: ConversionResult = {
@@ -2327,6 +2368,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     if (
       !output
       || visualQaBusy
+      || visualQaCorrectionAttempts.section
       || visualQaSectionCorrections.length > 0
       || !visualQaSectionCorrectionCandidates.length
     ) {
@@ -2334,6 +2376,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     }
 
     const baselineOutput = output;
+    markVisualQaCorrectionAttempt("section");
     const baselineResults = visualQaResults;
     const corrections = visualQaSectionCorrectionCandidates;
     const correctedOutput: ConversionResult = {
@@ -2380,6 +2423,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     if (
       !output
       || visualQaBusy
+      || visualQaCorrectionAttempts.text
       || visualQaTextGeometryCorrections.length > 0
       || !visualQaTextGeometryCorrectionCandidates.length
     ) {
@@ -2387,6 +2431,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     }
 
     const baselineOutput = output;
+    markVisualQaCorrectionAttempt("text");
     const baselineResults = visualQaResults;
     const corrections = visualQaTextGeometryCorrectionCandidates;
     const correctedOutput: ConversionResult = {
@@ -2433,6 +2478,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     if (
       !output
       || visualQaBusy
+      || visualQaCorrectionAttempts.media
       || visualQaMediaGeometryCorrections.length > 0
       || !visualQaMediaGeometryCorrectionCandidates.length
     ) {
@@ -2440,6 +2486,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     }
 
     const baselineOutput = output;
+    markVisualQaCorrectionAttempt("media");
     const baselineResults = visualQaResults;
     const corrections = visualQaMediaGeometryCorrectionCandidates;
     const correctedOutput: ConversionResult = {
@@ -2486,6 +2533,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     if (
       !output
       || visualQaBusy
+      || visualQaCorrectionAttempts.decoration
       || visualQaDecorationGeometryCorrections.length > 0
       || !visualQaDecorationGeometryCorrectionCandidates.length
     ) {
@@ -2493,6 +2541,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     }
 
     const baselineOutput = output;
+    markVisualQaCorrectionAttempt("decoration");
     const baselineResults = visualQaResults;
     const corrections = visualQaDecorationGeometryCorrectionCandidates;
     const correctedOutput: ConversionResult = {
@@ -2945,7 +2994,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                 </div>
                 {visualQaResults.length > 0 && (
                   <div className="visual-qa-card__actions">
-                    {visualQaCorrectionCandidates.length > 0 && visualQaCorrections.length === 0 && (
+                    {visualQaCorrectionCandidates.length > 0 && visualQaCorrections.length === 0 && !visualQaCorrectionAttempts.wholePage && (
                       <button
                         disabled={visualQaBusy}
                         onClick={applySafeVisualCorrections}
@@ -2954,7 +3003,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                         安全補正を適用して再測定
                       </button>
                     )}
-                    {visualQaSectionCorrectionCandidates.length > 0 && visualQaSectionCorrections.length === 0 && (
+                    {visualQaSectionCorrectionCandidates.length > 0 && visualQaSectionCorrections.length === 0 && !visualQaCorrectionAttempts.section && (
                       <button
                         disabled={visualQaBusy}
                         onClick={applySafeSectionVisualCorrections}
@@ -2963,7 +3012,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                         セクション補正を適用して再測定
                       </button>
                     )}
-                    {visualQaTextGeometryCorrectionCandidates.length > 0 && visualQaTextGeometryCorrections.length === 0 && (
+                    {visualQaTextGeometryCorrectionCandidates.length > 0 && visualQaTextGeometryCorrections.length === 0 && !visualQaCorrectionAttempts.text && (
                       <button
                         disabled={visualQaBusy}
                         onClick={applySafeTextGeometryCorrections}
@@ -2972,7 +3021,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                         文字寸法補正を適用して再測定
                       </button>
                     )}
-                    {visualQaMediaGeometryCorrectionCandidates.length > 0 && visualQaMediaGeometryCorrections.length === 0 && (
+                    {visualQaMediaGeometryCorrectionCandidates.length > 0 && visualQaMediaGeometryCorrections.length === 0 && !visualQaCorrectionAttempts.media && (
                       <button
                         disabled={visualQaBusy}
                         onClick={applySafeMediaGeometryCorrections}
@@ -2981,7 +3030,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                         画像補正を適用して再測定
                       </button>
                     )}
-                    {visualQaDecorationGeometryCorrectionCandidates.length > 0 && visualQaDecorationGeometryCorrections.length === 0 && (
+                    {visualQaDecorationGeometryCorrectionCandidates.length > 0 && visualQaDecorationGeometryCorrections.length === 0 && !visualQaCorrectionAttempts.decoration && (
                       <button
                         disabled={visualQaBusy}
                         onClick={applySafeDecorationGeometryCorrections}
