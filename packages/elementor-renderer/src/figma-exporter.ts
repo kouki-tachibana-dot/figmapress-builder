@@ -1725,9 +1725,15 @@ function previewNode(
     const style = node.style ?? {};
     const runs = textRuns(node);
     const fontSize = textFontSize(style, runs, bounds);
-    const content = runs.length > 1
-      ? runs.map((run) => runHtml(run, context)).join("").replace(/\n/g, "<br>")
-      : escapeHtml(node.characters ?? "").replace(/\n/g, "<br>");
+    // The wrapper intentionally has a zero font size so adjacent rich-text
+    // runs do not inherit stray whitespace. Every run therefore has to restore
+    // its own typography, including ordinary single-style text. Returning raw
+    // text for a single run made most headings, body copy, nav labels and CTA
+    // text exist in the DOM but render at 0px in the page preview.
+    const content = runs
+      .map((run) => runHtml(run, context))
+      .join("")
+      .replace(/\n/g, "<br>");
     return `<div ${attributes} data-figmapress-kind="text" style="${position};box-sizing:border-box;color:${escapeAttribute(solidColor(style.fills ?? node.fills) ?? "#111111")};display:flex;flex-direction:column;font-family:${escapeAttribute(cssFont(style.fontFamily))};font-size:calc(var(--figma-unit) * ${round(fontSize)});font-style:${style.italic ? "italic" : "normal"};font-weight:${round(style.fontWeight ?? 400)};hyphens:none;justify-content:${textVerticalAlign(style.textAlignVertical)};letter-spacing:calc(var(--figma-unit) * ${round(style.letterSpacing ?? 0)});line-break:strict;line-height:${round(textLineHeight(style, runs, fontSize) / fontSize)};max-width:100%;overflow:${textOverflow(node)};overflow-wrap:${textOverflowWrap(node)};text-align:${textAlign(style.textAlignHorizontal)};text-decoration:${textDecoration(style.textDecoration)};text-orientation:mixed;text-transform:${textTransform(style.textCase)};white-space:${textWhiteSpace(node)};word-break:${textWordBreak(node)};writing-mode:horizontal-tb;${previewTransform(node)}${previewEffects(node)}"><span style="display:block;font-size:0;line-height:0;max-width:100%">${content}</span></div>`;
   }
 

@@ -313,6 +313,10 @@ test("real Figma bounds produce a high-fidelity editable Elementor document", as
   assert.deepEqual(portrait?.settings.height, { unit: "vw", size: 36.458, sizes: [] });
   assert.equal(portrait?.settings._position, "absolute");
   assert.match(result.previewHtml, /明石をずーっと元気なまちに/);
+  assert.match(
+    result.previewHtml,
+    /font-size:0;line-height:0;max-width:100%"><span style="[^\"]*font-size:3\.333vw/,
+  );
   assert.match(result.previewHtml, /data-figmapress-node-name="Main heading"/);
   assert.match(result.previewHtml, /data-figmapress-kind="text"/);
   assert.match(result.previewHtml, /writing-mode:horizontal-tb/);

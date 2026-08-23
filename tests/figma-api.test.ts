@@ -147,6 +147,8 @@ test("long visual references skip lossless renders that exceed Figma's edge limi
   );
 
   assert.equal(result.visualReferences.desktop?.height, 5372);
+  assert.equal(result.visualReferences.desktop?.sourceWidth, 1440);
+  assert.equal(result.visualReferences.desktop?.sourceHeight, 8058);
   assert.equal(result.visualReferences.desktop?.format, "jpg");
   assert.ok(!requested.some((url) =>
     url.includes("/v1/images/") && url.includes("format=png"),

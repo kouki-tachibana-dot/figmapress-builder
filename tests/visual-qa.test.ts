@@ -55,6 +55,8 @@ test("browser Visual QA waits for the srcdoc DOM separately from slow media", as
   assert.match(source, /Promise\.all\(\[\s*html2canvas/);
   assert.match(source, /loadReferenceImage\(reference\.url\)/);
   assert.match(source, /`width:\$\{renderWidth\}px`/);
+  assert.match(source, /reference\.sourceWidth/);
+  assert.match(source, /reference\.sourceHeight/);
   assert.match(source, /scale: captureScale/);
   assert.match(source, /referenceImageUrl: referenceCanvas\.toDataURL/);
   assert.match(source, /previewImageUrl: targetCanvas\.toDataURL/);
