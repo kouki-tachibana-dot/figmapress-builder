@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore, type ChangeEvent, type FormEvent, type MouseEvent } from "react";
+import {
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type ChangeEvent,
+  type FormEvent,
+  type MouseEvent,
+  type SyntheticEvent,
+} from "react";
 import {
   applyElementorDecorationGeometryCorrections,
   applyElementorMediaGeometryCorrections,
@@ -78,6 +86,7 @@ type OutputTarget = "gutenberg" | "elementor";
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
+const APP_RELEASE = "0.26.46";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -318,6 +327,38 @@ interface FigmaFrameSelectionResult {
   ok: true;
   selectionRequired: true;
   candidates: FigmaPageCandidate[];
+}
+
+interface PreviewTextIntegrity {
+  source: string;
+  total: number;
+  visible: number;
+}
+
+function inspectPreviewTextIntegrity(
+  frame: HTMLIFrameElement,
+): Omit<PreviewTextIntegrity, "source"> | null {
+  const document = frame.contentDocument;
+  if (!document) return null;
+  const boxes = Array.from(
+    document.querySelectorAll<HTMLElement>('[data-figmapress-kind="text"]'),
+  ).filter((element) => element.textContent?.trim());
+  let visible = 0;
+  for (const box of boxes) {
+    const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT);
+    const textNodes: Text[] = [];
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (node.textContent?.trim()) textNodes.push(node as Text);
+    }
+    const everyTextRunPainted = textNodes.length > 0 && textNodes.every((node) => {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const rect = range.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    });
+    if (everyTextRunPainted) visible += 1;
+  }
+  return { total: boxes.length, visible };
 }
 
 interface WordPressResult {
@@ -740,6 +781,12 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const [visualQaError, setVisualQaError] = useState("");
   const [visualQaResults, setVisualQaResults] = useState<VisualQaBrowserResult[]>([]);
   const [visualQaAcknowledged, setVisualQaAcknowledged] = useState(false);
+  const [previewTextIntegrity, setPreviewTextIntegrity] =
+    useState<PreviewTextIntegrity | null>(null);
+  const [staleReleaseDetected] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return new URL(window.location.href).searchParams.get("release") !== APP_RELEASE;
+  });
   const [visualQaCorrections, setVisualQaCorrections] = useState<ElementorVisualCorrection[]>([]);
   const [visualQaSectionCorrections, setVisualQaSectionCorrections] = useState<
     ElementorSectionVisualCorrection[]
@@ -765,6 +812,14 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     WordPressConnectionProfile[]
   >([]);
   const [confirmed, setConfirmed] = useState(false);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("release") !== APP_RELEASE) {
+      url.searchParams.set("release", APP_RELEASE);
+      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -836,6 +891,16 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         output.elementorTemplate.page_settings.figmapress_webfonts,
       )
     : "";
+  const currentPreviewTextIntegrity = previewTextIntegrity?.source === srcDoc
+    ? previewTextIntegrity
+    : null;
+
+  const handlePreviewLoad = (event: SyntheticEvent<HTMLIFrameElement>) => {
+    const integrity = inspectPreviewTextIntegrity(event.currentTarget);
+    setPreviewTextIntegrity(integrity
+      ? { ...integrity, source: event.currentTarget.srcdoc }
+      : null);
+  };
   const connectorSupportsInteractions = wpStatus?.functionalWidgets
     ? wpStatus.functionalWidgets.navigation
       && wpStatus.functionalWidgets.links === true
@@ -2407,7 +2472,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v0.26.45 live</span>
+          <span className="status-pill"><i /> v{APP_RELEASE} live</span>
         </nav>
       </header>
 
@@ -2689,7 +2754,29 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                 <span>ページプレビュー</span>
                 <div className="browser-dots"><i /><i /><i /></div>
               </div>
-              <iframe sandbox="" srcDoc={srcDoc} title="生成ページのプレビュー" />
+              <iframe
+                onLoad={handlePreviewLoad}
+                sandbox="allow-same-origin"
+                srcDoc={srcDoc}
+                title="生成ページのプレビュー"
+              />
+              {currentPreviewTextIntegrity && (
+                <p
+                  className={`preview-text-integrity${currentPreviewTextIntegrity.visible === currentPreviewTextIntegrity.total ? " is-pass" : " is-fail"}`}
+                  role="status"
+                >
+                  {currentPreviewTextIntegrity.visible === currentPreviewTextIntegrity.total ? "✓" : "!"}
+                  {" "}文字表示 {currentPreviewTextIntegrity.visible}/{currentPreviewTextIntegrity.total}
+                  {currentPreviewTextIntegrity.visible === currentPreviewTextIntegrity.total
+                    ? " — 全テキストを実描画で確認"
+                    : " — 非表示文字があるため変換結果を使用しないでください"}
+                </p>
+              )}
+              {staleReleaseDetected && (
+                <p className="preview-release-notice" role="status">
+                  旧リリース指定を v{APP_RELEASE} に更新しました。
+                </p>
+              )}
             </div>
             <aside className="output-card">
               <span className="eyebrow">Generated</span>
@@ -3601,7 +3688,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       <footer>
         <div className="brand brand--footer"><span className="brand__mark">F</span><span>FigmaPress</span></div>
         <p>Figmaから、運用できるWordPressへ。</p>
-        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v0.26.45</span></div>
+        <div><a href="#convert">変換する</a><a href="#setup">導入方法</a><a href="/privacy">プライバシー</a><a href="/security">セキュリティ</a><span>v{APP_RELEASE}</span></div>
       </footer>
     </main>
   );
