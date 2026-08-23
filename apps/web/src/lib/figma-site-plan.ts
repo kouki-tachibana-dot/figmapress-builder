@@ -1,4 +1,7 @@
-import type { FigmaMultiPagePlan } from "@figmapress/elementor-renderer";
+import {
+  figmaPageLinkPlaceholder,
+  type FigmaMultiPagePlan,
+} from "@figmapress/elementor-renderer";
 import type { FigmaPageCandidate } from "./figma-frame-selection";
 
 const SEMANTIC_PAGES: Array<{
@@ -91,4 +94,32 @@ export function createCandidateFigmaMultiPagePlan(
       };
     }),
   };
+}
+
+/** Build stable prototype targets for both members of every PC/SP pair. */
+export function createCandidatePageLinkTargets(
+  candidates: FigmaPageCandidate[],
+  plan: FigmaMultiPagePlan | null,
+): Record<string, string> {
+  if (!plan) return {};
+  const targets: Record<string, string> = {};
+  for (const page of plan.pages) {
+    if (!page.frameId) continue;
+    const candidate = candidates.find((entry) => entry.id === page.frameId);
+    if (!candidate) continue;
+    const target = figmaPageLinkPlaceholder(page.key);
+    for (const id of [candidate.id, candidate.desktop?.id, candidate.mobile?.id]) {
+      if (id) targets[id] = target;
+    }
+  }
+  return targets;
+}
+
+export function createSemanticPageLinkTargets(
+  plan: FigmaMultiPagePlan | null,
+): Record<string, string> {
+  if (!plan) return {};
+  return Object.fromEntries(
+    plan.pages.map((page) => [page.key, figmaPageLinkPlaceholder(page.key)]),
+  );
 }

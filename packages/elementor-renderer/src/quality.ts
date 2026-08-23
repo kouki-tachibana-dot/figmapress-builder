@@ -549,6 +549,15 @@ function countFunctionalWidgets(elements: ElementorElement[]): {
     for (const item of items) {
       if (item.widgetType === "figmapress-nav") result.navigation += 1;
       if (item.widgetType === "figmapress-link") result.links += 1;
+      if (
+        item.widgetType === "image"
+        && item.settings.link
+        && typeof item.settings.link === "object"
+        && typeof (item.settings.link as Record<string, unknown>).url === "string"
+        && String((item.settings.link as Record<string, unknown>).url).trim()
+      ) {
+        result.links += 1;
+      }
       if (item.widgetType === "text-editor" && typeof item.settings.editor === "string") {
         result.links += (item.settings.editor.match(/data-figmapress-functional-link/g) ?? []).length;
       }
@@ -625,10 +634,22 @@ function inspectNavigationIntegrity(elements: ElementorElement[]): {
 } {
   const anchorCounts = new Map<string, number>();
   const targets: string[] = [];
+  let navigationLinks = 0;
+  const recordHref = (url: string): void => {
+    const normalized = url.trim();
+    if (!normalized) return;
+    navigationLinks += 1;
+    if (
+      /^#[A-Za-z][\w:-]*$/.test(normalized)
+      && !normalized.startsWith("#figmapress-page-")
+    ) {
+      targets.push(normalized.slice(1));
+    }
+  };
   const recordUrl = (value: unknown): void => {
     if (!value || typeof value !== "object") return;
     const url = (value as Record<string, unknown>).url;
-    if (typeof url === "string" && /^#[A-Za-z][\w:-]*$/.test(url)) targets.push(url.slice(1));
+    if (typeof url === "string") recordHref(url);
   };
   const visit = (items: ElementorElement[]): void => {
     for (const item of items) {
@@ -646,9 +667,15 @@ function inspectNavigationIntegrity(elements: ElementorElement[]): {
         recordUrl(item.settings.cta_url);
         recordUrl(item.settings.home_url);
       }
+      if (item.widgetType === "figmapress-link") {
+        recordUrl(item.settings.link_url);
+      }
+      if (item.widgetType === "image") {
+        recordUrl(item.settings.link);
+      }
       if (item.widgetType === "text-editor" && typeof item.settings.editor === "string") {
-        for (const match of item.settings.editor.matchAll(/href=["'](#[A-Za-z][\w:-]*)["']/g)) {
-          targets.push(match[1].slice(1));
+        for (const match of item.settings.editor.matchAll(/href=["']([^"']+)["']/g)) {
+          recordHref(match[1]);
         }
       }
       visit(item.elements);
@@ -661,7 +688,7 @@ function inspectNavigationIntegrity(elements: ElementorElement[]): {
   return {
     anchors: anchorCounts.size,
     duplicateAnchors,
-    navigationLinks: targets.length,
+    navigationLinks,
     missingTargets,
   };
 }

@@ -27,7 +27,11 @@ import {
 } from "@figmapress/elementor-renderer";
 import { tokensToThemeJson } from "@figmapress/token-pipeline";
 import type { FigmaPageCandidate } from "./figma-frame-selection";
-import { createCandidateFigmaMultiPagePlan } from "./figma-site-plan";
+import {
+  createCandidateFigmaMultiPagePlan,
+  createCandidatePageLinkTargets,
+  createSemanticPageLinkTargets,
+} from "./figma-site-plan";
 
 export interface ConversionOutput {
   blueprint: SiteBlueprint;
@@ -85,7 +89,25 @@ export async function convertFile(
   const blueprint = assertBlueprint(mapped.blueprint);
   const exported = await new GutenbergExporter().export(blueprint);
   const page = blueprint.pages[0];
-  const fidelityAssets = { imageUrls, renderedNodeUrls };
+  const multiPagePlan = fidelityLayout
+    ? createCandidateFigmaMultiPagePlan(
+        sourcePages?.candidates ?? [],
+        sourcePages?.selectedFrameId ?? "",
+        sourcePages?.siteTitle ?? page?.title ?? blueprint.site.name,
+      ) ?? createFigmaMultiPagePlan(
+        file,
+        page?.title ?? blueprint.site.name,
+        page?.slug ?? "/",
+      )
+    : null;
+  const fidelityAssets = {
+    imageUrls,
+    renderedNodeUrls,
+    linkTargets: sourcePages
+      ? createCandidatePageLinkTargets(sourcePages.candidates, multiPagePlan)
+      : {},
+    pageTargets: sourcePages ? createSemanticPageLinkTargets(multiPagePlan) : {},
+  };
   const elementorTemplate = fidelityLayout
     ? new FigmaElementorExporter().toTemplate(
         file,
@@ -121,17 +143,7 @@ export async function convertFile(
     elementorTemplate,
     previewHtml: fidelityPreview ?? (page ? renderPreviewPage(page) : ""),
     qualityReport,
-    multiPagePlan: fidelityLayout
-      ? createCandidateFigmaMultiPagePlan(
-          sourcePages?.candidates ?? [],
-          sourcePages?.selectedFrameId ?? "",
-          sourcePages?.siteTitle ?? page?.title ?? blueprint.site.name,
-        ) ?? createFigmaMultiPagePlan(
-          file,
-          page?.title ?? blueprint.site.name,
-          page?.slug ?? "/",
-        )
-      : null,
+    multiPagePlan,
     themeJson: tokensToThemeJson(blueprint.tokens),
     warnings,
     summary: {

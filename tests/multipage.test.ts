@@ -4,6 +4,8 @@ import type { FigmaNode, MockFigmaFile } from "@figmapress/figma-parser";
 import {
   createFigmaMultiPagePlan,
   createFigmaSitePageTemplate,
+  auditElementorTemplateLinks,
+  figmaPageLinkPlaceholder,
   rewriteElementorTemplatePageLinks,
   type ElementorElement,
 } from "@figmapress/elementor-renderer";
@@ -125,4 +127,77 @@ test("page-link rewrite connects desktop, mobile, CTA, and text links to WordPre
     assert.equal((navigation.settings.home_url as { url: string }).url, "https://example.com/home/");
   }
   assert.notDeepEqual(linked, template);
+});
+
+test("arbitrary Figma page keys and prototype placeholders rewrite idempotently", () => {
+  const template = createFigmaSitePageTemplate(
+    file,
+    createFigmaMultiPagePlan(file, "竹内きよ子様").pages[0],
+  );
+  template.content.push({
+    id: "custom1",
+    elType: "widget",
+    widgetType: "figmapress-link",
+    isInner: false,
+    settings: {
+      link_label: "採用情報",
+      link_url: { url: figmaPageLinkPlaceholder("recruit-2027") },
+    },
+    elements: [],
+  });
+  const pageLinks = [
+    { key: "home", rawLink: "https://example.com/home/" },
+    { key: "policies", rawLink: "https://example.com/seisaku/" },
+    { key: "profile", rawLink: "https://example.com/profile/" },
+    { key: "contact", rawLink: "https://example.com/contact/" },
+    { key: "recruit-2027", rawLink: "https://example.com/recruit-2027/" },
+  ];
+  const once = rewriteElementorTemplatePageLinks(template, pageLinks);
+  const twice = rewriteElementorTemplatePageLinks(once, pageLinks);
+  assert.deepEqual(twice, once);
+  const custom = flatten(once.content).find((element) => element.id === "custom1");
+  assert.equal(
+    (custom?.settings.link_url as { url: string }).url,
+    "https://example.com/recruit-2027/",
+  );
+  const audit = auditElementorTemplateLinks(once, pageLinks);
+  assert.equal(audit.valid, true);
+  assert.equal(audit.unresolvedPlaceholders.length, 0);
+  assert.ok(audit.pageLinks >= 1);
+});
+
+test("link audit rejects unresolved, missing, and unsafe destinations", () => {
+  const template = {
+    title: "Broken links",
+    type: "page" as const,
+    version: "0.4" as const,
+    page_settings: {},
+    content: [{
+    id: "broken1",
+    elType: "widget",
+    widgetType: "figmapress-link",
+    isInner: false,
+    settings: { link_url: { url: figmaPageLinkPlaceholder("unknown") } },
+    elements: [],
+  }, {
+    id: "broken2",
+    elType: "widget",
+    widgetType: "button",
+    isInner: false,
+    settings: { link: { url: "javascript:alert(1)" } },
+    elements: [],
+  }, {
+    id: "broken3",
+    elType: "widget",
+    widgetType: "figmapress-link",
+    isInner: false,
+    settings: { link_url: { url: "#not-created" } },
+    elements: [],
+    }],
+  };
+  const audit = auditElementorTemplateLinks(template);
+  assert.equal(audit.valid, false);
+  assert.deepEqual(audit.unresolvedPlaceholders, ["#figmapress-page-unknown"]);
+  assert.deepEqual(audit.missingAnchors, ["not-created"]);
+  assert.deepEqual(audit.unsafe, ["javascript:alert(1)"]);
 });

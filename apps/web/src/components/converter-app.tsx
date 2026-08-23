@@ -21,6 +21,7 @@ import {
   applyPreviewTextGeometryCorrections,
   applyPreviewVisualCorrections,
   rewriteElementorTemplatePageLinks,
+  auditElementorTemplateLinks,
   type ElementorDecorationGeometryCorrection,
   type ElementorMediaGeometryCorrection,
   type ElementorSectionVisualCorrection,
@@ -86,7 +87,7 @@ type OutputTarget = "gutenberg" | "elementor";
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
-const APP_RELEASE = "0.26.54";
+const APP_RELEASE = "0.26.55";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -763,7 +764,7 @@ ${webfontUrl ? `<link rel="stylesheet" href="${webfontUrl}">` : ""}
 section{padding:64px clamp(24px,7vw,88px);max-width:1100px;margin:0 auto}h1,h2,h3{line-height:1.13;letter-spacing:-.035em}h1{font-size:clamp(36px,7vw,72px);margin:0 0 20px}h2{font-size:clamp(28px,5vw,48px);margin:0 0 28px}h3{font-size:20px}p{color:#53636c}a{display:inline-block;background:#c8ff61;color:#102029;text-decoration:none;font-weight:750;padding:13px 20px;border-radius:999px}
 .wp-block-figmapress-hero{display:grid;grid-template-columns:1fr;align-items:center;gap:48px;min-height:520px}.wp-block-figmapress-hero[data-layout="text-left-image-right"]{grid-template-columns:1.15fr .85fr}.wp-block-figmapress-hero__image img{width:100%;border-radius:24px}.wp-block-figmapress-service-list,.wp-block-figmapress-faq{background:#fff}.wp-block-figmapress-card-grid__items,.wp-block-figmapress-service-list__items{list-style:none;padding:0;display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.wp-block-figmapress-card-grid__item,.wp-block-figmapress-service-list__item{padding:24px;background:#fff;border:1px solid #dbe1df;border-radius:18px}.wp-block-figmapress-faq__items dt{font-weight:750;margin-top:20px}.wp-block-figmapress-faq__items dd{margin:6px 0 0;color:#53636c}.wp-block-figmapress-cta{text-align:center;background:#112832;color:#fff;border-radius:28px}.wp-block-figmapress-cta h2{color:#fff}.wp-block-figmapress-contact{text-align:center}
 .figmapress-figma-preview{container-type:inline-size;overflow:hidden;position:relative;width:100%}.figmapress-figma-preview *{box-sizing:border-box;margin:0;max-width:none}.figmapress-figma-preview img{display:block}.figmapress-figma-preview--mobile{display:none}
-.figmapress-exact-stack{overflow:hidden;position:relative;width:100%}.figmapress-exact-editable-source{left:-200vw;pointer-events:none;position:fixed;top:0;width:100vw}.figmapress-exact-preview img{height:100%;object-fit:fill;width:100%}
+.figmapress-exact-stack{overflow:hidden;position:relative;width:100%}.figmapress-exact-interaction-layer{inset:0 auto auto 0;pointer-events:none;position:absolute;width:100%;z-index:2}.figmapress-exact-interaction-layer [data-figmapress-kind="container"]{background:transparent!important;background-image:none!important;border-color:transparent!important;box-shadow:none!important}.figmapress-exact-interaction-layer [data-figmapress-kind="text"]{color:transparent!important;text-shadow:none!important;-webkit-text-fill-color:transparent!important}.figmapress-exact-interaction-layer [data-figmapress-kind="visual"]{opacity:0!important}.figmapress-exact-interaction-layer [data-figmapress-preview-link]{cursor:pointer;pointer-events:auto}.figmapress-exact-preview img{height:100%;object-fit:fill;width:100%}
 @media(max-width:767px){section{padding:44px 22px}.wp-block-figmapress-hero{grid-template-columns:1fr;min-height:auto}.wp-block-figmapress-card-grid__items,.wp-block-figmapress-service-list__items{grid-template-columns:1fr}.figmapress-figma-preview--desktop{display:none}.figmapress-figma-preview--mobile{display:block}}
 </style></head><body>${content}</body></html>`;
 }
@@ -1765,6 +1766,16 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                   hasDesktop: page.hasDesktop,
                   hasMobile: page.hasMobile,
                 })),
+                sitePages: output?.multiPagePlan?.pages
+                  .filter((page) => page.frameId)
+                  .map((page) => ({
+                    key: page.key,
+                    title: page.title,
+                    slug: page.slug,
+                    frameId: page.frameId,
+                    hasDesktop: page.hasDesktop,
+                    hasMobile: page.hasMobile,
+                  })),
               }
             : { pageKeys: requestedPages.map((page) => page.key) }),
         }),
@@ -1890,6 +1901,12 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         : sectionTemplates.get(page.key);
       if (!template) throw new Error(`「${page.title}」のElementorデータを準備できませんでした。`);
       const linkedTemplate = rewriteElementorTemplatePageLinks(template, pageLinks);
+      const linkAudit = auditElementorTemplateLinks(linkedTemplate, pageLinks);
+      if (!linkAudit.valid) {
+        throw new Error(
+          `「${page.title}」のリンク検査に失敗しました（未解決${linkAudit.unresolvedPlaceholders.length}・移動先なし${linkAudit.missingAnchors.length}・不正URL${linkAudit.unsafe.length}）。WordPressには保存していません。`,
+        );
+      }
       const requestId = createRequestId();
       const input = {
         target: "elementor" as const,

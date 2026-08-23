@@ -556,7 +556,8 @@ test("exact presentation keeps responsive snapshots and native Elementor editing
   assert.match(exact.previewHtml, /data-figmapress-reference-node-id="10:1"/);
   assert.match(exact.previewHtml, /exact-pc\.jpg/);
   assert.match(exact.previewHtml, /exact-mobile\.jpg/);
-  assert.match(exact.previewHtml, /figmapress-exact-editable-source[^>]*>.*編集文字/);
+  assert.match(exact.previewHtml, /figmapress-exact-interaction-layer[^>]*>.*編集文字/);
+  assert.doesNotMatch(exact.previewHtml, /figmapress-exact-interaction-layer" aria-hidden/);
   assert.equal(exact.elementorTemplate.page_settings.figmapress_exact_visual, "yes");
   assert.equal(exact.elementorTemplate.content.length, 1);
   const stack = exact.elementorTemplate.content[0];
@@ -1801,4 +1802,84 @@ test("business-site menu labels become editable page links", async () => {
   assert.match(String(menuText?.settings.editor), /href="#company"/);
   assert.equal(result.qualityReport?.metrics.functionalWidgets.links, 1);
   assert.equal(result.qualityReport?.metrics.navigationIntegrity.navigationLinks, 1);
+});
+
+test("cross-page Figma prototype links survive page pruning in Elementor and preview", async () => {
+  const actionRoot = (
+    id: string,
+    width: number,
+    destinationId: string,
+  ): FigmaNode => ({
+    id,
+    name: width < 768 ? "SP ホーム" : "PC ホーム",
+    type: "FRAME",
+    absoluteBoundingBox: { x: 0, y: 0, width, height: 900 },
+    children: [{
+      id: `${id}:company-link`,
+      name: "Header/Menu-Item Company",
+      type: "FRAME",
+      absoluteBoundingBox: { x: width - 180, y: 30, width: 150, height: 50 },
+      interactions: [{
+        actions: [{ type: "NODE", navigation: "NAVIGATE", destinationId }],
+      }],
+      children: [{
+        id: `${id}:company-label`,
+        name: "Company label",
+        type: "TEXT",
+        characters: "会社案内",
+        absoluteBoundingBox: { x: width - 165, y: 40, width: 120, height: 28 },
+        style: { fontSize: 16, fontWeight: 600 },
+      }],
+    }],
+  });
+  const file: MockFigmaFile = {
+    document: {
+      id: "0:0",
+      name: "Pruned corporate page",
+      type: "DOCUMENT",
+      children: [{
+        id: "1:0",
+        name: "Page",
+        type: "CANVAS",
+        children: [
+          actionRoot("10:1", 1440, "20:1"),
+          actionRoot("10:2", 440, "20:2"),
+        ],
+      }],
+    },
+  };
+  const candidate = (id: string, title: string) => ({
+    id: `${id}:1`,
+    title,
+    confidence: "content" as const,
+    desktop: {
+      id: `${id}:1`, name: `PC ${title}`, label: title,
+      width: 1440, height: 900, variant: "desktop" as const,
+    },
+    mobile: {
+      id: `${id}:2`, name: `SP ${title}`, label: title,
+      width: 440, height: 900, variant: "mobile" as const,
+    },
+  });
+  const result = await convertFile(file, {}, {}, [], {}, {
+    candidates: [candidate("10", "ホーム"), candidate("20", "会社案内")],
+    selectedFrameId: "10:1",
+    siteTitle: "建工101",
+  });
+  const elements: typeof result.elementorTemplate.content = [];
+  const visit = (items: typeof result.elementorTemplate.content): void => {
+    for (const item of items) {
+      elements.push(item);
+      visit(item.elements);
+    }
+  };
+  visit(result.elementorTemplate.content);
+  const pageLinks = elements.filter((element) =>
+    element.widgetType === "figmapress-link"
+    && (element.settings.link_url as { url?: string })?.url === "#figmapress-page-company"
+  );
+  assert.equal(pageLinks.length, 2);
+  assert.match(result.previewHtml, /data-figmapress-preview-link/);
+  assert.match(result.previewHtml, /href="#figmapress-page-company"/);
+  assert.equal(result.qualityReport?.metrics.navigationIntegrity.missingTargets, 0);
 });
