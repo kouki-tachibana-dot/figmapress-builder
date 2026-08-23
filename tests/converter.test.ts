@@ -1587,6 +1587,17 @@ test("root-level corporate inquiry fields become complete responsive forms", asy
         children: (() => {
           const mobile = formRoot("40:2", "SP お問い合わせ", 2000, 440);
           const nestedMobileFields = mobile.children ?? [];
+          for (const child of nestedMobileFields) {
+            if (!child.id.includes(":control:") || !child.absoluteBoundingBox) continue;
+            child.absoluteBoundingBox = {
+              ...child.absoluteBoundingBox,
+              x: 2030,
+              width: 380,
+              height: 32,
+            };
+            child.fills = [];
+            child.strokes = [{ type: "SOLID", color: { r: 0.55, g: 0.55, b: 0.55 } }];
+          }
           mobile.children = nestedMobileFields.map((child, index) => ({
             id: `40:2:generic-field:${index}`,
             name: `Group ${400 + index}`,
@@ -1642,6 +1653,10 @@ test("root-level corporate inquiry fields become complete responsive forms", asy
   );
   assert.equal(result.qualityReport?.metrics.expectedFunctionalWidgets.contactForm, 2);
   assert.equal(result.qualityReport?.metrics.functionalWidgets.contactForm, 2);
+  assert.equal(
+    result.qualityReport?.checks.find((check) => check.id === "component-geometry")?.status,
+    "pass",
+  );
 });
 
 test("Figma carousel and prototype actions become editable functional widgets", async () => {

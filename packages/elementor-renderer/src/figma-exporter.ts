@@ -782,11 +782,16 @@ function contactFormElement(
   const controlCandidates = descendants(node).filter((child) => {
     const candidate = child.absoluteBoundingBox;
     if (!candidate || child === panel || child === buttonBackground || child.type === "TEXT") return false;
-    if (!solidColor(child.fills)) return false;
+    const hasControlSurface = Boolean(
+      solidColor(child.fills)
+      || solidColor(child.strokes)
+      || /(?:rectangle|input|field|textarea)/i.test(child.name),
+    );
+    if (!hasControlSurface) return false;
     return candidate.width > bounds.width * 0.18
-      && candidate.width < bounds.width * 0.75
-      && candidate.height > bounds.height * 0.025
-      && candidate.height < bounds.height * 0.3;
+      && candidate.width < bounds.width * 0.98
+      && candidate.height > bounds.height * 0.008
+      && candidate.height < bounds.height * 0.25;
   });
   const controlFor = (labelNode: FigmaNode | undefined): FigmaNode | undefined => {
     const labelBounds = labelNode?.absoluteBoundingBox;
