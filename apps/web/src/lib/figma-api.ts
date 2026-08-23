@@ -471,7 +471,15 @@ async function fetchVisualReferences(
       );
       const losslessLongestEdge = Math.max(bounds.width, bounds.height)
         * losslessScale;
-      const jpegScale = Math.max(
+      const jpegHighFidelityScale = Math.max(
+        0.01,
+        Math.min(
+          1,
+          (mobileFrame ? 440 : 1440) / bounds.width,
+          Math.sqrt(16_000_000 / (bounds.width * bounds.height)),
+        ),
+      );
+      const jpegFallbackScale = Math.max(
         0.01,
         Math.min(
           1,
@@ -487,7 +495,10 @@ async function fetchVisualReferences(
       if (losslessLongestEdge <= 4_096) {
         attempts.push({ format: "png", scale: losslessScale });
       }
-      attempts.push({ format: "jpg", scale: jpegScale });
+      attempts.push({ format: "jpg", scale: jpegHighFidelityScale });
+      if (Math.abs(jpegFallbackScale - jpegHighFidelityScale) >= 0.001) {
+        attempts.push({ format: "jpg", scale: jpegFallbackScale });
+      }
 
       let image: string | null = null;
       let renderedScale = 1;
