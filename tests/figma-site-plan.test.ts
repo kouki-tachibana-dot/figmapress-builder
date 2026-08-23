@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   createCandidateFigmaMultiPagePlan,
   createCandidatePageLinkTargets,
+  currentCandidateFigmaSitePageKey,
 } from "../apps/web/src/lib/figma-site-plan";
 import type { FigmaPageCandidate } from "../apps/web/src/lib/figma-frame-selection";
 
@@ -71,6 +72,18 @@ test("previewing contact never replaces the stable Figma home page", () => {
   assert.deepEqual(plan.pages.map((page) => page.key), ["home", "company", "contact"]);
   assert.deepEqual(plan.pages.map((page) => page.frameId), ["10:1", "20:1", "30:1"]);
   assert.deepEqual(plan.pages.map((page) => page.title), ["ホーム", "会社案内", "お問い合わせ"]);
+  assert.equal(
+    currentCandidateFigmaSitePageKey(plan, candidates, "30:1"),
+    "contact",
+  );
+  assert.equal(
+    currentCandidateFigmaSitePageKey(plan, candidates, "30:2"),
+    "contact",
+  );
+  assert.equal(
+    currentCandidateFigmaSitePageKey(plan, candidates, "10:1"),
+    "home",
+  );
 });
 
 test("unpaired component scraps are excluded when complete page pairs exist", () => {

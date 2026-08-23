@@ -71,6 +71,8 @@ import {
 import { readApi } from "@/lib/api-client";
 import { resolveFigmaRequestAuthentication } from "@/lib/figma-client-auth";
 import type { FigmaPageCandidate } from "@/lib/figma-frame-selection";
+import { currentCandidateFigmaSitePageKey } from "@/lib/figma-site-plan";
+import { figmaSiteSourceKey, figmaSourceKey } from "@/lib/figma-source-key";
 import {
   runWordPressWriteWithNetworkFallback,
   shouldProxyWordPressDraft,
@@ -96,7 +98,7 @@ type PageTemplateEntry = {
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
-const APP_RELEASE = "0.26.70";
+const APP_RELEASE = "0.26.71";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -227,34 +229,6 @@ function createRequestId(): string {
   if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
-}
-
-function figmaSourceKey(input: string, selectedFrameId?: string): string | undefined {
-  const value = input.trim();
-  let fileKey = "";
-  let nodeId = "root";
-  if (/^[A-Za-z0-9_-]{6,160}$/.test(value)) {
-    fileKey = value;
-  } else {
-    try {
-      const url = new URL(value);
-      if (!/(^|\.)figma\.com$/i.test(url.hostname)) return undefined;
-      const parts = url.pathname.split("/").filter(Boolean);
-      const typeIndex = parts.findIndex((part) =>
-        ["design", "file", "proto", "board"].includes(part),
-      );
-      const candidate = typeIndex >= 0 ? parts[typeIndex + 1] ?? "" : "";
-      if (!/^[A-Za-z0-9_-]{6,160}$/.test(candidate)) return undefined;
-      fileKey = candidate;
-      const rawNodeId = url.searchParams.get("node-id")?.trim() ?? "";
-      if (/^[0-9]+(?::|-)[0-9]+$/.test(rawNodeId)) {
-        nodeId = rawNodeId.replace("-", ":");
-      }
-    } catch {
-      return undefined;
-    }
-  }
-  return `figma:${fileKey}:${selectedFrameId || nodeId}`;
 }
 
 interface ConversionResult {
@@ -913,6 +887,8 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   );
   const [draftRequestId, setDraftRequestId] = useState("");
   const [conversionSourceKey, setConversionSourceKey] = useState<string | undefined>();
+  const [conversionSiteSourceKey, setConversionSiteSourceKey] =
+    useState<string | undefined>();
   const [baseUrl, setBaseUrl] = useState("");
   const [username, setUsername] = useState("");
   const [applicationPassword, setApplicationPassword] = useState("");
@@ -1060,7 +1036,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       && versionAtLeast(wpStatus?.connectorVersion, requiredMultiPageConnectorVersion)
     : versionAtLeast(wpStatus?.connectorVersion, MULTI_PAGE_CONNECTOR_VERSION);
   const multiPageAvailable = wpTarget === "elementor"
-    && Boolean(conversionSourceKey)
+    && Boolean(conversionSiteSourceKey)
     && Boolean(multiPagePlan && multiPagePlan.pages.length > 1);
   const multiPageBlocked = wpBuildMode === "site"
     && (!multiPageAvailable
@@ -1199,6 +1175,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     setError("");
     setOutput(null);
     setConversionSourceKey(undefined);
+    setConversionSiteSourceKey(undefined);
     setWpResult(null);
     setWpSiteResult(null);
     setWpSiteProgress("");
@@ -1234,6 +1211,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     try {
       let body: Record<string, unknown>;
       let nextSourceKey: string | undefined;
+      let nextSiteSourceKey: string | undefined;
       if (mode === "figma") {
         const authentication = resolveFigmaRequestAuthentication(
           figmaToken,
@@ -1246,6 +1224,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
           ...authentication.credentials,
         };
         nextSourceKey = figmaSourceKey(fileKeyOrUrl, selectedFrameId || undefined);
+        nextSiteSourceKey = figmaSiteSourceKey(fileKeyOrUrl);
       } else {
         let data: unknown;
         try {
@@ -1282,6 +1261,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       }
       setOutput(data);
       setConversionSourceKey(nextSourceKey);
+      setConversionSiteSourceKey(nextSiteSourceKey);
       setDraftRequestId(createRequestId());
       requestAnimationFrame(() => {
         document.getElementById("result")?.scrollIntoView({ behavior: "smooth" });
@@ -1826,7 +1806,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         ) {
           if (onPage && requestedPages[0]) {
             setSitePreflightProgress(
-              `${1 + sitePreflightTemplates.current.size}/${output?.multiPagePlan?.pages.length ?? "?"}ページを確認済み・「${requestedPages[0].title}」を自動再取得中`,
+              `${sitePreflightTemplates.current.size}/${output?.multiPagePlan?.pages.length ?? "?"}ページを確認済み・「${requestedPages[0].title}」を自動再取得中`,
             );
           }
           await new Promise((resolve) =>
@@ -1865,23 +1845,36 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     setSitePreflightError("");
     setSitePreflightResult(null);
     try {
-      const subpages = plan.pages.filter((page) => page.key !== "home");
       const templates = new Map(sitePreflightTemplates.current);
-      const missingPages = subpages.filter((page) => !templates.has(page.key));
+      const candidateMode = plan.pages.every((page) => Boolean(page.frameId));
+      const currentPageKey = candidateMode
+        ? currentCandidateFigmaSitePageKey(
+            plan,
+            figmaPageCandidates,
+            selectedFrameId,
+          )
+        : "home";
+      if (!currentPageKey) {
+        throw new Error(
+          "現在のプレビューとサイト内ページを対応付けられませんでした。Figmaからもう一度変換してください。",
+        );
+      }
+      templates.set(currentPageKey, output.elementorTemplate);
+      sitePreflightTemplates.current.set(currentPageKey, output.elementorTemplate);
+      const missingPages = plan.pages.filter((page) => !templates.has(page.key));
       setSitePreflightProgress(
-        `${1 + templates.size}/${plan.pages.length}ページを確認済み`,
+        `${templates.size}/${plan.pages.length}ページを確認済み`,
       );
       if (missingPages.length) {
         const fetched = await fetchMultiPageTemplates(missingPages, (entry) => {
           sitePreflightTemplates.current.set(entry.page.key, entry.elementorTemplate);
           templates.set(entry.page.key, entry.elementorTemplate);
           setSitePreflightProgress(
-            `${1 + sitePreflightTemplates.current.size}/${plan.pages.length}ページを確認済み`,
+            `${sitePreflightTemplates.current.size}/${plan.pages.length}ページを確認済み`,
           );
         });
         for (const [key, template] of fetched) templates.set(key, template);
       }
-      templates.set("home", output.elementorTemplate);
       setSitePreflightResult(inspectFigmaSiteTemplates(plan, templates));
       setSitePreflightProgress("");
     } catch (caught) {
@@ -1900,7 +1893,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     resumeAfterPageKey?: FigmaSitePageKey,
   ): Promise<void> {
     const plan = output?.multiPagePlan;
-    if (!output || !plan || plan.pages.length < 2 || !conversionSourceKey) {
+    if (!output || !plan || plan.pages.length < 2 || !conversionSiteSourceKey) {
       throw new Error("複数ページ化できるFigma URLとセクションを確認してください。");
     }
     if (!connectorSupportsMultiPage) {
@@ -1910,7 +1903,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       throw new Error(`Figmaフォームの全項目送信にはConnector v${DYNAMIC_FORM_CONNECTOR_VERSION}以上が必要です。`);
     }
     const siteInput = {
-      siteKey: conversionSourceKey,
+      siteKey: conversionSiteSourceKey,
       title: plan.title,
       menuName: plan.menuName,
       pages: plan.pages.map((page) => ({
@@ -1918,8 +1911,8 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         title: page.title,
         slug: page.slug,
         sourceKey: page.key === "home"
-          ? conversionSourceKey
-          : `${conversionSourceKey}:page:${page.key}`,
+          ? conversionSiteSourceKey
+          : `${conversionSiteSourceKey}:page:${page.key}`,
       })),
     };
     const resumeAfterIndex = resumeAfterPageKey
@@ -1929,21 +1922,36 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       throw new Error("画像保存を再開するページを確認できませんでした。サイト一式を再実行してください。");
     }
     const startIndex = resumeAfterIndex + 1;
-    const sectionPages = plan.pages
-      .slice(startIndex)
-      .filter((page) => page.key !== "home");
+    const pagesToSave = plan.pages.slice(startIndex);
     // Prefer the already-loaded target-origin iframe. Older Connector versions
     // keep the submit-gesture popup fallback for backwards compatibility.
     const siteBridge = credentials.connectorToken
       ? openWordPressSiteBridge(credentials.baseUrl)
       : null;
-      let sectionTemplates: Map<FigmaSitePageKey, ElementorTemplate>;
+    let pageTemplates: Map<FigmaSitePageKey, ElementorTemplate>;
     let prepared: BrowserPreparedSiteResult;
     try {
       setWpSiteProgress("Figmaから各ページの編集データを準備しています…");
-      sectionTemplates = sectionPages.length > 0
-        ? await fetchMultiPageTemplates(sectionPages)
-        : new Map();
+      pageTemplates = new Map(sitePreflightTemplates.current);
+      const candidateMode = plan.pages.every((page) => Boolean(page.frameId));
+      const currentPageKey = candidateMode
+        ? currentCandidateFigmaSitePageKey(
+            plan,
+            figmaPageCandidates,
+            selectedFrameId,
+          )
+        : "home";
+      if (!currentPageKey) {
+        throw new Error(
+          "現在のプレビューとサイト内ページを対応付けられませんでした。Figmaからもう一度変換してください。",
+        );
+      }
+      pageTemplates.set(currentPageKey, output.elementorTemplate);
+      const missingPages = pagesToSave.filter((page) => !pageTemplates.has(page.key));
+      if (missingPages.length > 0) {
+        const fetched = await fetchMultiPageTemplates(missingPages);
+        for (const [key, template] of fetched) pageTemplates.set(key, template);
+      }
       setWpSiteProgress("下書きページと未割り当てメニューを準備しています…");
       const prepareThroughProxy = async (): Promise<BrowserPreparedSiteResult> => {
         if (wpTransport === "direct") {
@@ -1992,9 +2000,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       const target = prepared.pages.find((candidate) => candidate.key === page.key);
       if (!target) throw new Error(`${page.title}の下書き準備結果がありません。`);
       setWpSiteProgress(`${index + 1}/${plan.pages.length}「${page.title}」をElementorへ保存しています…`);
-      const template = page.key === "home"
-        ? output.elementorTemplate
-        : sectionTemplates.get(page.key);
+      const template = pageTemplates.get(page.key);
       if (!template) throw new Error(`「${page.title}」のElementorデータを準備できませんでした。`);
       if (page.frameId && template.page_settings.figmapress_exact_visual !== "yes") {
         throw new Error(`「${page.title}」のPC/SP精密表示が不足しているため、WordPressには保存していません。`);
