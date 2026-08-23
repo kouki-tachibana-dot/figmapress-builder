@@ -348,6 +348,7 @@ a { color: inherit; }
 .visual-qa-result__score > span { display: flex; flex-direction: column; }
 .visual-qa-result__score b { font-size: 12px; }
 .visual-qa-result__score small { color: #728188; font-size: 9px; }
+.preview-text-integrity,.preview-release-notice{margin:0;padding:10px 14px;font-size:12px;line-height:1.5}.preview-text-integrity{background:#fff6e7;color:#8b4f0a}.preview-text-integrity.is-pass{background:#eff8e8;color:#426820}.preview-text-integrity.is-fail{background:#fff0ed;color:#a13d2f}.preview-release-notice{background:#edf7fb;color:#245d71}
 .visual-qa-metrics { display: grid; gap: 1px; grid-template-columns: repeat(4, 1fr); margin: 20px 0 0; }
 .visual-qa-metrics > div { background: #e9efed; padding: 10px; }
 .visual-qa-metrics > div:first-child { border-radius: 10px 0 0 10px; }
