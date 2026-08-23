@@ -463,28 +463,45 @@ async function fetchVisualReferences(
         1,
         Math.sqrt(4_000_000 / (bounds.width * bounds.height)),
       );
-      const scale = Math.max(0.01, Math.min(widthScale, pixelScale));
-      const query = new URLSearchParams({
-        ids: node.id,
-        format: "png",
-        scale: String(Math.round(scale * 1_000) / 1_000),
-        use_absolute_bounds: "true",
-      });
-      const response = await fetch(
-        `https://api.figma.com/v1/images/${encodeURIComponent(key)}?${query.toString()}`,
-        init,
+      // Figma refuses some lossless renders whose longest edge exceeds its
+      // raster limit even when their total pixel count is modest.
+      const dimensionScale = Math.min(
+        1,
+        4_096 / Math.max(bounds.width, bounds.height),
       );
-      if (!response.ok) return null;
-      const data = await readLimitedJson(response);
-      if (!isRecord(data) || !isRecord(data.images)) return null;
-      const image = data.images[node.id];
-      if (typeof image !== "string") return null;
+      const scale = Math.max(
+        0.01,
+        Math.min(widthScale, pixelScale, dimensionScale),
+      );
+      const requestScale = Math.round(scale * 1_000) / 1_000;
+      let image: string | null = null;
+      for (const format of ["png", "jpg"] as const) {
+        const query = new URLSearchParams({
+          ids: node.id,
+          format,
+          scale: String(requestScale),
+          use_absolute_bounds: "true",
+        });
+        const response = await fetch(
+          `https://api.figma.com/v1/images/${encodeURIComponent(key)}?${query.toString()}`,
+          init,
+        );
+        if (!response.ok) continue;
+        const data = await readLimitedJson(response);
+        if (!isRecord(data) || !isRecord(data.images)) continue;
+        const candidate = data.images[node.id];
+        if (typeof candidate === "string") {
+          image = candidate;
+          break;
+        }
+      }
+      if (!image) return null;
       return {
         nodeId: node.id,
         name: node.name,
         url: image,
-        width: Math.max(1, Math.round(bounds.width * scale)),
-        height: Math.max(1, Math.round(bounds.height * scale)),
+        width: Math.max(1, Math.round(bounds.width * requestScale)),
+        height: Math.max(1, Math.round(bounds.height * requestScale)),
       };
     }));
     const references = new Map(

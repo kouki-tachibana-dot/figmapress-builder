@@ -107,6 +107,96 @@ test("Figma OAuth uses Bearer auth without exposing the token as a PAT header", 
   }
 });
 
+test("long visual references stay within Figma's raster edge limit", async (context) => {
+  const requested: string[] = [];
+  context.mock.method(globalThis, "fetch", async (input) => {
+    const url = String(input);
+    requested.push(url);
+    if (url.includes("/v1/images/")) {
+      return Response.json({
+        images: { "2:2": "https://s3-alpha-sig.figma.com/long-reference.png" },
+      });
+    }
+    if (url.includes("/images")) return Response.json({ images: {} });
+    return Response.json({
+      name: "Long page",
+      document: {
+        id: "0:0",
+        name: "Document",
+        type: "DOCUMENT",
+        children: [{
+          id: "1:1",
+          name: "Page",
+          type: "CANVAS",
+          children: [{
+            id: "2:2",
+            name: "PC-page",
+            type: "FRAME",
+            absoluteBoundingBox: { x: 0, y: 0, width: 1440, height: 8058 },
+            children: [],
+          }],
+        }],
+      },
+    });
+  });
+
+  const result = await fetchFigmaFile(
+    "https://www.figma.com/design/AbCdEf123456/Long?node-id=2-2",
+    "figd_test_token_value",
+  );
+
+  assert.equal(result.visualReferences.desktop?.height, 4093);
+  assert.ok(requested.some((url) =>
+    url.includes("/v1/images/")
+    && url.includes("format=png")
+    && url.includes("scale=0.508"),
+  ));
+});
+
+test("visual references fall back to JPEG when Figma rejects PNG", async (context) => {
+  const requested: string[] = [];
+  context.mock.method(globalThis, "fetch", async (input) => {
+    const url = String(input);
+    requested.push(url);
+    if (url.includes("/v1/images/")) {
+      if (url.includes("format=png")) return new Response(null, { status: 400 });
+      return Response.json({
+        images: { "2:2": "https://s3-alpha-sig.figma.com/reference.jpg" },
+      });
+    }
+    if (url.includes("/images")) return Response.json({ images: {} });
+    return Response.json({
+      name: "Fallback page",
+      document: {
+        id: "0:0",
+        name: "Document",
+        type: "DOCUMENT",
+        children: [{
+          id: "1:1",
+          name: "Page",
+          type: "CANVAS",
+          children: [{
+            id: "2:2",
+            name: "PC-page",
+            type: "FRAME",
+            absoluteBoundingBox: { x: 0, y: 0, width: 1440, height: 900 },
+            children: [],
+          }],
+        }],
+      },
+    });
+  });
+
+  const result = await fetchFigmaFile(
+    "https://www.figma.com/design/AbCdEf123456/Fallback?node-id=2-2",
+    "figd_test_token_value",
+  );
+
+  assert.equal(result.visualReferences.desktop?.url, "https://s3-alpha-sig.figma.com/reference.jpg");
+  assert.ok(requested.some((url) => url.includes("format=png")));
+  assert.ok(requested.some((url) => url.includes("format=jpg")));
+});
+
 test("Figma authentication errors distinguish OAuth draft state from PAT permissions", async (context) => {
   context.mock.method(globalThis, "fetch", async (_input, init) => {
     const headers = new Headers(init?.headers);
@@ -197,6 +287,9 @@ test("Figma image, render, and visual reference requests start concurrently", as
       });
     }
     secondaryRequests.push(url);
+    if (url.includes("format=jpg")) {
+      return Response.json({ images: {} });
+    }
     return await new Promise<Response>((resolve) => {
       waitingResponses.push(resolve);
     });
