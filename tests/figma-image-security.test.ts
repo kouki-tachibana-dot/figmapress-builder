@@ -4,6 +4,7 @@ import {
   isAllowedFigmaRasterContentType,
   safeFigmaAssetUrl,
 } from "../apps/web/src/lib/figma-image-security.ts";
+import { readFile } from "node:fs/promises";
 
 test("Figma image proxy accepts only approved HTTPS asset hosts", () => {
   assert.equal(
@@ -32,4 +33,13 @@ test("Figma image proxy rejects active SVG content", () => {
   assert.equal(isAllowedFigmaRasterContentType("image/jpeg; charset=binary"), true);
   assert.equal(isAllowedFigmaRasterContentType("image/svg+xml"), false);
   assert.equal(isAllowedFigmaRasterContentType("text/html"), false);
+});
+
+test("Figma image proxy budgets responsive QA and privately caches retries", async () => {
+  const route = await readFile(
+    new URL("../apps/web/src/app/api/figma-image/route.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(route, /enforceRateLimit\("figma-image", clientIp\(request\), 600/);
+  assert.match(route, /"Cache-Control": "private, max-age=300"/);
 });
