@@ -229,21 +229,41 @@ function keyFromAnchor(
     : null;
 }
 
-function rewriteString(value: string, links: Map<FigmaSitePageKey, string>): string {
-  const directKey = keyFromAnchor(value, links);
-  if (directKey && links.has(directKey)) return links.get(directKey) as string;
+function rewriteEmbeddedHrefs(
+  value: string,
+  links: Map<FigmaSitePageKey, string>,
+): string {
   return value.replace(/href=(['"])(#[A-Za-z][\w:-]*)\1/g, (match, quote: string, href: string) => {
     const key = keyFromAnchor(href, links);
     return key && links.has(key) ? `href=${quote}${links.get(key)}${quote}` : match;
   });
 }
 
-function rewriteValue(value: unknown, links: Map<FigmaSitePageKey, string>): unknown {
-  if (typeof value === "string") return rewriteString(value, links);
+function rewriteUrl(value: string, links: Map<FigmaSitePageKey, string>): string {
+  const directKey = keyFromAnchor(value, links);
+  if (directKey && links.has(directKey)) return links.get(directKey) as string;
+  return rewriteEmbeddedHrefs(value, links);
+}
+
+function rewriteValue(
+  value: unknown,
+  links: Map<FigmaSitePageKey, string>,
+  propertyName?: string,
+): unknown {
+  if (typeof value === "string") {
+    // Elementor stores navigable destinations in `url` properties. Rewriting
+    // every matching string also changed unrelated values such as a dynamic
+    // form field named "company" into the company page URL. HTML fields are
+    // still handled everywhere, but a whole-string page rewrite is restricted
+    // to actual URL properties.
+    return propertyName === "url"
+      ? rewriteUrl(value, links)
+      : rewriteEmbeddedHrefs(value, links);
+  }
   if (Array.isArray(value)) return value.map((item) => rewriteValue(item, links));
   if (!value || typeof value !== "object") return value;
   return Object.fromEntries(
-    Object.entries(value).map(([key, item]) => [key, rewriteValue(item, links)]),
+    Object.entries(value).map(([key, item]) => [key, rewriteValue(item, links, key)]),
   );
 }
 

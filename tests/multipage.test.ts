@@ -166,6 +166,72 @@ test("arbitrary Figma page keys and prototype placeholders rewrite idempotently"
   assert.ok(audit.pageLinks >= 1);
 });
 
+test("page-link rewrite never changes form field names or other semantic values", () => {
+  const template = createFigmaSitePageTemplate(
+    file,
+    createFigmaMultiPagePlan(file, "竹内きよ子様").pages[0],
+  );
+  template.title = "company";
+  template.page_settings = { site_label: "company", fallback_anchor: "#company" };
+  template.content.push({
+    id: "form1",
+    elType: "widget",
+    widgetType: "figmapress-contact-form",
+    isInner: false,
+    settings: {
+      fields: [{
+        name: "company",
+        label: "company",
+        placeholder: "#company",
+        options: [{ label: "company", value: "company" }],
+      }],
+    },
+    elements: [],
+  }, {
+    id: "link1",
+    elType: "widget",
+    widgetType: "figmapress-link",
+    isInner: false,
+    settings: { link_url: { url: "#company" } },
+    elements: [],
+  }, {
+    id: "text1",
+    elType: "widget",
+    widgetType: "text-editor",
+    isInner: false,
+    settings: { editor: '<a href="#company">会社案内</a>' },
+    elements: [],
+  });
+
+  const linked = rewriteElementorTemplatePageLinks(template, [
+    { key: "company", rawLink: "https://example.com/company/" },
+  ]);
+  const elements = flatten(linked.content);
+  const form = elements.find((element) => element.id === "form1");
+  const link = elements.find((element) => element.id === "link1");
+  const editor = elements.find((element) => element.id === "text1");
+
+  assert.equal(linked.title, "company");
+  assert.deepEqual(linked.page_settings, {
+    site_label: "company",
+    fallback_anchor: "#company",
+  });
+  assert.deepEqual(form?.settings.fields, [{
+    name: "company",
+    label: "company",
+    placeholder: "#company",
+    options: [{ label: "company", value: "company" }],
+  }]);
+  assert.equal(
+    (link?.settings.link_url as { url: string }).url,
+    "https://example.com/company/",
+  );
+  assert.equal(
+    editor?.settings.editor,
+    '<a href="https://example.com/company/">会社案内</a>',
+  );
+});
+
 test("link audit rejects unresolved, missing, and unsafe destinations", () => {
   const template = {
     title: "Broken links",
