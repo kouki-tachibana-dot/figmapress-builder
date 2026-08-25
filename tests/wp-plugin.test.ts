@@ -524,6 +524,8 @@ test("mobile navigation keeps its CTA and device-specific anchor targets", async
   assert.match(widget, /figmapress-nav--mobile/);
   assert.match(widget, /figmapress-nav__mobile-cta/);
   assert.match(widget, /figmapress_connector_design_geometry/);
+  assert.match(widget, /figmapress_connector_has_geometry_box/);
+  assert.match(widget, /\! \$fidelity \|\| \$has_cta_geometry/);
   assert.match(widget, /figmapress_connector_inferred_mobile_toggle_geometry/);
   assert.match(widget, /figmapress-nav--toggle-inferred/);
   assert.match(widget, /aria-expanded="false"/);
@@ -545,6 +547,19 @@ test("mobile navigation keeps its CTA and device-specific anchor targets", async
   assert.match(style, /textarea[^}]*min-height:\s*min\(144px,\s*7\.5vw\)/s);
   assert.match(style, /#contact-mobile/);
   assert.match(style, /#contact-desktop/);
+});
+
+test("high-fidelity navigation never renders an unpositioned CTA over the header", async () => {
+  const widgets = await readFile(elementorWidgetsPath, "utf8");
+  assert.match(widgets, /'transparent' === strtolower\( \$value \)/);
+  assert.match(
+    widgets,
+    /function figmapress_connector_has_geometry_box\([\s\S]*?'x', 'y', 'width', 'height'[\s\S]*?return \(float\) \$box\['width'\] > 0/,
+  );
+  assert.match(
+    widgets,
+    /\! empty\( \$settings\['cta_label'\] \) && \( \! \$fidelity \|\| \$has_cta_geometry \)/,
+  );
 });
 
 test("accordion keeps empty Figma states closed instead of opening a blank panel", async () => {

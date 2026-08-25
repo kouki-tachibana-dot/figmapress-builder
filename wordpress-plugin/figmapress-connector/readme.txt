@@ -3,7 +3,7 @@ Contributors: figmapress
 Tags: blocks, figma, gutenberg, elementor
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 0.18.1
+Stable tag: 0.18.2
 License: GPLv2 or later
 
 Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
@@ -15,6 +15,11 @@ Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
    create a draft page containing figmapress/* blocks.
 
 == Changelog ==
+
+= 0.18.2 =
+* Figmaに独立CTAがない高忠実度ヘッダーで、CTAが全面を覆ってロゴとメニューを隠す問題を解消しました。
+* 背景レイヤーがないヘッダーをヒーロー上へ透明に重ね、PC/SPのFigma配置を保持します。
+* 一般名のスマホメニュー画像も右上の位置情報から復元します。
 
 = 0.18.1 =
 * 単一ページの大容量分割保存でも、事前準備なしで安全なElementor下書きを作成できるようにしました。

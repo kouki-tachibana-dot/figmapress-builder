@@ -516,13 +516,33 @@ function navigationElement(
   );
   const background = descendants(node).find((child) => /nav bar background/i.test(child.name));
   const topBar = descendants(node).find((child) => /top bar/i.test(child.name));
-  const toggleNode = descendants(node).find((child) =>
+  const namedToggleNode = descendants(node).find((child) =>
     /(?:hamburger|menu.?icon|header\/menu|メニュー.?アイコン)/i.test(child.name),
   );
+  const inferredToggleNode = context.variant === "mobile"
+    ? navigationVisuals
+      .filter((child) => child !== logoNode)
+      .filter((child) => {
+        const childBounds = child.absoluteBoundingBox as FigmaBounds;
+        const centerX = childBounds.x + childBounds.width / 2;
+        const centerY = childBounds.y + childBounds.height / 2;
+        return centerX >= bounds.x + bounds.width * 0.72
+          && centerY <= bounds.y + bounds.height * 0.72
+          && childBounds.width <= bounds.width * 0.18
+          && childBounds.height <= bounds.height * 0.72;
+      })
+      .sort((left, right) => {
+        const leftBounds = left.absoluteBoundingBox as FigmaBounds;
+        const rightBounds = right.absoluteBoundingBox as FigmaBounds;
+        return rightBounds.x - leftBounds.x
+          || area(left) - area(right);
+      })[0]
+    : undefined;
+  const toggleNode = namedToggleNode ?? inferredToggleNode;
   const ctaBackground = ctaText?.absoluteBoundingBox
     ? smallestContainingVisual(node, ctaText.absoluteBoundingBox)
     : undefined;
-  const ctaBounds = ctaBackground?.absoluteBoundingBox;
+  const ctaBounds = ctaBackground?.absoluteBoundingBox ?? ctaText?.absoluteBoundingBox;
   const ctaIconNode = ctaBounds ? navigationVisuals
     .filter((child) => child !== logoNode)
     .find((child) => {
@@ -564,7 +584,10 @@ function navigationElement(
           ?? inferredSectionLink(item.characters ?? "", context),
       ),
     })),
-    cta_label: ctaText?.characters?.trim() || "お問い合わせ",
+    // A page-menu item named "お問い合わせ" is not automatically a separate
+    // header CTA. Emitting a default label without a Figma box made the
+    // absolutely positioned CTA cover the entire high-fidelity navigation.
+    cta_label: ctaText?.characters?.trim() || "",
     cta_url: elementorUrl(
       functionalLink(ctaText ?? node, context, false)
         ?? inferredSectionLink("お問い合わせ", context),
@@ -574,7 +597,9 @@ function navigationElement(
       label: "ホーム",
       external: false,
     }),
-    background_color: solidColor(background?.fills) ?? "rgba(255,255,255,0.92)",
+    // High-fidelity headers commonly sit directly over the hero. An opaque
+    // fallback is a visible design change when Figma has no background layer.
+    background_color: solidColor(background?.fills) ?? "transparent",
     accent_color: solidColor(topBar?.fills) ?? "#D10B2C",
     text_color: solidColor(menuTexts[0]?.fills) ?? "#202020",
     design_geometry: JSON.stringify({
@@ -589,7 +614,7 @@ function navigationElement(
         ...designTextStyle(item, bounds.width),
       })),
       cta: {
-        ...relativeDesignBox(ctaBackground?.absoluteBoundingBox, bounds),
+        ...relativeDesignBox(ctaBounds, bounds),
         ...designTextStyle(ctaText, bounds.width),
       },
     }),

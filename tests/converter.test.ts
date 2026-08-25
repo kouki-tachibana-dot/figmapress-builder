@@ -1410,6 +1410,11 @@ test("Figma interaction layers become functional Elementor widgets", async () =>
     JSON.parse(String(navigation?.settings.design_geometry)).root,
     { width: 1920, height: 115 },
   );
+  assert.equal(navigation?.settings.cta_label, "ご相談はこちら");
+  assert.ok(
+    Number.isFinite(JSON.parse(String(navigation?.settings.design_geometry)).cta.x),
+    "a named CTA without a rectangle must use its text box instead of becoming unpositioned",
+  );
   assert.deepEqual(
     JSON.parse(String(form?.settings.design_geometry)).root,
     { width: 1920, height: 900 },

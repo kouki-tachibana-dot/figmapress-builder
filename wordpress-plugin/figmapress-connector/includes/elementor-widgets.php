@@ -8,6 +8,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 /** Sanitize a CSS color while allowing the rgba() colors returned by Figma. */
 function figmapress_connector_css_color( $value, $fallback ) {
     $value = trim( (string) $value );
+    if ( 'transparent' === strtolower( $value ) ) {
+        return 'transparent';
+    }
     if ( sanitize_hex_color( $value ) ) {
         return $value;
     }
@@ -50,6 +53,19 @@ function figmapress_connector_geometry_style( $box, $include_text = false ) {
         }
     }
     return $style;
+}
+
+/** Confirm that a high-fidelity control has a complete, usable Figma box. */
+function figmapress_connector_has_geometry_box( $box ) {
+    if ( ! is_array( $box ) ) {
+        return false;
+    }
+    foreach ( array( 'x', 'y', 'width', 'height' ) as $key ) {
+        if ( ! isset( $box[ $key ] ) || ! is_numeric( $box[ $key ] ) ) {
+            return false;
+        }
+    }
+    return (float) $box['width'] > 0 && (float) $box['height'] > 0;
 }
 
 /** Preserve a Figma component's imported width-to-height ratio. */
@@ -254,6 +270,8 @@ final class FigmaPress_Nav_Widget extends FigmaPress_Widget_Base {
         $text       = figmapress_connector_css_color( isset( $settings['text_color'] ) ? $settings['text_color'] : '', '#202020' );
         $geometry   = figmapress_connector_design_geometry( $settings );
         $fidelity   = is_array( $geometry );
+        $has_cta_geometry = $fidelity && isset( $geometry['cta'] )
+            && figmapress_connector_has_geometry_box( $geometry['cta'] );
         $toggle_geometry = $fidelity && ! empty( $geometry['toggle'] ) ? $geometry['toggle'] : null;
         $toggle_inferred = false;
         if ( $is_mobile && $fidelity && ! $toggle_geometry ) {
@@ -274,8 +292,8 @@ final class FigmaPress_Nav_Widget extends FigmaPress_Widget_Base {
             <?php endif; ?>
             <input class="figmapress-nav__state" id="<?php echo esc_attr( $menu_state_id ); ?>" type="checkbox" aria-controls="<?php echo esc_attr( $menu_id ); ?>" aria-label="<?php esc_attr_e( 'メニューを開閉', 'figmapress-connector' ); ?>"<?php echo $toggle_geometry ? ' style="' . esc_attr( figmapress_connector_geometry_style( $toggle_geometry ) ) . '"' : ''; ?>>
             <label class="figmapress-nav__toggle" for="<?php echo esc_attr( $menu_state_id ); ?>" aria-expanded="false"<?php echo $toggle_geometry ? ' style="' . esc_attr( figmapress_connector_geometry_style( $toggle_geometry ) ) . '"' : ''; ?>><span></span><span></span><span></span><span class="screen-reader-text"><?php esc_html_e( 'メニューを開閉', 'figmapress-connector' ); ?></span></label>
-            <?php if ( $is_mobile && ! empty( $settings['cta_label'] ) ) : ?>
-                <a class="figmapress-nav__mobile-cta" href="<?php echo esc_url( $cta_url ); ?>"<?php echo $fidelity && ! empty( $geometry['cta'] ) ? ' style="' . esc_attr( figmapress_connector_geometry_style( $geometry['cta'], true ) ) . '"' : ''; ?>><?php echo esc_html( $settings['cta_label'] ); ?></a>
+            <?php if ( $is_mobile && ! empty( $settings['cta_label'] ) && ( ! $fidelity || $has_cta_geometry ) ) : ?>
+                <a class="figmapress-nav__mobile-cta" href="<?php echo esc_url( $cta_url ); ?>"<?php echo $has_cta_geometry ? ' style="' . esc_attr( figmapress_connector_geometry_style( $geometry['cta'], true ) ) . '"' : ''; ?>><?php echo esc_html( $settings['cta_label'] ); ?></a>
             <?php endif; ?>
             <div class="figmapress-nav__panel" id="<?php echo esc_attr( $menu_id ); ?>">
                 <ul class="figmapress-nav__items">
@@ -286,8 +304,8 @@ final class FigmaPress_Nav_Widget extends FigmaPress_Widget_Base {
                         <li<?php echo $item_geometry ? ' style="' . esc_attr( figmapress_connector_geometry_style( $item_geometry, true ) ) . '"' : ''; ?>><a href="<?php echo esc_url( $url ); ?>"><?php echo esc_html( isset( $item['label'] ) ? $item['label'] : '' ); ?></a></li>
                     <?php endforeach; ?>
                 </ul>
-                <?php if ( ! empty( $settings['cta_label'] ) ) : ?>
-                    <a class="figmapress-nav__cta" href="<?php echo esc_url( $cta_url ); ?>"<?php echo $fidelity && ! empty( $geometry['cta'] ) ? ' style="' . esc_attr( figmapress_connector_geometry_style( $geometry['cta'], true ) ) . '"' : ''; ?>><?php echo esc_html( $settings['cta_label'] ); ?></a>
+                <?php if ( ! empty( $settings['cta_label'] ) && ( ! $fidelity || $has_cta_geometry ) ) : ?>
+                    <a class="figmapress-nav__cta" href="<?php echo esc_url( $cta_url ); ?>"<?php echo $has_cta_geometry ? ' style="' . esc_attr( figmapress_connector_geometry_style( $geometry['cta'], true ) ) . '"' : ''; ?>><?php echo esc_html( $settings['cta_label'] ); ?></a>
                 <?php endif; ?>
             </div>
         </nav>
