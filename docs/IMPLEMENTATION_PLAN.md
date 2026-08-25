@@ -1,5 +1,40 @@
 # FigmaPress 実運用品質向上計画
 
+## Elementorネイティブ再構築（v0.27.0）
+
+### 目的
+
+- 公開画面とElementor編集画面を、同じElementorコンテナ・ウィジェット構造から描画する。
+- Figma全画面スナップショットを公開コンテンツとして保存せず、視覚QAの比較資料としてだけ使用する。
+- 見出し、本文、リンク、画像、ナビゲーション、フォーム、アコーディオン、カルーセルをElementor上で個別に選択・編集できる状態を必須とする。
+
+### 公式Elementor構造との対応
+
+| Elementorの仕組み | FigmaPressの出力 | 必須検査 |
+| --- | --- | --- |
+| Page JSON `version: 0.4` | `ElementorTemplate` | `content`がコンテナ／ウィジェットの有効な木であること |
+| Container | Figma Frame / Group | 子要素、幅、高さ、背景、余白、配置をElementor設定として保持 |
+| Widget | text-editor / image / FigmaPress機能Widget | `widgetType`と登録済みコントロールが一致すること |
+| Responsive values | desktop値と`_tablet`／`_mobile`、または端末別ルート | PC/SPの表示切替、横はみ出し、操作対象を確認 |
+| Page settings | 背景、タイトル非表示、Webフォント、ネイティブ構造識別 | 全画面画像や透明文字による代替を禁止 |
+
+### 実装順序
+
+1. `convert`と複数ページ変換から精密表示スタックの挿入を外し、Figma参照画像はAPIレスポンスの比較資料にだけ残す。
+2. ネイティブElementorテンプレートへ構造バージョンとPC/SP参照IDを記録する。公開HTMLには参照画像を出力しない。
+3. 保存前検査で、要素IDの一意性、コンテナ／ウィジェットの木、登録Widget、実テキスト、画像、PC/SPルート、機能Widgetを検証する。
+4. 全画面画像、`figmapress-exact-*`、透明化した文字・Widgetを含むテンプレートはWordPress保存前に拒否する。
+5. 文字表示検査へ文字色と`-webkit-text-fill-color`を追加し、透明文字を「実描画」と誤判定しない。
+6. WordPress保存後はElementorの実フロントエンド描画を取得し、実テキスト、リンク、フォーム、PC/SP、アクセシビリティを再検査する。
+
+### 完了条件
+
+- 公開画面にFigma全画面画像がなく、見えている全文章がHTMLテキストである。
+- Elementorナビゲータでセクション、文字、画像、機能Widgetを個別に選択・編集できる。
+- 公開画面とElementor編集画面で同じネイティブ構造が描画され、透明な操作レイヤーを使わない。
+- PC 1440px、タブレット1024px、スマホ390pxでFigmaと比較し、意図しない縦書き、欠落、重なり、横スクロールがない。
+- 変換、型検査、lint、ビルド、WordPress保存、実ページブラウザ試験に合格する。
+
 ## フォーム値を保護するリンク限定変換（v0.26.74）
 
 - WordPressページURLへの変換対象をElementorの`url`設定とHTML内の`href`に限定する。

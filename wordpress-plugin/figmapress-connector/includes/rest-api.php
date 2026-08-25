@@ -263,6 +263,12 @@ function figmapress_connector_rest_status() {
                 'imageTransforms' => true,
                 'mediaPersistence' => true,
             ),
+            'nativeElementor'   => array(
+                'required'        => true,
+                'structureAudit'  => true,
+                'realText'        => true,
+                'snapshotContent' => false,
+            ),
             'siteBuild'         => array(
                 'pages'  => true,
                 'menus'  => current_user_can( 'edit_theme_options' ),
@@ -778,7 +784,9 @@ function figmapress_connector_stream_elementor_upload( $upload_id, $index, $tota
                 JSON_UNQUOTE(JSON_EXTRACT(option_value, '$.template.version')) AS template_version,
                 JSON_TYPE(JSON_EXTRACT(option_value, '$.template.content')) AS content_type,
                 JSON_LENGTH(JSON_EXTRACT(option_value, '$.template.content')) AS root_elements,
-                JSON_EXTRACT(option_value, '$.template.page_settings') AS page_settings
+                JSON_EXTRACT(option_value, '$.template.page_settings') AS page_settings,
+                JSON_UNQUOTE(JSON_EXTRACT(option_value, '$.template.page_settings.figmapress_native_layout')) AS native_layout,
+                JSON_UNQUOTE(JSON_EXTRACT(option_value, '$.template.page_settings.figmapress_exact_visual')) AS exact_visual
              FROM {$wpdb->options} WHERE option_name = %s LIMIT 1",
             $data_key
         ),
@@ -789,6 +797,7 @@ function figmapress_connector_stream_elementor_upload( $upload_id, $index, $tota
         ! hash_equals( $upload_id, (string) $valid['request_id'] ) ||
         ! preg_match( figmapress_connector_site_source_key_pattern(), (string) $valid['source_key'] ) ||
         'draft' !== (string) $valid['post_status'] || '0.4' !== (string) $valid['template_version'] ||
+        'yes' !== (string) $valid['native_layout'] || 'yes' === (string) $valid['exact_visual'] ||
         'ARRAY' !== (string) $valid['content_type'] || absint( $valid['root_elements'] ) < 1
     ) {
         $wpdb->delete( $wpdb->options, array( 'option_name' => $data_key ), array( '%s' ) );
@@ -797,12 +806,13 @@ function figmapress_connector_stream_elementor_upload( $upload_id, $index, $tota
     }
     $unsafe = $wpdb->get_var(
         $wpdb->prepare(
-            "SELECT (LOWER(option_value) LIKE %s OR LOWER(option_value) LIKE %s OR LOWER(option_value) LIKE %s OR LOWER(option_value) LIKE %s)
+            "SELECT (LOWER(option_value) LIKE %s OR LOWER(option_value) LIKE %s OR LOWER(option_value) LIKE %s OR LOWER(option_value) LIKE %s OR LOWER(option_value) LIKE %s)
              FROM {$wpdb->options} WHERE option_name = %s LIMIT 1",
             '%<script%',
             '%javascript:%',
             '%data:text/html%',
             '%\"widgettype\":\"html\"%',
+            '%figmapress-exact-%',
             $data_key
         )
     );
@@ -823,6 +833,8 @@ function figmapress_connector_stream_elementor_upload( $upload_id, $index, $tota
                 ((LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"elType\":\"widget\"', ''))) / 17) AS allowed_elements,
                 (LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"widgetType\":', ''))) / 13 AS widget_count,
                 ((LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"widgetType\":\"heading\"', ''))) / 22) +
+                ((LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"widgetType\":\"text-editor\"', ''))) / 26) AS text_widget_count,
+                ((LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"widgetType\":\"heading\"', ''))) / 22) +
                 ((LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"widgetType\":\"text-editor\"', ''))) / 26) +
                 ((LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"widgetType\":\"button\"', ''))) / 21) +
                 ((LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"widgetType\":\"image\"', ''))) / 20) +
@@ -840,6 +852,7 @@ function figmapress_connector_stream_elementor_upload( $upload_id, $index, $tota
         ! current_user_can( 'unfiltered_html' ) || ! is_array( $structure ) ||
         absint( $structure['element_count'] ) !== absint( $structure['allowed_elements'] ) ||
         absint( $structure['widget_count'] ) !== absint( $structure['allowed_widgets'] ) ||
+        absint( $structure['text_widget_count'] ) < 1 ||
         absint( $structure['element_count'] ) > 1200
     ) {
         $wpdb->delete( $wpdb->options, array( 'option_name' => $data_key ), array( '%s' ) );
@@ -1068,6 +1081,11 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
     }
     if ( '' !== $source_key && ! preg_match( figmapress_connector_site_source_key_pattern(), $source_key ) ) {
         return new WP_Error( 'figmapress_invalid_source_key', 'Figma変換元の識別情報が無効です。', array( 'status' => 422 ) );
+    }
+
+    $native_template = figmapress_connector_validate_native_elementor_template( $template );
+    if ( is_wp_error( $native_template ) ) {
+        return $native_template;
     }
 
     $identity         = '' !== $source_key ? $source_key : $request_id;
@@ -1788,6 +1806,11 @@ function figmapress_connector_rest_update_elementor_document( WP_REST_Request $r
         return new WP_Error( 'figmapress_invalid_template', 'The Elementor template payload is invalid.', array( 'status' => 422 ) );
     }
 
+    $native_template = figmapress_connector_validate_native_elementor_template( $template );
+    if ( is_wp_error( $native_template ) ) {
+        return $native_template;
+    }
+
     $element_count = 0;
     $content       = figmapress_connector_sanitize_elementor_elements(
         isset( $template['content'] ) ? $template['content'] : array(),
@@ -2091,6 +2114,106 @@ function figmapress_connector_count_elementor_elements( $elements ) {
         }
     }
     return $count;
+}
+
+/**
+ * Reject screenshot-backed pages and require a normal Elementor document tree.
+ * Figma reference images belong to visual QA and must never become the visible
+ * page content or a transparent interaction overlay.
+ */
+function figmapress_connector_validate_native_elementor_template( $template ) {
+    $settings = isset( $template['page_settings'] ) && is_array( $template['page_settings'] )
+        ? $template['page_settings']
+        : array();
+    if ( 'yes' !== (string) ( $settings['figmapress_native_layout'] ?? '' ) ) {
+        return new WP_Error(
+            'figmapress_native_elementor_required',
+            'Elementorネイティブ構造がありません。FigmaPressを最新版へ更新して、もう一度変換してください。',
+            array( 'status' => 422 )
+        );
+    }
+    if ( 'yes' === (string) ( $settings['figmapress_exact_visual'] ?? '' ) ) {
+        return new WP_Error(
+            'figmapress_snapshot_layout_rejected',
+            'Figma全画面画像を使う旧形式は保存できません。実テキストのElementor構造へ再変換してください。',
+            array( 'status' => 422 )
+        );
+    }
+
+    $content = isset( $template['content'] ) && is_array( $template['content'] )
+        ? $template['content']
+        : array();
+    if ( empty( $content ) ) {
+        return new WP_Error( 'figmapress_empty_template', 'The Elementor template contains no supported elements.', array( 'status' => 422 ) );
+    }
+    foreach ( $content as $root ) {
+        if ( ! is_array( $root ) || 'container' !== (string) ( $root['elType'] ?? '' ) ) {
+            return new WP_Error(
+                'figmapress_native_root_required',
+                'Elementorページの最上位要素はコンテナである必要があります。',
+                array( 'status' => 422 )
+            );
+        }
+    }
+
+    $text_widgets = 0;
+    $inspect = function ( $elements ) use ( &$inspect, &$text_widgets ) {
+        foreach ( is_array( $elements ) ? $elements : array() as $element ) {
+            if ( ! is_array( $element ) ) {
+                continue;
+            }
+            $classes = isset( $element['settings']['css_classes'] )
+                ? (string) $element['settings']['css_classes']
+                : '';
+            $node_id = isset( $element['settings']['figmapress_node_id'] )
+                ? (string) $element['settings']['figmapress_node_id']
+                : '';
+            if ( false !== strpos( $classes, 'figmapress-exact-' ) || 0 === strpos( $node_id, 'exact-' ) ) {
+                return false;
+            }
+            $widget_type = isset( $element['widgetType'] ) ? (string) $element['widgetType'] : '';
+            if ( in_array( $widget_type, array( 'heading', 'text-editor' ), true ) ) {
+                $settings = isset( $element['settings'] ) && is_array( $element['settings'] )
+                    ? $element['settings']
+                    : array();
+                $raw_text = 'heading' === $widget_type
+                    ? (string) ( $settings['title'] ?? '' )
+                    : (string) ( $settings['editor'] ?? '' );
+                $plain_text = trim( wp_strip_all_tags( html_entity_decode( $raw_text, ENT_QUOTES, 'UTF-8' ) ) );
+                $opacity = $settings['opacity'] ?? null;
+                $opacity_size = is_array( $opacity ) ? ( $opacity['size'] ?? null ) : $opacity;
+                $text_color = (string) ( $settings['text_color'] ?? ( $settings['title_color'] ?? '' ) );
+                $normalized_color = strtolower( preg_replace( '/\s+/', '', $text_color ) );
+                $transparent_color = 'transparent' === $normalized_color
+                    || 1 === preg_match( '/^#[0-9a-f]{3}0$/', $normalized_color )
+                    || 1 === preg_match( '/^#[0-9a-f]{6}00$/', $normalized_color )
+                    || 1 === preg_match( '/^rgba\([^,]+,[^,]+,[^,]+,0(?:\.0+)?\)$/', $normalized_color )
+                    || 1 === preg_match( '/^rgba?\([^\/]+\/0(?:\.0+)?%?\)$/', $normalized_color );
+                if ( '' !== $plain_text && ( ! is_numeric( $opacity_size ) || (float) $opacity_size > 0 ) && ! $transparent_color ) {
+                    ++$text_widgets;
+                }
+            }
+            if ( false === $inspect( $element['elements'] ?? array() ) ) {
+                return false;
+            }
+        }
+        return true;
+    };
+    if ( false === $inspect( $content ) ) {
+        return new WP_Error(
+            'figmapress_snapshot_layout_rejected',
+            '全画面画像または透明操作レイヤーを含む旧形式は保存できません。',
+            array( 'status' => 422 )
+        );
+    }
+    if ( $text_widgets < 1 ) {
+        return new WP_Error(
+            'figmapress_real_text_required',
+            '編集可能な文字ウィジェットがありません。',
+            array( 'status' => 422 )
+        );
+    }
+    return true;
 }
 
 function figmapress_connector_sanitize_elementor_elements( $elements, &$count ) {

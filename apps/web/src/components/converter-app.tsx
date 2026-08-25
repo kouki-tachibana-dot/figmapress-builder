@@ -69,6 +69,7 @@ import {
   shouldKeepVisualCorrections,
 } from "@/lib/visual-qa";
 import { readApi } from "@/lib/api-client";
+import { cssColorIsPainted } from "@/lib/text-integrity";
 import { resolveFigmaRequestAuthentication } from "@/lib/figma-client-auth";
 import type { FigmaPageCandidate } from "@/lib/figma-frame-selection";
 import { currentCandidateFigmaSitePageKey } from "@/lib/figma-site-plan";
@@ -83,6 +84,7 @@ import {
   WORDPRESS_SITE_BRIDGE_FRAME_ID,
   type WordPressSiteBridge,
 } from "@/lib/wordpress-site-bridge";
+import { auditNativeElementorTemplate } from "@/lib/elementor-native";
 import {
   inspectFigmaSiteTemplates,
   type FigmaSitePreflightReport,
@@ -98,7 +100,7 @@ type PageTemplateEntry = {
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
-const APP_RELEASE = "0.26.74";
+const APP_RELEASE = "0.27.0";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -107,8 +109,8 @@ const SMALL_CHUNK_UPLOAD_CONNECTOR_VERSION = "0.16.24";
 const FIGMA_HEADER_MEDIA_CONNECTOR_VERSION = "0.16.18";
 const MULTI_PAGE_CONNECTOR_VERSION = "0.17.18";
 const FIGMA_PAGE_SET_CONNECTOR_VERSION = "0.17.28";
-const EXACT_VISUAL_CONNECTOR_VERSION = "0.17.29";
 const DYNAMIC_FORM_CONNECTOR_VERSION = "0.17.30";
+const NATIVE_ELEMENTOR_CONNECTOR_VERSION = "0.18.0";
 
 function safeWordPressSiteBridgeUrl(baseUrl: string): string {
   try {
@@ -360,6 +362,8 @@ function countPaintedText(
     const everyTextRunPainted = style?.display !== "none"
       && style?.visibility !== "hidden"
       && Number.parseFloat(style?.opacity || "1") > 0
+      && cssColorIsPainted(style?.color)
+      && cssColorIsPainted(style?.webkitTextFillColor)
       && textNodes.length > 0
       && textNodes.every((node) => {
         const range = document.createRange();
@@ -748,7 +752,6 @@ ${webfontUrl ? `<link rel="stylesheet" href="${webfontUrl}">` : ""}
 section{padding:64px clamp(24px,7vw,88px);max-width:1100px;margin:0 auto}h1,h2,h3{line-height:1.13;letter-spacing:-.035em}h1{font-size:clamp(36px,7vw,72px);margin:0 0 20px}h2{font-size:clamp(28px,5vw,48px);margin:0 0 28px}h3{font-size:20px}p{color:#53636c}a{display:inline-block;background:#c8ff61;color:#102029;text-decoration:none;font-weight:750;padding:13px 20px;border-radius:999px}
 .wp-block-figmapress-hero{display:grid;grid-template-columns:1fr;align-items:center;gap:48px;min-height:520px}.wp-block-figmapress-hero[data-layout="text-left-image-right"]{grid-template-columns:1.15fr .85fr}.wp-block-figmapress-hero__image img{width:100%;border-radius:24px}.wp-block-figmapress-service-list,.wp-block-figmapress-faq{background:#fff}.wp-block-figmapress-card-grid__items,.wp-block-figmapress-service-list__items{list-style:none;padding:0;display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.wp-block-figmapress-card-grid__item,.wp-block-figmapress-service-list__item{padding:24px;background:#fff;border:1px solid #dbe1df;border-radius:18px}.wp-block-figmapress-faq__items dt{font-weight:750;margin-top:20px}.wp-block-figmapress-faq__items dd{margin:6px 0 0;color:#53636c}.wp-block-figmapress-cta{text-align:center;background:#112832;color:#fff;border-radius:28px}.wp-block-figmapress-cta h2{color:#fff}.wp-block-figmapress-contact{text-align:center}
 .figmapress-figma-preview{container-type:inline-size;overflow:hidden;position:relative;width:100%}.figmapress-figma-preview *{box-sizing:border-box;margin:0;max-width:none}.figmapress-figma-preview img{display:block}.figmapress-figma-preview--mobile{display:none}
-.figmapress-exact-stack{overflow:hidden;position:relative;width:100%}.figmapress-exact-interaction-layer{inset:0 auto auto 0;pointer-events:none;position:absolute;width:100%;z-index:2}.figmapress-exact-interaction-layer .figmapress-figma-preview{background:transparent!important;background-image:none!important;box-shadow:none!important}.figmapress-exact-interaction-layer [data-figmapress-kind="container"]{background:transparent!important;background-image:none!important;border-color:transparent!important;box-shadow:none!important}.figmapress-exact-interaction-layer [data-figmapress-kind="text"],.figmapress-exact-interaction-layer [data-figmapress-kind="text"] *{color:transparent!important;text-shadow:none!important;-webkit-text-fill-color:transparent!important}.figmapress-exact-interaction-layer [data-figmapress-kind="visual"]{opacity:0!important}.figmapress-exact-interaction-layer [data-figmapress-preview-link]{background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;color:transparent!important;cursor:pointer;margin:0!important;padding:0!important;pointer-events:auto;text-decoration:none!important}.figmapress-exact-preview img{height:100%;object-fit:fill;width:100%}
 @media(max-width:767px){section{padding:44px 22px}.wp-block-figmapress-hero{grid-template-columns:1fr;min-height:auto}.wp-block-figmapress-card-grid__items,.wp-block-figmapress-service-list__items{grid-template-columns:1fr}.figmapress-figma-preview--desktop{display:none}.figmapress-figma-preview--mobile{display:block}}
 </style></head><body>${content}</body></html>`;
 }
@@ -1015,9 +1018,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     wpStatus?.connectorVersion,
     FIGMA_HEADER_MEDIA_CONNECTOR_VERSION,
   );
-  const connectorSupportsExactVisual = versionAtLeast(
+  const connectorSupportsNativeElementor = versionAtLeast(
     wpStatus?.connectorVersion,
-    EXACT_VISUAL_CONNECTOR_VERSION,
+    NATIVE_ELEMENTOR_CONNECTOR_VERSION,
   );
   const connectorSupportsDynamicForms = versionAtLeast(
     wpStatus?.connectorVersion,
@@ -2002,8 +2005,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       setWpSiteProgress(`${index + 1}/${plan.pages.length}「${page.title}」をElementorへ保存しています…`);
       const template = pageTemplates.get(page.key);
       if (!template) throw new Error(`「${page.title}」のElementorデータを準備できませんでした。`);
-      if (page.frameId && template.page_settings.figmapress_exact_visual !== "yes") {
-        throw new Error(`「${page.title}」のPC/SP精密表示が不足しているため、WordPressには保存していません。`);
+      const nativeAudit = auditNativeElementorTemplate(template);
+      if (!nativeAudit.valid) {
+        throw new Error(`「${page.title}」のElementorネイティブ構造に問題があります（${nativeAudit.errors.slice(0, 4).join("、")}）。WordPressには保存していません。`);
       }
       const linkedTemplate = rewriteElementorTemplatePageLinks(template, pageLinks);
       const linkAudit = auditElementorTemplateLinks(linkedTemplate, pageLinks);
@@ -2113,6 +2117,17 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     ) {
       setWpError(`Figmaフォームの全項目送信にはConnector v${DYNAMIC_FORM_CONNECTOR_VERSION}以上が必要です。`);
       return;
+    }
+    if (wpTarget === "elementor" && !connectorSupportsNativeElementor) {
+      setWpError(`実テキスト・コンテナ方式のElementor保存にはConnector v${NATIVE_ELEMENTOR_CONNECTOR_VERSION}以上が必要です。`);
+      return;
+    }
+    if (wpTarget === "elementor") {
+      const nativeAudit = auditNativeElementorTemplate(output.elementorTemplate);
+      if (!nativeAudit.valid) {
+        setWpError(`Elementorネイティブ構造に問題があります（${nativeAudit.errors.slice(0, 4).join("、")}）。WordPressには保存していません。`);
+        return;
+      }
     }
     const credentials = readWordPressCredentials(new FormData(event.currentTarget), {
       baseUrl,
@@ -3596,7 +3611,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                       </button>
                       {sitePreflightResult && (
                         <p role="status">
-                          ✓ {sitePreflightResult.pages}/{multiPagePlan.pages.length}ページ合格・PC/SP精密表示 {sitePreflightResult.exactPages}ページ・実動メニュー {sitePreflightResult.navigationPages}ページ/{sitePreflightResult.navigationWidgets}個・リンク {sitePreflightResult.links}件・移動先 {sitePreflightResult.destinations}ページ・フォーム {sitePreflightResult.contactForms}個
+                          ✓ {sitePreflightResult.pages}/{multiPagePlan.pages.length}ページ合格・ネイティブElementor {sitePreflightResult.nativePages}ページ／文字 {sitePreflightResult.textWidgets}個／画像 {sitePreflightResult.imageWidgets}個・実動メニュー {sitePreflightResult.navigationPages}ページ/{sitePreflightResult.navigationWidgets}個・リンク {sitePreflightResult.links}件・移動先 {sitePreflightResult.destinations}ページ・フォーム {sitePreflightResult.contactForms}個
                         </p>
                       )}
                       {sitePreflightError && (
@@ -3681,7 +3696,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                       <span>実ページQA {connectorSupportsActualVisualQa ? "対応" : "更新必要"}</span>
                     )}
                     {wpTarget === "elementor" && visualQaReferenceCount > 0 && (
-                      <span>Figma精密表示 {connectorSupportsExactVisual ? "対応" : "更新必要"}</span>
+                      <span>ネイティブElementor {connectorSupportsNativeElementor ? "対応" : "更新必要"}</span>
                     )}
                     {wpTarget === "elementor" && conversionRequiresDynamicForms && (
                       <span>Figmaフォーム {connectorSupportsDynamicForms ? "対応" : "更新必要"}</span>
@@ -3728,9 +3743,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                   実際のElementor下書きをFigmaと再比較して自動補正するにはConnector v{ACTUAL_VISUAL_QA_CONNECTOR_VERSION}以上が必要です。WordPressのプラグイン更新画面から最新版へ更新し、再診断してください。
                 </div>
               )}
-              {wpStatus && wpTarget === "elementor" && visualQaReferenceCount > 0 && wpStatus.connectorInstalled && !connectorSupportsExactVisual && (
+              {wpStatus && wpTarget === "elementor" && wpStatus.connectorInstalled && !connectorSupportsNativeElementor && (
                 <div className="alert alert--error" role="alert">
-                  Figma原本のPC・スマホ精密表示にはConnector v{EXACT_VISUAL_CONNECTOR_VERSION}以上が必要です。<a href="/downloads/figmapress-connector.zip" download>最新版ZIPをダウンロード</a>して更新し、再診断してください。
+                  画像に焼き込まず、実テキストとElementorコンテナで保存するにはConnector v{NATIVE_ELEMENTOR_CONNECTOR_VERSION}以上が必要です。<a href="/downloads/figmapress-connector.zip" download>最新版ZIPをダウンロード</a>して更新し、再診断してください。
                 </div>
               )}
               {wpStatus && wpTarget === "elementor" && conversionRequiresDynamicForms && wpStatus.connectorInstalled && !connectorSupportsDynamicForms && (
@@ -3932,7 +3947,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                 <span>常に <code>status: draft</code></span>
                 <button
                   className="button button--dark"
-                  disabled={!confirmed || wpBusy || visualQaBlocksDraft || multiPageBlocked || !wpStatus || !wpStatus.connectorInstalled || !wpStatus.canEditPages || (wpTarget === "elementor" && (!wpStatus.elementor.active || !connectorSupportsInteractions || (conversionRequiresDynamicForms && !connectorSupportsDynamicForms) || (visualQaReferenceCount > 0 && (!connectorSupportsActualVisualQa || !connectorSupportsExactVisual))))}
+                  disabled={!confirmed || wpBusy || visualQaBlocksDraft || multiPageBlocked || !wpStatus || !wpStatus.connectorInstalled || !wpStatus.canEditPages || (wpTarget === "elementor" && (!wpStatus.elementor.active || !connectorSupportsInteractions || !connectorSupportsNativeElementor || (conversionRequiresDynamicForms && !connectorSupportsDynamicForms) || (visualQaReferenceCount > 0 && !connectorSupportsActualVisualQa)))}
                   type="submit"
                 >
                   {wpBusy

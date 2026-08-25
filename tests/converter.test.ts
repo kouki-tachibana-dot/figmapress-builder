@@ -1,17 +1,28 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import mockFigma from "../examples/mock-figma.json";
 import { convertFile } from "../apps/web/src/lib/converter.ts";
 import {
-  applyExactVisualPresentation,
-  applyExactVisualTemplate,
-} from "../apps/web/src/lib/exact-visual.ts";
+  applyNativeElementorPresentation,
+  auditNativeElementorTemplate,
+  markNativeElementorTemplate,
+} from "../apps/web/src/lib/elementor-native.ts";
 import {
   figmaRotationShouldApply,
   figmaTextShouldWrap,
 } from "../packages/elementor-renderer/src/figma-exporter.ts";
 import type { FigmaNode, MockFigmaFile } from "@figmapress/figma-parser";
+import { cssColorIsPainted } from "../apps/web/src/lib/text-integrity.ts";
+
+test("text integrity rejects transparent CSS colors", () => {
+  assert.equal(cssColorIsPainted("transparent"), false);
+  assert.equal(cssColorIsPainted("rgba(0, 0, 0, 0)"), false);
+  assert.equal(cssColorIsPainted("rgb(0 0 0 / 0)"), false);
+  assert.equal(cssColorIsPainted("#0000"), false);
+  assert.equal(cssColorIsPainted("#00000000"), false);
+  assert.equal(cssColorIsPainted("rgb(0, 0, 0)"), true);
+  assert.equal(cssColorIsPainted("rgb(0 0 0 / 100%)"), true);
+});
 
 test("single-line fixed Figma headings do not wrap into adjacent text", () => {
   const heading: FigmaNode = {
@@ -506,7 +517,7 @@ test("larger mixed-size runs keep Figma's common absolute line box", async () =>
   assert.match(result.previewHtml, /font-size:6\.667vw[^>]*line-height:1\.125/);
 });
 
-test("exact presentation keeps responsive snapshots and native Elementor editing", () => {
+test("native Elementor presentation keeps screenshots out of public content", () => {
   const output: Awaited<ReturnType<typeof convertFile>> = {
     blueprint: {
       site: { name: "Exact", type: "landing_page", language: "ja" },
@@ -521,8 +532,8 @@ test("exact presentation keeps responsive snapshots and native Elementor editing
       version: "0.4",
       page_settings: {},
       content: [
-        { id: "native1", elType: "container", isInner: false, settings: { css_classes: "figmapress-layout figmapress-layout--desktop" }, elements: [] },
-        { id: "native2", elType: "container", isInner: false, settings: { css_classes: "figmapress-layout figmapress-layout--mobile" }, elements: [] },
+        { id: "native1", elType: "container", isInner: false, settings: { css_classes: "figmapress-layout figmapress-layout--desktop" }, elements: [{ id: "text001", elType: "widget", widgetType: "text-editor", isInner: false, settings: { editor: "編集文字" }, elements: [] }] },
+        { id: "native2", elType: "container", isInner: false, settings: { css_classes: "figmapress-layout figmapress-layout--mobile" }, elements: [{ id: "text002", elType: "widget", widgetType: "text-editor", isInner: false, settings: { editor: "編集文字" }, elements: [] }] },
       ],
     },
     previewHtml: '<div class="figmapress-figma-preview figmapress-figma-preview--desktop" data-figmapress-layout="desktop"><div data-figmapress-kind="text">編集文字</div></div>',
@@ -533,7 +544,7 @@ test("exact presentation keeps responsive snapshots and native Elementor editing
     summary: { pageTitle: "Exact", sectionCount: 1, sectionTypes: ["figma"] },
   };
 
-  const exact = applyExactVisualPresentation(output, {
+  const native = applyNativeElementorPresentation(output, {
     desktop: {
       nodeId: "10:1",
       name: "PC",
@@ -556,33 +567,45 @@ test("exact presentation keeps responsive snapshots and native Elementor editing
     },
   });
 
-  assert.match(exact.previewHtml, /figmapress-exact-preview/);
-  assert.match(exact.previewHtml, /data-figmapress-reference-node-id="10:1"/);
-  assert.match(exact.previewHtml, /exact-pc\.jpg/);
-  assert.match(exact.previewHtml, /exact-mobile\.jpg/);
-  assert.match(exact.previewHtml, /figmapress-exact-interaction-layer[^>]*>.*編集文字/);
-  assert.doesNotMatch(exact.previewHtml, /figmapress-exact-interaction-layer" aria-hidden/);
-  assert.equal(exact.elementorTemplate.page_settings.figmapress_exact_visual, "yes");
-  assert.equal(exact.elementorTemplate.content.length, 1);
-  const stack = exact.elementorTemplate.content[0];
-  assert.match(String(stack?.settings.css_classes), /figmapress-exact-stack/);
-  assert.equal(stack?.elements.length, 4);
-  assert.match(String(stack?.elements[0]?.settings.css_classes), /figmapress-exact-layout--desktop/);
-  assert.match(String(stack?.elements[1]?.settings.css_classes), /figmapress-exact-layout--mobile/);
-  assert.match(String(stack?.elements[2]?.settings.css_classes), /figmapress-native-layout/);
-  assert.match(String(stack?.elements[3]?.settings.css_classes), /figmapress-native-layout/);
-  assert.ok(exact.warnings.some((warning) => warning.includes("精密表示レイヤー")));
-  const appSource = readFileSync(
-    new URL("../apps/web/src/components/converter-app.tsx", import.meta.url),
-    "utf8",
-  );
-  assert.match(
-    appSource,
-    /figmapress-exact-interaction-layer \.figmapress-figma-preview\{background:transparent!important;background-image:none!important/,
-  );
+  assert.equal(native.previewHtml, output.previewHtml);
+  assert.doesNotMatch(native.previewHtml, /figmapress-exact|exact-pc\.jpg|exact-mobile\.jpg/);
+  assert.equal(native.elementorTemplate.page_settings.figmapress_native_layout, "yes");
+  assert.equal(native.elementorTemplate.page_settings.figmapress_reference_desktop_node_id, "10:1");
+  assert.equal(native.elementorTemplate.page_settings.figmapress_reference_mobile_node_id, "10:2");
+  assert.equal(native.elementorTemplate.content.length, 2);
+  assert.doesNotMatch(JSON.stringify(native.elementorTemplate.content), /figmapress-exact|exact-pc\.jpg|exact-mobile\.jpg/);
+  assert.ok(native.warnings.some((warning) => warning.includes("同じネイティブ")));
+  assert.equal(auditNativeElementorTemplate(native.elementorTemplate).valid, true);
 });
 
-test("multi-page Elementor templates receive the same exact PC/SP presentation", () => {
+test("native Elementor audit rejects transparent text widgets", () => {
+  const template = markNativeElementorTemplate({
+    title: "Transparent text",
+    type: "page",
+    version: "0.4",
+    page_settings: {},
+    content: [{
+      id: "root001",
+      elType: "container",
+      isInner: false,
+      settings: { css_classes: "figmapress-layout figmapress-layout--desktop" },
+      elements: [{
+        id: "text001",
+        elType: "widget",
+        widgetType: "text-editor",
+        isInner: false,
+        settings: { editor: "見えているべき文字", text_color: "rgba(0, 0, 0, 0)" },
+        elements: [],
+      }],
+    }],
+  });
+
+  const audit = auditNativeElementorTemplate(template);
+  assert.equal(audit.valid, false);
+  assert.ok(audit.errors.some((error) => error.includes("透明")));
+});
+
+test("multi-page templates retain native content and reference IDs only", () => {
   const template = {
     title: "会社案内",
     type: "page" as const,
@@ -593,10 +616,17 @@ test("multi-page Elementor templates receive the same exact PC/SP presentation",
       elType: "container" as const,
       isInner: false,
       settings: { css_classes: "figmapress-layout figmapress-layout--desktop" },
-      elements: [],
+      elements: [{
+        id: "text001",
+        elType: "widget" as const,
+        widgetType: "text-editor" as const,
+        isInner: false,
+        settings: { editor: "会社案内" },
+        elements: [],
+      }],
     }],
   };
-  const exact = applyExactVisualTemplate(template, {
+  const native = markNativeElementorTemplate(template, {
     desktop: {
       nodeId: "20:1", name: "会社案内 PC",
       url: "https://images.example/company-pc.jpg",
@@ -608,13 +638,11 @@ test("multi-page Elementor templates receive the same exact PC/SP presentation",
       width: 440, height: 7559, sourceWidth: 440, sourceHeight: 7559, format: "jpg",
     },
   });
-  assert.equal(exact.page_settings.figmapress_exact_visual, "yes");
-  assert.equal(exact.content.length, 1);
-  assert.equal(exact.content[0]?.elements.length, 3);
-  assert.match(
-    JSON.stringify(exact),
-    /company-pc\.jpg[^]*company-sp\.jpg[^]*figmapress-native-layout/,
-  );
+  assert.equal(native.page_settings.figmapress_native_layout, "yes");
+  assert.equal(native.page_settings.figmapress_reference_desktop_node_id, "20:1");
+  assert.equal(native.page_settings.figmapress_reference_mobile_node_id, "20:2");
+  assert.deepEqual(native.content, template.content);
+  assert.doesNotMatch(JSON.stringify(native), /company-pc\.jpg|company-sp\.jpg|figmapress-exact/);
 });
 
 test("mobile containers preserve their Figma width across Elementor breakpoints", async () => {

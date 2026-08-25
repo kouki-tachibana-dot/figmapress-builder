@@ -2,7 +2,7 @@ import { z } from "zod";
 import { cookies } from "next/headers";
 import type { MockFigmaFile } from "@figmapress/figma-parser";
 import { convertFile } from "@/lib/converter";
-import { applyExactVisualPresentation } from "@/lib/exact-visual";
+import { applyNativeElementorPresentation } from "@/lib/elementor-native";
 import {
   FIGMA_OAUTH_SESSION_COOKIE,
   figmaOAuthCookie,
@@ -176,9 +176,7 @@ export async function POST(request: Request): Promise<Response> {
       }
     }
 
-    if (Object.keys(visualReferences).length > 0) {
-      output = applyExactVisualPresentation(output, visualReferences);
-    }
+    output = applyNativeElementorPresentation(output, visualReferences);
     const response = jsonResponse({
       ok: true,
       ...output,

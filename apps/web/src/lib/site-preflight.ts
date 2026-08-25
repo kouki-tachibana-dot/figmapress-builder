@@ -6,10 +6,15 @@ import {
   type FigmaMultiPagePlan,
   type FigmaSitePageKey,
 } from "@figmapress/elementor-renderer";
+import { auditNativeElementorTemplate } from "./elementor-native";
 
 export interface FigmaSitePreflightReport {
   pages: number;
-  exactPages: number;
+  nativePages: number;
+  containers: number;
+  widgets: number;
+  textWidgets: number;
+  imageWidgets: number;
   links: number;
   destinations: number;
   navigationPages: number;
@@ -103,7 +108,11 @@ export function inspectFigmaSiteTemplates(
     plan.pages.map((page) => figmaPageLinkPlaceholder(page.key)),
   );
   const referencedDestinations = new Set<string>();
-  let exactPages = 0;
+  let nativePages = 0;
+  let containers = 0;
+  let widgets = 0;
+  let textWidgets = 0;
+  let imageWidgets = 0;
   let links = 0;
   let navigationPages = 0;
   let navigationWidgets = 0;
@@ -116,14 +125,33 @@ export function inspectFigmaSiteTemplates(
     if (!template) {
       throw new Error(`「${page.title}」の編集データを準備できませんでした。`);
     }
+    const nativeAudit = auditNativeElementorTemplate(template);
+    if (!nativeAudit.valid) {
+      throw new Error(
+        `「${page.title}」のElementorネイティブ構造に問題があります（${nativeAudit.errors.slice(0, 4).join("、")}）。WordPressには送信していません。`,
+      );
+    }
+    if (page.hasDesktop && nativeAudit.desktopRoots < 1) {
+      throw new Error(`「${page.title}」のPC用Elementorレイアウトがありません。WordPressには送信していません。`);
+    }
+    if (page.hasMobile && nativeAudit.mobileRoots < 1) {
+      throw new Error(`「${page.title}」のスマホ用Elementorレイアウトがありません。WordPressには送信していません。`);
+    }
     if (page.frameId) {
-      if (template.page_settings.figmapress_exact_visual !== "yes") {
+      const desktopReference = template.page_settings.figmapress_reference_desktop_node_id;
+      const mobileReference = template.page_settings.figmapress_reference_mobile_node_id;
+      if ((page.hasDesktop && typeof desktopReference !== "string")
+        || (page.hasMobile && typeof mobileReference !== "string")) {
         throw new Error(
-          `「${page.title}」のPC/SP精密表示が不足しています。WordPressには送信していません。`,
+          `「${page.title}」のFigma比較基準が不足しています。WordPressには送信していません。`,
         );
       }
-      exactPages += 1;
     }
+    nativePages += 1;
+    containers += nativeAudit.containers;
+    widgets += nativeAudit.widgets;
+    textWidgets += nativeAudit.textWidgets;
+    imageWidgets += nativeAudit.imageWidgets;
 
     const audit = auditElementorTemplateLinks(template);
     const unknownPlaceholders = audit.unresolvedPlaceholders.filter(
@@ -187,7 +215,11 @@ export function inspectFigmaSiteTemplates(
 
   return {
     pages: plan.pages.length,
-    exactPages,
+    nativePages,
+    containers,
+    widgets,
+    textWidgets,
+    imageWidgets,
     links,
     destinations: referencedDestinations.size,
     navigationPages,

@@ -26,7 +26,7 @@ import {
   createCandidatePageLinkTargets,
   createSemanticPageLinkTargets,
 } from "@/lib/figma-site-plan";
-import { applyExactVisualTemplate } from "@/lib/exact-visual";
+import { markNativeElementorTemplate } from "@/lib/elementor-native";
 import {
   RequestError,
   clientIp,
@@ -159,7 +159,7 @@ export async function POST(request: Request): Promise<Response> {
             page.title,
             assets,
           );
-          const elementorTemplate = applyExactVisualTemplate(
+          const elementorTemplate = markNativeElementorTemplate(
             nativeTemplate,
             fetched.visualReferences,
           );
@@ -252,7 +252,9 @@ export async function POST(request: Request): Promise<Response> {
       }
       return {
         page,
-        elementorTemplate: createFigmaSitePageTemplate(file, page, assets),
+        elementorTemplate: markNativeElementorTemplate(
+          createFigmaSitePageTemplate(file, page, assets),
+        ),
       };
     });
     const responseBody = { ok: true, pages };

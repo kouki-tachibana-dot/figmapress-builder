@@ -142,6 +142,24 @@ test("Connector accepts and registers functional Elementor widgets", async () =>
   }
 });
 
+test("Connector accepts only native Elementor documents with real text", async () => {
+  const rest = await readFile(restApiPath, "utf8");
+  assert.match(rest, /function figmapress_connector_validate_native_elementor_template/);
+  assert.match(rest, /figmapress_native_layout/);
+  assert.match(rest, /figmapress_exact_visual/);
+  assert.match(rest, /figmapress-exact-/);
+  assert.match(rest, /figmapress_real_text_required/);
+  assert.match(rest, /wp_strip_all_tags/);
+  assert.match(rest, /transparent_color/);
+  assert.match(rest, /opacity_size/);
+  assert.match(rest, /figmapress_native_elementor_required/);
+  assert.match(rest, /'nativeElementor'\s*=>\s*array/);
+  assert.match(rest, /'snapshotContent'\s*=>\s*false/);
+  assert.match(rest, /AS native_layout/);
+  assert.match(rest, /AS exact_visual/);
+  assert.match(rest, /AS text_widget_count/);
+});
+
 test("Connector keeps the mobile navigation above later Elementor content", async () => {
   const styles = await readFile(interactionStylePath, "utf8");
   assert.match(

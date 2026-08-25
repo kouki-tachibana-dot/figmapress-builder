@@ -18,7 +18,7 @@ const plan: FigmaMultiPagePlan = {
   ],
 };
 
-function exactTemplate(
+function nativeTemplate(
   key: FigmaSitePageKey,
   destinations: FigmaSitePageKey[],
   navigationDestinations: FigmaSitePageKey[] = plan.pages.map((page) => page.key),
@@ -26,7 +26,7 @@ function exactTemplate(
   const navigation = (variant: "desktop" | "mobile") => ({
     id: `${key}-navigation-${variant}`,
     elType: "widget" as const,
-    widgetType: "figmapress-nav",
+    widgetType: "figmapress-nav" as const,
     isInner: false,
     settings: {
       layout_variant: variant,
@@ -42,42 +42,73 @@ function exactTemplate(
     title: key,
     type: "page",
     version: "0.4",
-    page_settings: { figmapress_exact_visual: "yes" },
+    page_settings: {
+      figmapress_native_layout: "yes",
+      figmapress_native_layout_version: "1",
+      figmapress_reference_desktop_node_id: `${key}:desktop`,
+      figmapress_reference_mobile_node_id: `${key}:mobile`,
+    },
     content: [
-      navigation("desktop"),
-      navigation("mobile"),
-      ...destinations.map((destination, index) => ({
-        id: `${key}-${index}`,
-        elType: "widget" as const,
-        widgetType: "figmapress-link",
+      {
+        id: `${key}-desktop-root`,
+        elType: "container",
         isInner: false,
-        settings: {
-          link_label: destination,
-          link_url: { url: figmaPageLinkPlaceholder(destination) },
-        },
-        elements: [],
-      })),
-      ...(key === "contact" ? [{
-        id: `${key}-form`,
-        elType: "widget" as const,
-        widgetType: "figmapress-contact-form",
+        settings: { css_classes: "figmapress-layout figmapress-layout--desktop" },
+        elements: [
+          navigation("desktop"),
+          {
+            id: `${key}-text`,
+            elType: "widget",
+            widgetType: "text-editor",
+            isInner: false,
+            settings: { editor: `<p>${key}</p>` },
+            elements: [],
+          },
+          ...destinations.map((destination, index) => ({
+            id: `${key}-link-${index}`,
+            elType: "widget" as const,
+            widgetType: "figmapress-link" as const,
+            isInner: false,
+            settings: {
+              link_label: destination,
+              link_url: { url: figmaPageLinkPlaceholder(destination) },
+            },
+            elements: [],
+          })),
+          ...(key === "contact" ? [{
+            id: `${key}-form`,
+            elType: "widget" as const,
+            widgetType: "figmapress-contact-form" as const,
+            isInner: false,
+            settings: {},
+            elements: [],
+          }] : []),
+        ],
+      },
+      {
+        id: `${key}-mobile-root`,
+        elType: "container",
         isInner: false,
-        settings: {},
-        elements: [],
-      }] : []),
+        settings: { css_classes: "figmapress-layout figmapress-layout--mobile" },
+        elements: [navigation("mobile")],
+      },
     ],
   };
 }
 
-test("all exact pages and every logical destination pass the preflight", () => {
+test("all native pages and every logical destination pass the preflight", () => {
   const templates = new Map<FigmaSitePageKey, ElementorTemplate>([
-    ["home", exactTemplate("home", ["company", "contact"])],
-    ["company", exactTemplate("company", ["home", "contact"])],
-    ["contact", exactTemplate("contact", ["home", "company"])],
+    ["home", nativeTemplate("home", ["company", "contact"])],
+    ["company", nativeTemplate("company", ["home", "contact"])],
+    ["contact", nativeTemplate("contact", ["home", "company"])],
   ]);
   assert.deepEqual(inspectFigmaSiteTemplates(plan, templates), {
     pages: 3,
-    exactPages: 3,
+    nativePages: 3,
+    containers: 6,
+    widgets: 16,
+    textWidgets: 3,
+    imageWidgets: 0,
     links: 24,
     destinations: 3,
     navigationPages: 3,
@@ -88,26 +119,26 @@ test("all exact pages and every logical destination pass the preflight", () => {
   });
 });
 
-test("a candidate page without its exact PC/SP template is rejected", () => {
+test("a candidate page without its native Elementor marker is rejected", () => {
   const templates = new Map<FigmaSitePageKey, ElementorTemplate>([
-    ["home", exactTemplate("home", ["company", "contact"])],
+    ["home", nativeTemplate("home", ["company", "contact"])],
     ["company", {
-      ...exactTemplate("company", ["home", "contact"]),
+      ...nativeTemplate("company", ["home", "contact"]),
       page_settings: {},
     }],
-    ["contact", exactTemplate("contact", ["home", "company"])],
+    ["contact", nativeTemplate("contact", ["home", "company"])],
   ]);
   assert.throws(
     () => inspectFigmaSiteTemplates(plan, templates),
-    /会社案内.*PC\/SP精密表示/,
+    /会社案内.*Elementorネイティブ構造/,
   );
 });
 
 test("unknown and incomplete menu destinations are rejected", () => {
   const unknown = new Map<FigmaSitePageKey, ElementorTemplate>([
-    ["home", exactTemplate("home", ["company", "unknown"])],
-    ["company", exactTemplate("company", ["home"])],
-    ["contact", exactTemplate("contact", ["home"])],
+    ["home", nativeTemplate("home", ["company", "unknown"])],
+    ["company", nativeTemplate("company", ["home"])],
+    ["contact", nativeTemplate("contact", ["home"])],
   ]);
   assert.throws(
     () => inspectFigmaSiteTemplates(plan, unknown),
@@ -115,9 +146,9 @@ test("unknown and incomplete menu destinations are rejected", () => {
   );
 
   const unreachable = new Map<FigmaSitePageKey, ElementorTemplate>([
-    ["home", exactTemplate("home", ["company"], ["home", "company"])],
-    ["company", exactTemplate("company", ["home"])],
-    ["contact", exactTemplate("contact", ["home", "company"])],
+    ["home", nativeTemplate("home", ["company"], ["home", "company"])],
+    ["company", nativeTemplate("company", ["home"])],
+    ["contact", nativeTemplate("contact", ["home", "company"])],
   ]);
   assert.throws(
     () => inspectFigmaSiteTemplates(plan, unreachable),
@@ -126,8 +157,8 @@ test("unknown and incomplete menu destinations are rejected", () => {
 });
 
 test("a duplicated semantic label cannot hide a wrong menu or CTA destination", () => {
-  const home = exactTemplate("home", ["company", "contact"]);
-  home.content.push({
+  const home = nativeTemplate("home", ["company", "contact"]);
+  home.content[0]?.elements.push({
     id: "stale-contact-wire",
     elType: "widget",
     widgetType: "figmapress-link",
@@ -141,36 +172,38 @@ test("a duplicated semantic label cannot hide a wrong menu or CTA destination", 
   assert.throws(
     () => inspectFigmaSiteTemplates(plan, new Map([
       ["home", home],
-      ["company", exactTemplate("company", ["home", "contact"])],
-      ["contact", exactTemplate("contact", ["home", "company"])],
+      ["company", nativeTemplate("company", ["home", "contact"])],
+      ["contact", nativeTemplate("contact", ["home", "company"])],
     ])),
     /ホーム.*リンク名と移動先が一致しません.*お問い合わせ.*figmapress-page-home.*figmapress-page-contact/,
   );
 });
 
 test("missing responsive navigation or the contact form is rejected", () => {
-  const missingMobileNavigation = exactTemplate("home", ["company", "contact"]);
-  missingMobileNavigation.content = missingMobileNavigation.content.filter(
+  const missingMobileNavigation = nativeTemplate("home", ["company", "contact"]);
+  const mobileRoot = missingMobileNavigation.content[1];
+  if (mobileRoot) mobileRoot.elements = mobileRoot.elements.filter(
     (element) => !(element.widgetType === "figmapress-nav"
       && element.settings.layout_variant === "mobile"),
   );
   assert.throws(
     () => inspectFigmaSiteTemplates(plan, new Map([
       ["home", missingMobileNavigation],
-      ["company", exactTemplate("company", ["home", "contact"])],
-      ["contact", exactTemplate("contact", ["home", "company"])],
+      ["company", nativeTemplate("company", ["home", "contact"])],
+      ["contact", nativeTemplate("contact", ["home", "company"])],
     ])),
     /ホーム.*PC\/SP実動メニューが不足.*1\/2/,
   );
 
-  const contactWithoutForm = exactTemplate("contact", ["home", "company"]);
-  contactWithoutForm.content = contactWithoutForm.content.filter(
+  const contactWithoutForm = nativeTemplate("contact", ["home", "company"]);
+  const contactDesktop = contactWithoutForm.content[0];
+  if (contactDesktop) contactDesktop.elements = contactDesktop.elements.filter(
     (element) => element.widgetType !== "figmapress-contact-form",
   );
   assert.throws(
     () => inspectFigmaSiteTemplates(plan, new Map([
-      ["home", exactTemplate("home", ["company", "contact"])],
-      ["company", exactTemplate("company", ["home", "contact"])],
+      ["home", nativeTemplate("home", ["company", "contact"])],
+      ["company", nativeTemplate("company", ["home", "contact"])],
       ["contact", contactWithoutForm],
     ])),
     /お問い合わせ.*送信できるフォームがありません/,
