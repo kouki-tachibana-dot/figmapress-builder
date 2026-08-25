@@ -461,22 +461,16 @@ function figmapress_connector_rest_prepare_site( WP_REST_Request $request, $acto
     }
 
     foreach ( $validated_pages as $index => $requested ) {
-        $existing_id = figmapress_connector_find_page_by_meta( '_figmapress_source_key', $requested['sourceKey'] );
+        $existing_id = figmapress_connector_find_editable_draft_by_meta(
+            '_figmapress_source_key',
+            $requested['sourceKey'],
+            $actor_user_id
+        );
         // map_meta_cap() expects a real post for edit_post. Passing ID 0 for a
         // page that has not been prepared yet can trigger a fatal error on
         // newer WordPress versions before wp_insert_post() is reached.
-        if ( $existing_id ) {
-            $can_edit_existing = $actor_user_id
-                ? user_can( $actor_user_id, 'edit_post', $existing_id )
-                : current_user_can( 'edit_post', $existing_id );
-            if ( ! $can_edit_existing || 'draft' !== get_post_status( $existing_id ) ) {
-                return new WP_Error(
-                    'figmapress_site_page_not_editable',
-                    'FigmaPress管理ページが下書き以外の状態です。公開済みページは自動更新しません。',
-                    array( 'status' => 409, 'postId' => $existing_id )
-                );
-            }
-        }
+        // Published pages with the same source identity are deliberately
+        // ignored. A new draft is safer than mutating public content.
         $validated_pages[ $index ]['existingId'] = $existing_id;
     }
 
@@ -636,6 +630,47 @@ function figmapress_connector_find_page_by_meta( $meta_key, $meta_value ) {
 }
 
 /**
+ * Find the newest editable draft for a stable Figma identity.
+ *
+ * A previously generated page may have been published while a newer draft is
+ * still being edited. The generic lookup above intentionally includes every
+ * durable status for request receipts, but document writes must never select a
+ * published page just because it has a higher ID. Inspect a bounded set of
+ * drafts and return only one the current actor may edit.
+ */
+function figmapress_connector_find_editable_draft_by_meta( $meta_key, $meta_value, $actor_user_id = 0 ) {
+    if ( '' === $meta_value ) {
+        return 0;
+    }
+    $pages = get_posts(
+        array(
+            'post_type'              => 'page',
+            'post_status'            => 'draft',
+            'posts_per_page'         => 20,
+            'fields'                 => 'ids',
+            'meta_key'               => $meta_key,
+            'meta_value'             => $meta_value,
+            'no_found_rows'          => true,
+            'orderby'                => 'ID',
+            'order'                  => 'DESC',
+            'suppress_filters'       => false,
+            'update_post_meta_cache' => false,
+            'update_post_term_cache' => false,
+        )
+    );
+    foreach ( $pages as $page_id ) {
+        $page_id  = absint( $page_id );
+        $can_edit = $actor_user_id
+            ? user_can( $actor_user_id, 'edit_post', $page_id )
+            : current_user_can( 'edit_post', $page_id );
+        if ( $page_id && $can_edit ) {
+            return $page_id;
+        }
+    }
+    return 0;
+}
+
+/**
  * Release only the lock created by the current request, including when PHP is
  * terminated by a host timeout while Elementor is storing a large document.
  */
@@ -779,6 +814,8 @@ function figmapress_connector_stream_elementor_upload( $upload_id, $index, $tota
             "SELECT JSON_VALID(option_value) AS valid_json,
                 JSON_UNQUOTE(JSON_EXTRACT(option_value, '$.requestId')) AS request_id,
                 JSON_UNQUOTE(JSON_EXTRACT(option_value, '$.sourceKey')) AS source_key,
+                JSON_UNQUOTE(JSON_EXTRACT(option_value, '$.title')) AS post_title,
+                JSON_UNQUOTE(JSON_EXTRACT(option_value, '$.slug')) AS post_slug,
                 JSON_UNQUOTE(JSON_EXTRACT(option_value, '$.status')) AS post_status,
                 JSON_UNQUOTE(JSON_EXTRACT(option_value, '$.pageTemplate')) AS page_template,
                 JSON_UNQUOTE(JSON_EXTRACT(option_value, '$.template.version')) AS template_version,
@@ -796,6 +833,7 @@ function figmapress_connector_stream_elementor_upload( $upload_id, $index, $tota
         ! is_array( $valid ) || '1' !== (string) $valid['valid_json'] ||
         ! hash_equals( $upload_id, (string) $valid['request_id'] ) ||
         ! preg_match( figmapress_connector_site_source_key_pattern(), (string) $valid['source_key'] ) ||
+        '' === trim( (string) $valid['post_title'] ) ||
         'draft' !== (string) $valid['post_status'] || '0.4' !== (string) $valid['template_version'] ||
         'yes' !== (string) $valid['native_layout'] || 'yes' === (string) $valid['exact_visual'] ||
         'ARRAY' !== (string) $valid['content_type'] || absint( $valid['root_elements'] ) < 1
@@ -860,9 +898,37 @@ function figmapress_connector_stream_elementor_upload( $upload_id, $index, $tota
         return new WP_Error( 'figmapress_invalid_streamed_element', 'Elementorデータに未対応の要素があります。', array( 'status' => 422 ) );
     }
 
-    $source_key = (string) $valid['source_key'];
-    $post_id    = figmapress_connector_find_page_by_meta( '_figmapress_source_key', $source_key );
-    if ( ! $post_id || 'draft' !== get_post_status( $post_id ) || ! current_user_can( 'edit_post', $post_id ) ) {
+    $source_key    = (string) $valid['source_key'];
+    $post_id       = figmapress_connector_find_editable_draft_by_meta( '_figmapress_source_key', $source_key );
+    $created_draft = false;
+    if ( ! $post_id ) {
+        // Single-page conversion can enter the low-memory streaming path
+        // without a preceding multi-page prepare call. Create an empty draft
+        // only after the complete native document has passed every validation
+        // above. WordPress resolves slug collisions without touching an
+        // existing public page.
+        $post_id = wp_insert_post(
+            array(
+                'post_type'    => 'page',
+                'post_status'  => 'draft',
+                'post_title'   => sanitize_text_field( $valid['post_title'] ),
+                'post_name'    => sanitize_title( $valid['post_slug'] ),
+                'post_content' => '',
+                'post_author'  => get_current_user_id(),
+            ),
+            true
+        );
+        if ( is_wp_error( $post_id ) ) {
+            return $post_id;
+        }
+        update_post_meta( $post_id, '_figmapress_source_key', $source_key );
+        update_post_meta( $post_id, '_figmapress_prepared', '1' );
+        $created_draft = true;
+    }
+    if ( 'draft' !== get_post_status( $post_id ) || ! current_user_can( 'edit_post', $post_id ) ) {
+        if ( $created_draft ) {
+            wp_delete_post( $post_id, true );
+        }
         return new WP_Error( 'figmapress_streamed_draft_not_editable', '対象のElementor下書きを更新できません。', array( 'status' => 409 ) );
     }
 
@@ -897,6 +963,9 @@ function figmapress_connector_stream_elementor_upload( $upload_id, $index, $tota
     $new_meta_id = 1 === $stored ? absint( $wpdb->insert_id ) : 0;
     $stored      = $new_meta_id > 0;
     if ( ! $stored ) {
+        if ( $created_draft ) {
+            wp_delete_post( $post_id, true );
+        }
         return new WP_Error( 'figmapress_streamed_store_failed', 'Elementor data could not be stored on this server.', array( 'status' => 500 ) );
     }
     $wpdb->query(
@@ -1093,7 +1162,7 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
         ? 'figmapress_request_' . substr( hash_hmac( 'sha256', $identity, wp_salt( 'nonce' ) ), 0, 32 )
         : '';
     $existing_id      = '' !== $source_key
-        ? figmapress_connector_find_page_by_meta( '_figmapress_source_key', $source_key )
+        ? figmapress_connector_find_editable_draft_by_meta( '_figmapress_source_key', $source_key )
         : 0;
     if ( ! $existing_id && '' !== $request_id ) {
         $existing_id = figmapress_connector_find_page_by_meta( '_figmapress_request_id', $request_id );

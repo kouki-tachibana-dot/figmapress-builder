@@ -395,7 +395,7 @@ test("shared-host site preparation keeps the paired user explicit", async () => 
   assert.match(pairing, /'permission_callback' => '__return_true'/);
   assert.match(pairing, /function figmapress_connector_rest_prepare_site_paired/);
   assert.match(rest, /function figmapress_connector_rest_prepare_site\( WP_REST_Request \$request, \$actor_user_id = 0 \)/);
-  assert.match(rest, /user_can\( \$actor_user_id, 'edit_post', \$existing_id \)/);
+  assert.match(rest, /user_can\( \$actor_user_id, 'edit_post', \$page_id \)/);
   assert.match(rest, /user_can\( \$actor_user_id, 'edit_theme_options' \)/);
   assert.match(rest, /\$post_data\['post_author'\] = absint\( \$actor_user_id \)/);
 });
@@ -451,19 +451,38 @@ test("Connector browser bridge is origin pinned and token scoped", async () => {
   );
 });
 
-test("Connector updates one draft for a stable Figma source", async () => {
+test("Connector updates an editable draft for a stable Figma source", async () => {
   const source = await readFile(restApiPath, "utf8");
   const createStart = source.indexOf("function figmapress_connector_rest_create_elementor_page");
   const createEnd = source.indexOf("function figmapress_connector_rest_confirm_elementor_page", createStart);
   const createSource = source.slice(createStart, createEnd);
   assert.match(source, /\^figma:/);
   assert.match(source, /'_figmapress_source_key'/);
-  assert.match(source, /figmapress_connector_find_page_by_meta\( '_figmapress_source_key'/);
+  assert.match(source, /function figmapress_connector_find_editable_draft_by_meta/);
+  assert.match(source, /'post_status'\s*=>\s*'draft'/);
+  assert.match(source, /'posts_per_page'\s*=>\s*20/);
+  assert.match(source, /current_user_can\( 'edit_post', \$page_id \)/);
+  assert.match(createSource, /figmapress_connector_find_editable_draft_by_meta\( '_figmapress_source_key'/);
   assert.match(createSource, /\$existing_elementor_bytes > 0 && \$existing_elementor_bytes <= 600000/);
   assert.match(createSource, /get_post_field\( 'post_title', \$existing_id, 'raw' \)/);
   assert.match(createSource, /if \( \$current_title === \$title \) \{[\s\S]{0,300}\$post_id = \$existing_id;/);
   assert.match(createSource, /\} else \{\s+\$post_id = wp_update_post\(/);
   assert.match(source, /'updated'\s*=>\s*\$reuse_existing/);
+});
+
+test("Connector streaming creates a safe draft when a single-page run has no prepared draft", async () => {
+  const source = await readFile(restApiPath, "utf8");
+  const streamStart = source.indexOf("function figmapress_connector_stream_elementor_upload");
+  const streamEnd = source.indexOf("function figmapress_connector_rest_upload_elementor_page", streamStart);
+  const streamSource = source.slice(streamStart, streamEnd);
+  assert.match(streamSource, /JSON_EXTRACT\(option_value, '\$\.title'\)/);
+  assert.match(streamSource, /JSON_EXTRACT\(option_value, '\$\.slug'\)/);
+  assert.match(streamSource, /figmapress_connector_find_editable_draft_by_meta\( '_figmapress_source_key'/);
+  assert.match(streamSource, /if \( ! \$post_id \) \{[\s\S]{0,900}wp_insert_post\(/);
+  assert.match(streamSource, /'post_status'\s*=>\s*'draft'/);
+  assert.match(streamSource, /'post_author'\s*=>\s*get_current_user_id\(\)/);
+  assert.match(streamSource, /update_post_meta\( \$post_id, '_figmapress_source_key', \$source_key \)/);
+  assert.doesNotMatch(streamSource, /figmapress_connector_find_page_by_meta\( '_figmapress_source_key'/);
 });
 
 test("functional widgets include keyboard, reduced-motion, and timeout safeguards", async () => {
@@ -714,7 +733,7 @@ test("Connector prepares idempotent draft pages and a plugin-owned unassigned me
   assert.match(rest, /\$request->get_param\( 'payload' \)/);
   assert.match(rest, /json_decode\( wp_unslash\( \$payload \), true \)/);
   assert.match(rest, /'post_status'\s*=>\s*'draft'/);
-  assert.match(rest, /figmapress_connector_find_page_by_meta\( '_figmapress_source_key', \$source_key \)/);
+  assert.match(prepareSite, /figmapress_connector_find_editable_draft_by_meta\(/);
   assert.match(rest, /'_figmapress_site_key'/);
   assert.match(rest, /'_figmapress_page_key'/);
   assert.match(rest, /'_figmapress_prepared'/);
@@ -730,9 +749,8 @@ test("Connector prepares idempotent draft pages and a plugin-owned unassigned me
   assert.match(prepareSite, /\[a-z0-9\]\[a-z0-9-\]\{0,79\}/);
   assert.match(rest, /foreach \( \$validated_pages as \$requested \)/);
   assert.match(rest, /\$validated_pages\[ \$index \]\['existingId'\] = \$existing_id/);
-  assert.match(rest, /if \( \$existing_id \) \{\s+\$can_edit_existing = \$actor_user_id/);
-  assert.doesNotMatch(rest, /\$can_edit_existing = \$actor_user_id[\s\S]{0,180}\$existing_id &&/);
-  assert.match(rest, /'draft' !== get_post_status\( \$existing_id \)/);
+  assert.match(prepareSite, /Published pages with the same source identity are deliberately/);
+  assert.doesNotMatch(prepareSite, /figmapress_site_page_not_editable/);
   assert.match(prepareSite, /get_post_field\( 'post_title', \$existing_id, 'raw' \)/);
   assert.match(prepareSite, /if \( \$current_title === \$page_title \) \{\s+\/\/ Replays should not fire save_post hooks/);
   assert.match(prepareSite, /\$post_id = \$existing_id;\s+\} else \{\s+\$post_id = wp_update_post/);

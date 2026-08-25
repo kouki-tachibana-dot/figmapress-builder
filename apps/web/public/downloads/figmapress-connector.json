@@ -1,11 +1,11 @@
 {
   "name": "FigmaPress Connector",
   "slug": "figmapress-connector",
-  "version": "0.18.0",
+  "version": "0.18.1",
   "requires": "6.4",
   "requires_php": "7.4",
   "tested": "7.0",
   "homepage": "https://figmapress-builder.vercel.app",
   "download_url": "https://figmapress-builder.vercel.app/downloads/figmapress-connector.zip",
-  "changelog": "<h4>0.18.0</h4><ul><li>公開画面とElementor編集画面を同じネイティブのコンテナ・文字・画像・機能ウィジェットから描画します。</li><li>Figma全画面画像と透明操作レイヤーを使う旧形式を保存前に拒否します。</li><li>Figma画像は視覚QAの比較資料にだけ使用し、Elementor本文には保存しません。</li></ul><h4>0.17.30</h4><ul><li>グループ化されていないFigmaの企業向け問い合わせ欄もPC/SP双方で送信可能なフォームへ合成します。</li><li>企業名、担当者、住所、電話、メール、流入元、質問、個人情報同意等の全入力項目と必須条件を保持します。</li><li>必須、形式、文字数、選択肢をWordPress側でも再検証します。</li></ul>"
+  "changelog": "<h4>0.18.1</h4><ul><li>単一ページの大容量分割保存でも事前準備なしで安全なElementor下書きを作成します。</li><li>同じFigma変換元の公開済みページは変更せず、編集可能な下書きだけを更新します。</li><li>公開済みページしかない場合は新しい下書きを作成し、HTTP 409を解消します。</li></ul><h4>0.18.0</h4><ul><li>公開画面とElementor編集画面を同じネイティブのコンテナ・文字・画像・機能ウィジェットから描画します。</li><li>Figma全画面画像と透明操作レイヤーを使う旧形式を保存前に拒否します。</li><li>Figma画像は視覚QAの比較資料にだけ使用し、Elementor本文には保存しません。</li></ul>"
 }
