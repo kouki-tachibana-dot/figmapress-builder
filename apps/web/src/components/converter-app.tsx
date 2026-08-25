@@ -85,6 +85,7 @@ import {
   type WordPressSiteBridge,
 } from "@/lib/wordpress-site-bridge";
 import { auditNativeElementorTemplate } from "@/lib/elementor-native";
+import { inspectRenderedLinkIntegrity } from "@/lib/rendered-link-integrity";
 import {
   inspectFigmaSiteTemplates,
   type FigmaSitePreflightReport,
@@ -100,7 +101,7 @@ type PageTemplateEntry = {
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
-const APP_RELEASE = "0.27.2";
+const APP_RELEASE = "0.27.3";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -1265,6 +1266,11 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       setOutput(data);
       setConversionSourceKey(nextSourceKey);
       setConversionSiteSourceKey(nextSiteSourceKey);
+      setWpBuildMode(
+        nextSiteSourceKey && data.multiPagePlan && data.multiPagePlan.pages.length > 1
+          ? "site"
+          : "single",
+      );
       setDraftRequestId(createRequestId());
       requestAnimationFrame(() => {
         document.getElementById("result")?.scrollIntoView({ behavior: "smooth" });
@@ -1483,6 +1489,12 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         result.id,
         requestId,
       );
+      const renderedLinkAudit = inspectRenderedLinkIntegrity(snapshot.html);
+      if (!renderedLinkAudit.valid) {
+        throw new Error(
+          `実Elementorページのリンク検査に失敗しました（未解決${renderedLinkAudit.unresolvedPlaceholders.length}・移動先IDなし${renderedLinkAudit.missingAnchors.length}・重複ID${renderedLinkAudit.duplicateAnchors.length}・不正URL${renderedLinkAudit.unsafe.length}）。下書きを公開しないでください。`,
+        );
+      }
       if ((snapshot.omittedAssetsCount ?? 0) > 0) {
         throw new Error(
           `比較用画像を${snapshot.omittedAssetsCount}件準備できませんでした。Connectorを更新して再試行してください。`,
@@ -2127,6 +2139,18 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       if (!nativeAudit.valid) {
         setWpError(`Elementorネイティブ構造に問題があります（${nativeAudit.errors.slice(0, 4).join("、")}）。WordPressには保存していません。`);
         return;
+      }
+      if (wpBuildMode === "single") {
+        const linkAudit = auditElementorTemplateLinks(output.elementorTemplate);
+        if (!linkAudit.valid) {
+          const multiPageHint = linkAudit.unresolvedPlaceholders.length > 0 && multiPageAvailable
+            ? "「サイト一式を自動構築」を選び、全ページ事前検証を実行してください。"
+            : "Figma内のリンク先とページ内セクションを確認してください。";
+          setWpError(
+            `リンクが完成していないため下書きを保存しませんでした（未解決${linkAudit.unresolvedPlaceholders.length}・移動先なし${linkAudit.missingAnchors.length}・不正URL${linkAudit.unsafe.length}）。${multiPageHint}`,
+          );
+          return;
+        }
       }
     }
     const credentials = readWordPressCredentials(new FormData(event.currentTarget), {
