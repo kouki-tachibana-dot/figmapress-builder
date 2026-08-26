@@ -50,6 +50,7 @@ test("rendered ancestors cover every visible image fill in their subtree", () =>
         id: "2:1",
         name: "Photo",
         type: "RECTANGLE" as const,
+        absoluteBoundingBox: { x: 0, y: 0, width: 300, height: 200 },
         fills: [{ type: "IMAGE" as const, imageRef: "photo" }],
       }],
     }],
@@ -62,11 +63,46 @@ test("rendered ancestors cover every visible image fill in their subtree", () =>
   );
 });
 
+test("non-painting image refs do not block an otherwise complete page", () => {
+  const document = {
+    id: "0:0",
+    name: "Document",
+    type: "DOCUMENT" as const,
+    children: [{
+      id: "1:1",
+      name: "Definition without bounds",
+      type: "RECTANGLE" as const,
+      fills: [{ type: "IMAGE" as const, imageRef: "definition" }],
+      children: [{
+        id: "2:1",
+        name: "Visible child",
+        type: "RECTANGLE" as const,
+        absoluteBoundingBox: { x: 0, y: 0, width: 300, height: 200 },
+        fills: [{ type: "IMAGE" as const, imageRef: "visible" }],
+      }],
+    }, {
+      id: "1:2",
+      name: "Transparent artwork",
+      type: "RECTANGLE" as const,
+      opacity: 0,
+      absoluteBoundingBox: { x: 0, y: 0, width: 300, height: 200 },
+      fills: [{ type: "IMAGE" as const, imageRef: "transparent" }],
+    }],
+  };
+
+  assert.deepEqual(collectUncoveredVisibleImageRefs(document, {}, {}), ["visible"]);
+});
+
 test("Figma image URLs retry and never accept a page with missing visible images", async (context) => {
   let imageUrlRequests = 0;
   context.mock.method(globalThis, "fetch", async (input) => {
     const url = String(input);
-    if (url.includes("/v1/images/")) return Response.json({ images: {} });
+    if (url.includes("/v1/images/")) {
+      const ids = new URL(url).searchParams.get("ids")?.split(",") ?? [];
+      return Response.json({
+        images: Object.fromEntries(ids.map((id) => [id, `https://images.example/${id}.png`])),
+      });
+    }
     if (url.endsWith("/images")) {
       imageUrlRequests += 1;
       if (imageUrlRequests < 3) return new Response(null, { status: 503 });
@@ -78,12 +114,13 @@ test("Figma image URLs retry and never accept a page with missing visible images
         id: "0:0",
         name: "Document",
         type: "DOCUMENT",
-        children: [{
-          id: "1:1",
-          name: "Hero",
+        children: Array.from({ length: 121 }, (_, index) => ({
+          id: `1:${index}`,
+          name: `Hero ${index}`,
           type: "RECTANGLE",
           fills: [{ type: "IMAGE", imageRef: "hero" }],
-        }],
+          absoluteBoundingBox: { x: 0, y: index * 10, width: 100, height: 10 },
+        })),
       },
     });
   });
@@ -103,7 +140,12 @@ test("Figma image URLs retry and never accept a page with missing visible images
 test("Figma conversion fails instead of silently dropping visible images", async (context) => {
   context.mock.method(globalThis, "fetch", async (input) => {
     const url = String(input);
-    if (url.includes("/v1/images/")) return Response.json({ images: {} });
+    if (url.includes("/v1/images/")) {
+      const ids = new URL(url).searchParams.get("ids")?.split(",") ?? [];
+      return Response.json({
+        images: Object.fromEntries(ids.map((id) => [id, `https://images.example/${id}.png`])),
+      });
+    }
     if (url.endsWith("/images")) return Response.json({ images: {} });
     return Response.json({
       name: "Missing image",
@@ -111,12 +153,13 @@ test("Figma conversion fails instead of silently dropping visible images", async
         id: "0:0",
         name: "Document",
         type: "DOCUMENT",
-        children: [{
-          id: "1:1",
-          name: "Hero",
+        children: Array.from({ length: 121 }, (_, index) => ({
+          id: `1:${index}`,
+          name: `Hero ${index}`,
           type: "RECTANGLE",
           fills: [{ type: "IMAGE", imageRef: "hero" }],
-        }],
+          absoluteBoundingBox: { x: 0, y: index * 10, width: 100, height: 10 },
+        })),
       },
     });
   });

@@ -311,13 +311,16 @@ export function collectUncoveredVisibleImageRefs(
 ): string[] {
   const refs = new Set<string>();
   const visit = (node: FigmaNode, renderedAncestor: boolean): void => {
-    if (node.visible === false) return;
+    if (node.visible === false || (typeof node.opacity === "number" && node.opacity <= 0)) return;
     const rendered = renderedAncestor || Boolean(renderedNodeUrls[node.id]);
-    if (!rendered) {
+    const bounds = node.absoluteBoundingBox;
+    const nodeCanPaint = Boolean(bounds && bounds.width > 0 && bounds.height > 0);
+    if (!rendered && nodeCanPaint) {
       for (const fill of node.fills ?? []) {
         if (
           fill.visible !== false
           && fill.type === "IMAGE"
+          && (typeof fill.opacity !== "number" || fill.opacity > 0)
           && typeof fill.imageRef === "string"
           && fill.imageRef
           && !imageUrls[fill.imageRef]
