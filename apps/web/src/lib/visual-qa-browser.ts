@@ -2,6 +2,7 @@ import html2canvas from "html2canvas";
 import {
   analyzeVisualRegions,
   analyzeVisualPixels,
+  clampVisibleBottom,
   type VisualQaMetrics,
   type VisualQaRegionInput,
   type VisualQaRegionMetrics,
@@ -195,12 +196,22 @@ function enforceElementorResponsiveVariant(
   });
 }
 
+function clipsVerticalOverflow(style: CSSStyleDeclaration | undefined): boolean {
+  const overflow = style?.overflowY || style?.overflow;
+  return overflow === "hidden"
+    || overflow === "clip"
+    || overflow === "auto"
+    || overflow === "scroll";
+}
+
 function renderedContentHeight(element: HTMLElement): number {
   const rootRect = element.getBoundingClientRect();
+  const view = element.ownerDocument.defaultView;
+  const rootClipsOverflow = clipsVerticalOverflow(view?.getComputedStyle(element));
   let bottom = rootRect.bottom;
   element.querySelectorAll<HTMLElement>("*").forEach((descendant) => {
-    const view = descendant.ownerDocument.defaultView;
-    const style = view?.getComputedStyle(descendant);
+    const descendantView = descendant.ownerDocument.defaultView;
+    const style = descendantView?.getComputedStyle(descendant);
     if (
       style?.display === "none"
       || style?.visibility === "hidden"
@@ -209,9 +220,27 @@ function renderedContentHeight(element: HTMLElement): number {
       return;
     }
     const rect = descendant.getBoundingClientRect();
-    if (rect.width > 0 && rect.height > 0) bottom = Math.max(bottom, rect.bottom);
+    if (rect.width <= 0 || rect.height <= 0) return;
+    const clippingBottoms: number[] = [];
+    let ancestor = descendant.parentElement;
+    while (ancestor) {
+      const ancestorStyle = descendantView?.getComputedStyle(ancestor);
+      if (clipsVerticalOverflow(ancestorStyle)) {
+        clippingBottoms.push(ancestor.getBoundingClientRect().bottom);
+      }
+      if (ancestor === element) break;
+      ancestor = ancestor.parentElement;
+    }
+    bottom = Math.max(
+      bottom,
+      clampVisibleBottom(rect.bottom, clippingBottoms),
+    );
   });
-  return Math.max(rootRect.height, element.scrollHeight, bottom - rootRect.top);
+  return Math.max(
+    rootRect.height,
+    rootClipsOverflow ? rootRect.height : element.scrollHeight,
+    bottom - rootRect.top,
+  );
 }
 
 async function loadReferenceImage(url: string): Promise<HTMLImageElement> {

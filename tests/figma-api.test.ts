@@ -1,10 +1,118 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  collectVisibleImageRefs,
   collectRenderedNodeIds,
   fetchFigmaFile,
   FigmaFrameSelectionRequired,
 } from "../apps/web/src/lib/figma-api.ts";
+
+test("visible Figma image refs exclude hidden artwork and remove duplicates", () => {
+  assert.deepEqual(collectVisibleImageRefs({
+    id: "0:0",
+    name: "Document",
+    type: "DOCUMENT",
+    children: [{
+      id: "1:1",
+      name: "Visible",
+      type: "RECTANGLE",
+      fills: [
+        { type: "IMAGE", imageRef: "hero", visible: true },
+        { type: "IMAGE", imageRef: "hero" },
+      ],
+    }, {
+      id: "1:2",
+      name: "Hidden",
+      type: "FRAME",
+      visible: false,
+      fills: [{ type: "IMAGE", imageRef: "hidden" }],
+      children: [{
+        id: "1:3",
+        name: "Hidden child",
+        type: "RECTANGLE",
+        fills: [{ type: "IMAGE", imageRef: "also-hidden" }],
+      }],
+    }],
+  }), ["hero"]);
+});
+
+test("Figma image URLs retry and never accept a page with missing visible images", async (context) => {
+  let imageUrlRequests = 0;
+  context.mock.method(globalThis, "fetch", async (input) => {
+    const url = String(input);
+    if (url.includes("/v1/images/")) return Response.json({ images: {} });
+    if (url.endsWith("/images")) {
+      imageUrlRequests += 1;
+      if (imageUrlRequests < 3) return new Response(null, { status: 503 });
+      return Response.json({ images: { hero: "https://s3-alpha.figma.com/hero.png" } });
+    }
+    return Response.json({
+      name: "Image retry",
+      document: {
+        id: "0:0",
+        name: "Document",
+        type: "DOCUMENT",
+        children: [{
+          id: "1:1",
+          name: "Hero",
+          type: "RECTANGLE",
+          fills: [{ type: "IMAGE", imageRef: "hero" }],
+          absoluteBoundingBox: { x: 0, y: 0, width: 1440, height: 900 },
+        }],
+      },
+    });
+  });
+
+  const result = await fetchFigmaFile(
+    "https://www.figma.com/design/AbCdEf123456/Images",
+    "figd_test_token_value",
+    "pat",
+    undefined,
+    { includeVisualReferences: false },
+  );
+
+  assert.equal(imageUrlRequests, 3);
+  assert.equal(result.imageUrls.hero, "https://s3-alpha.figma.com/hero.png");
+});
+
+test("Figma conversion fails instead of silently dropping visible images", async (context) => {
+  context.mock.method(globalThis, "fetch", async (input) => {
+    const url = String(input);
+    if (url.includes("/v1/images/")) return Response.json({ images: {} });
+    if (url.endsWith("/images")) return Response.json({ images: {} });
+    return Response.json({
+      name: "Missing image",
+      document: {
+        id: "0:0",
+        name: "Document",
+        type: "DOCUMENT",
+        children: [{
+          id: "1:1",
+          name: "Hero",
+          type: "RECTANGLE",
+          fills: [{ type: "IMAGE", imageRef: "hero" }],
+          absoluteBoundingBox: { x: 0, y: 0, width: 1440, height: 900 },
+        }],
+      },
+    });
+  });
+
+  await assert.rejects(
+    fetchFigmaFile(
+      "https://www.figma.com/design/AbCdEf123456/Missing",
+      "figd_test_token_value",
+      "pat",
+      undefined,
+      { includeVisualReferences: false },
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /1件不足/);
+      assert.equal((error as { status?: number }).status, 502);
+      return true;
+    },
+  );
+});
 
 test("real Figma file shape is normalized into parser tokens", async (context) => {
   const requested: string[] = [];

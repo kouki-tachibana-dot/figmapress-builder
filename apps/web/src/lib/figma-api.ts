@@ -13,6 +13,7 @@ import { RequestError } from "./request-security";
 
 const FIGMA_FILE_KEY = /^[A-Za-z0-9_-]{6,160}$/;
 const MAX_FIGMA_RESPONSE_BYTES = 24_000_000;
+const FIGMA_IMAGE_URL_ATTEMPTS = 3;
 
 export interface FigmaFetchResult {
   file: MockFigmaFile;
@@ -281,6 +282,26 @@ function hasText(node: FigmaNode): boolean {
 
 function hasOwnImageFill(node: FigmaNode): boolean {
   return node.fills?.some((fill) => fill.visible !== false && fill.type === "IMAGE") === true;
+}
+
+export function collectVisibleImageRefs(document: FigmaNode): string[] {
+  const refs = new Set<string>();
+  const visit = (node: FigmaNode): void => {
+    if (node.visible === false) return;
+    for (const fill of node.fills ?? []) {
+      if (
+        fill.visible !== false
+        && fill.type === "IMAGE"
+        && typeof fill.imageRef === "string"
+        && fill.imageRef
+      ) {
+        refs.add(fill.imageRef);
+      }
+    }
+    for (const child of node.children ?? []) visit(child);
+  };
+  visit(document);
+  return [...refs];
 }
 
 function hasImageFill(node: FigmaNode): boolean {
@@ -677,27 +698,46 @@ export async function fetchFigmaFile(
     }
   }
   const normalizedData = data as RawFigmaFile;
+  const expectedImageRefs = collectVisibleImageRefs(normalizedData.document);
   const imageUrlsPromise = (async (): Promise<Record<string, string>> => {
-    try {
-      const imageResponse = await fetch(
-        `https://api.figma.com/v1/files/${encodeURIComponent(key)}/images`,
-        requestInit(),
-      );
-      if (!imageResponse.ok) {
-        warnings.push("Figma画像のURLを取得できなかったため、画像なしで続行しました。");
-        return {};
+    let lastStatus = 0;
+    for (let attempt = 1; attempt <= FIGMA_IMAGE_URL_ATTEMPTS; attempt += 1) {
+      try {
+        const imageResponse = await fetch(
+          `https://api.figma.com/v1/files/${encodeURIComponent(key)}/images`,
+          requestInit(),
+        );
+        lastStatus = imageResponse.status;
+        if (imageResponse.ok) {
+          const imageData = await readLimitedJson(imageResponse);
+          if (!isRecord(imageData) || !isRecord(imageData.images)) {
+            throw new RequestError("Figma画像APIから不正な応答が返されました。", 502);
+          }
+          return Object.fromEntries(
+            Object.entries(imageData.images).filter(
+              (entry): entry is [string, string] => typeof entry[1] === "string",
+            ),
+          );
+        }
+        if (imageResponse.status < 500 && imageResponse.status !== 429) {
+          throw figmaError(imageResponse.status, authentication);
+        }
+      } catch (error) {
+        if (error instanceof RequestError && error.status < 500 && error.status !== 429) {
+          throw error;
+        }
+        if (attempt === FIGMA_IMAGE_URL_ATTEMPTS) break;
       }
-      const imageData = await readLimitedJson(imageResponse);
-      if (!isRecord(imageData) || !isRecord(imageData.images)) return {};
-      return Object.fromEntries(
-        Object.entries(imageData.images).filter(
-          (entry): entry is [string, string] => typeof entry[1] === "string",
-        ),
-      );
-    } catch {
-      warnings.push("Figma画像の取得がタイムアウトしたため、画像なしで続行しました。");
-      return {};
+      if (attempt < FIGMA_IMAGE_URL_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 250));
+      }
     }
+    throw new RequestError(
+      lastStatus === 429
+        ? "Figma画像APIが混雑しています。画像を欠落させずに再試行してください。"
+        : "Figma画像を完全に取得できませんでした。画像を欠落させずに再試行してください。",
+      502,
+    );
   })();
   const [imageUrls, renderedNodeUrls, visualReferences] = await Promise.all([
     imageUrlsPromise,
@@ -716,6 +756,13 @@ export async function fetchFigmaFile(
           warnings,
         ),
   ]);
+  const missingImageRefs = expectedImageRefs.filter((imageRef) => !imageUrls[imageRef]);
+  if (missingImageRefs.length) {
+    throw new RequestError(
+      `Figma画像を完全に取得できませんでした（${missingImageRefs.length}件不足）。画像を欠落させずに再試行してください。`,
+      502,
+    );
+  }
 
   return {
     file: normalizeFigmaFile(normalizedData),

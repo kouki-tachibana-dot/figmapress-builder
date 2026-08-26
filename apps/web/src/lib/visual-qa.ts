@@ -1,6 +1,16 @@
 export type VisualQaStatus = "pass" | "review" | "fail";
 export type VisualQaDraftGateState = "off" | "pending" | "clear" | "warning";
 
+export function clampVisibleBottom(
+  bottom: number,
+  clippingBottoms: number[],
+): number {
+  return clippingBottoms.reduce(
+    (visibleBottom, clippingBottom) => Math.min(visibleBottom, clippingBottom),
+    bottom,
+  );
+}
+
 export interface VisualQaDraftGate {
   state: VisualQaDraftGateState;
   blocksDraft: boolean;

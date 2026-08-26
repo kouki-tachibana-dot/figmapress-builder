@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   analyzeVisualRegions,
   analyzeVisualPixels,
+  clampVisibleBottom,
   estimateVisualGeometry,
   resolveVisualQaDraftGate,
   shouldKeepDecorationGeometryCorrections,
@@ -36,6 +37,12 @@ const browserVisualQaPath = new URL(
   import.meta.url,
 );
 
+test("browser Visual QA ignores content clipped by nested containers", () => {
+  assert.equal(clampVisibleBottom(1_400, [1_000]), 1_000);
+  assert.equal(clampVisibleBottom(1_400, [1_200, 900]), 900);
+  assert.equal(clampVisibleBottom(800, [1_000]), 800);
+});
+
 test("browser Visual QA waits for the srcdoc DOM separately from slow media", async () => {
   const source = await readFile(browserVisualQaPath, "utf8");
   assert.match(source, /document\?\.URL === "about:srcdoc"/);
@@ -52,6 +59,9 @@ test("browser Visual QA waits for the srcdoc DOM separately from slow media", as
   assert.match(source, /visibleElementorLayouts\.length !== 1/);
   assert.match(source, /renderedContentHeight\(visiblePreview\)/);
   assert.match(source, /bottom - rootRect\.top/);
+  assert.match(source, /clipsVerticalOverflow\(ancestorStyle\)/);
+  assert.match(source, /clampVisibleBottom\(rect\.bottom, clippingBottoms\)/);
+  assert.match(source, /rootClipsOverflow \? rootRect\.height : element\.scrollHeight/);
   assert.match(source, /waitForImage\(image, 8_000\)/);
   assert.match(source, /reference\.format === "jpg" \? 32 : 24/);
   assert.match(source, /45_000/);
