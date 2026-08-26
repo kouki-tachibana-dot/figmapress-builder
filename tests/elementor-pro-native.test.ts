@@ -200,6 +200,7 @@ test("fallback form becomes Elementor Pro Form with Submissions enabled", () => 
   const fields = form?.settings.form_fields as Array<Record<string, unknown>>;
   assert.equal(form?.widgetType, "form");
   assert.match(String(form?.settings.css_classes), /figmapress-native-form/);
+  assert.match(String(form?.settings._css_classes), /figmapress-native-form/);
   assert.deepEqual(form?.settings.submit_actions, ["save-to-database"]);
   assert.equal(fields[0]?.custom_id, "name");
   assert.equal(fields[0]?.required, "true");
@@ -234,6 +235,7 @@ test("fallback navigation becomes a native Pro menu with logo and CTA", () => {
   assert.equal(menu?.settings.menu, "137");
   assert.equal(navigation?.settings.html_tag, "header");
   assert.match(String(menu?.settings.css_classes), /figmapress-native-nav-menu/);
+  assert.match(String(menu?.settings._css_classes), /figmapress-native-nav-menu/);
 });
 
 test("mobile native menu expands the Figma icon to a centered 44px touch target", () => {

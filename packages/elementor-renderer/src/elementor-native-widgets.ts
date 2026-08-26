@@ -138,6 +138,7 @@ function nativeAccordion(element: ElementorElement): ElementorElement {
     settings: {
       ...settings,
       css_classes: cssClasses(settings.css_classes, "figmapress-native-accordion"),
+      _css_classes: cssClasses(settings._css_classes, "figmapress-native-accordion"),
       items: items.map((item, index) => ({
         _id: string(item._id, hashId(`${element.id}:tab:${index}`)),
         item_title: string(item.title, `項目 ${index + 1}`),
@@ -194,6 +195,7 @@ function nativeForm(element: ElementorElement): ElementorElement {
     settings: {
       ...settings,
       css_classes: cssClasses(settings.css_classes, "figmapress-native-form"),
+      _css_classes: cssClasses(settings._css_classes, "figmapress-native-form"),
       form_name: string(settings.title, "お問い合わせ"),
       form_fields: fields.map((field, index) => {
         const sourceType = string(field.type, "text");
@@ -306,6 +308,7 @@ function nativeNavigation(
     settings: {
       ...positioned(menuBox),
       css_classes: "figmapress-native-nav-menu",
+      _css_classes: "figmapress-native-nav-menu",
       menu: String(menuId),
       layout: variant === "mobile" ? "dropdown" : "horizontal",
       align_items: variant === "mobile" ? "stretch" : "center",

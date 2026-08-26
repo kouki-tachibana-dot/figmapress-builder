@@ -2888,7 +2888,6 @@ function findPrimaryHeadingNode(
   const navigationIds = new Set(
     navigationNode ? [navigationNode.id, ...descendants(navigationNode).map((node) => node.id)] : [],
   );
-  const knownPageTitle = /^(?:会社案内|選ばれる理由|事業内容|施工事例|解体工事|お知らせ|お問い合わせ|役員一覧)$/;
   return descendants(root)
     .filter((node) =>
       node.type === "TEXT"
@@ -2921,7 +2920,6 @@ function findPrimaryHeadingNode(
       const japanese = /[ぁ-んァ-ヶ一-龠]/.test(text);
       const score = Number(matchesPageTitle) * 2_000_000
         + Number(explicit) * 1_000_000
-        + Number(knownPageTitle.test(text)) * 500_000
         + Number(japanese) * 20_000
         + fontSize * 100
         - ((bounds.y - rootBounds.y) / Math.max(1, rootBounds.height)) * 10_000;

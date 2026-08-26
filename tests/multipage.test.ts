@@ -4,6 +4,7 @@ import type { FigmaNode, MockFigmaFile } from "@figmapress/figma-parser";
 import {
   createFigmaMultiPagePlan,
   createFigmaSitePageTemplate,
+  FigmaElementorExporter,
   auditElementorTemplateLinks,
   figmaPageLinkPlaceholder,
   rewriteElementorTemplatePageLinks,
@@ -91,6 +92,45 @@ test("multi-page plan detects semantic desktop and mobile pages", () => {
   assert.equal(plan.pages[1]?.hasDesktop, true);
   assert.equal(plan.pages[1]?.hasMobile, true);
   assert.equal(plan.menuName, "竹内きよ子様｜FigmaPress");
+});
+
+test("home page promotes the first hero line instead of a later known section title", () => {
+  const homepage: MockFigmaFile = {
+    document: {
+      id: "home-document",
+      name: "Home",
+      type: "DOCUMENT",
+      children: [{
+        id: "home-canvas",
+        name: "Page",
+        type: "CANVAS",
+        children: [{
+          id: "home-frame",
+          name: "SP-page",
+          type: "FRAME",
+          absoluteBoundingBox: { x: 0, y: 0, width: 440, height: 2200 },
+          children: [
+            {
+              ...text("hero-line", "Hero line", "1からはじまる信頼の道", 24, 300),
+              absoluteBoundingBox: { x: 24, y: 300, width: 390, height: 68 },
+              style: { fontSize: 52, fontWeight: 800 },
+            },
+            {
+              ...text("works-heading", "Heading", "施工事例", 24, 900),
+              absoluteBoundingBox: { x: 24, y: 900, width: 220, height: 54 },
+              style: { fontSize: 42, fontWeight: 700 },
+            },
+          ],
+        }],
+      }],
+    },
+  };
+  const template = new FigmaElementorExporter().toTemplate(homepage, "ホーム");
+  const h1 = flatten(template.content).find((element) =>
+    element.widgetType === "text-editor" && /^<h1\b/.test(String(element.settings.editor)),
+  );
+  assert.match(String(h1?.settings.editor), /1からはじまる信頼の道/);
+  assert.doesNotMatch(String(h1?.settings.editor), /施工事例/);
 });
 
 test("section page keeps responsive header, target section, and footer only", () => {
