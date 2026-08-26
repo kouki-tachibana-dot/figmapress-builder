@@ -277,12 +277,85 @@
         });
     }
 
+    function initNativeNavigation(scope) {
+        scope.querySelectorAll(".figmapress-native-nav-menu:not([data-figmapress-ready])").forEach(function (widget) {
+            var toggle = widget.querySelector(".elementor-menu-toggle");
+            var dropdown = widget.querySelector(".elementor-nav-menu--dropdown");
+            if (!toggle || !dropdown) return;
+            widget.dataset.figmapressReady = "true";
+            var widgetId = (widget.getAttribute("data-id") || "menu").replace(/[^a-zA-Z0-9_-]/g, "");
+            if (!dropdown.id) dropdown.id = "figmapress-menu-" + widgetId;
+            toggle.setAttribute("aria-controls", dropdown.id);
+            var syncLabel = function () {
+                var open = toggle.getAttribute("aria-expanded") === "true";
+                toggle.setAttribute("aria-label", open ? "メニューを閉じる" : "メニューを開く");
+            };
+            syncLabel();
+            new MutationObserver(syncLabel).observe(toggle, { attributes: true, attributeFilter: ["aria-expanded"] });
+            toggle.addEventListener("keydown", function (event) {
+                if (event.key !== "Escape" || toggle.getAttribute("aria-expanded") !== "true") return;
+                event.preventDefault();
+                toggle.click();
+                toggle.focus();
+            });
+            widget.querySelectorAll(".current-menu-item > a, .current_page_item > a").forEach(function (link) {
+                link.setAttribute("aria-current", "page");
+            });
+        });
+    }
+
+    function initNativeForms(scope) {
+        var autocompleteById = {
+            company: "organization",
+            name: "name",
+            address: "street-address",
+            phone: "tel",
+            email: "email"
+        };
+        scope.querySelectorAll(".figmapress-native-form form:not([data-figmapress-ready])").forEach(function (form) {
+            form.dataset.figmapressReady = "true";
+            if (!form.getAttribute("aria-label")) {
+                form.setAttribute("aria-label", form.getAttribute("name") || "お問い合わせフォーム");
+            }
+            form.querySelectorAll("input, select, textarea").forEach(function (field) {
+                var customId = (field.id || "").replace(/^form-field-/, "").replace(/-\d+$/, "");
+                if (!field.getAttribute("autocomplete") && autocompleteById[customId]) {
+                    field.setAttribute("autocomplete", autocompleteById[customId]);
+                }
+                if (field.required) field.setAttribute("aria-required", "true");
+                if (customId === "phone" && !field.getAttribute("inputmode")) field.setAttribute("inputmode", "tel");
+                if (customId === "email" && !field.getAttribute("inputmode")) field.setAttribute("inputmode", "email");
+            });
+            new MutationObserver(function (records) {
+                records.forEach(function (record) {
+                    Array.prototype.forEach.call(record.addedNodes, function (node) {
+                        if (!(node instanceof Element)) return;
+                        var messages = node.matches(".elementor-message")
+                            ? [node]
+                            : Array.prototype.slice.call(node.querySelectorAll(".elementor-message"));
+                        messages.forEach(function (message) {
+                            var error = message.classList.contains("elementor-message-danger");
+                            message.setAttribute("role", error ? "alert" : "status");
+                            message.setAttribute("aria-live", error ? "assertive" : "polite");
+                        });
+                    });
+                });
+            }).observe(form, { childList: true, subtree: true });
+        });
+    }
+
+    function initNativeWidgets(scope) {
+        initNativeNavigation(scope);
+        initNativeForms(scope);
+    }
+
     function init(scope) {
         var root = scope && scope.querySelectorAll ? scope : document;
         initNavigation(root);
         initAccordions(root);
         initCarousels(root);
         initForms(root);
+        initNativeWidgets(root);
     }
 
     if (document.readyState === "loading") {
@@ -296,6 +369,11 @@
         ["figmapress-nav", "figmapress-link", "figmapress-carousel", "figmapress-contact-form", "figmapress-accordion"].forEach(function (name) {
             window.elementorFrontend.hooks.addAction("frontend/element_ready/" + name + ".default", function (element) {
                 init(element && element[0] ? element[0] : document);
+            });
+        });
+        ["nav-menu", "form", "nested-accordion"].forEach(function (name) {
+            window.elementorFrontend.hooks.addAction("frontend/element_ready/" + name + ".default", function (element) {
+                initNativeWidgets(element && element[0] ? element[0] : document);
             });
         });
     });

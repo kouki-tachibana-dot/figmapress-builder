@@ -3,7 +3,7 @@
  * Plugin Name:       FigmaPress Connector
  * Plugin URI:        https://github.com/kouki-tachibana-dot/figmapress-builder
  * Description:       Connects FigmaPress to Gutenberg and Elementor draft pages.
- * Version:           0.19.2
+ * Version:           0.19.3
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Update URI:        https://figmapress-builder.vercel.app/downloads/figmapress-connector.json
@@ -20,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 define( 'FIGMAPRESS_CONNECTOR_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FIGMAPRESS_CONNECTOR_URL', plugin_dir_url( __FILE__ ) );
-define( 'FIGMAPRESS_CONNECTOR_VERSION', '0.19.2' );
+define( 'FIGMAPRESS_CONNECTOR_VERSION', '0.19.3' );
 
 require_once FIGMAPRESS_CONNECTOR_DIR . 'includes/pairing.php';
 require_once FIGMAPRESS_CONNECTOR_DIR . 'includes/rest-api.php';
@@ -143,6 +143,54 @@ function figmapress_connector_register_elementor_assets() {
 }
 add_action( 'wp_enqueue_scripts', 'figmapress_connector_register_elementor_assets' );
 add_action( 'elementor/frontend/before_register_scripts', 'figmapress_connector_register_elementor_assets' );
+
+/** Always load the UX bridge on FigmaPress-owned Elementor pages. */
+function figmapress_connector_enqueue_owned_elementor_assets() {
+    $post_id = get_queried_object_id();
+    if (
+        ! $post_id ||
+        (
+            ! get_post_meta( $post_id, '_figmapress_request_id', true ) &&
+            ! get_post_meta( $post_id, '_figmapress_source_key', true )
+        )
+    ) {
+        return;
+    }
+    wp_enqueue_style( 'figmapress-elementor-interactions' );
+    wp_enqueue_script( 'figmapress-elementor-interactions' );
+}
+add_action( 'wp_enqueue_scripts', 'figmapress_connector_enqueue_owned_elementor_assets', 30 );
+
+/**
+ * Version FigmaPress-owned Elementor post CSS by the saved document hash.
+ *
+ * Elementor normally reuses /uploads/elementor/css/post-ID.css without a query
+ * version. Long-lived host/browser caches can therefore show an older layout
+ * after FigmaPress has already replaced the draft document and regenerated the
+ * file. Limiting this filter to owned drafts avoids changing unrelated pages.
+ */
+function figmapress_connector_version_owned_elementor_css( $src, $handle ) {
+    if ( 0 !== strpos( (string) $handle, 'elementor-post-' ) ) {
+        return $src;
+    }
+    $post_id = absint( substr( (string) $handle, strlen( 'elementor-post-' ) ) );
+    if (
+        ! $post_id ||
+        (
+            ! get_post_meta( $post_id, '_figmapress_request_id', true ) &&
+            ! get_post_meta( $post_id, '_figmapress_source_key', true )
+        )
+    ) {
+        return $src;
+    }
+    $version = strtolower( (string) get_post_meta( $post_id, '_figmapress_css_version', true ) );
+    if ( ! preg_match( '/^[a-f0-9]{12}$/', $version ) ) {
+        $stored_hash = strtolower( (string) get_post_meta( $post_id, '_figmapress_stored_hash', true ) );
+        $version     = preg_match( '/^[a-f0-9]{64}$/', $stored_hash ) ? substr( $stored_hash, 0, 12 ) : '';
+    }
+    return '' !== $version ? add_query_arg( 'figmapress', $version, $src ) : $src;
+}
+add_filter( 'style_loader_src', 'figmapress_connector_version_owned_elementor_css', 20, 2 );
 
 /** Google-hosted families that FigmaPress may request from a saved manifest. */
 function figmapress_connector_supported_webfont_families() {

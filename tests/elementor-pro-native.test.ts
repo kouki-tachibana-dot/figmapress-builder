@@ -199,6 +199,7 @@ test("fallback form becomes Elementor Pro Form with Submissions enabled", () => 
   const form = result.content[0];
   const fields = form?.settings.form_fields as Array<Record<string, unknown>>;
   assert.equal(form?.widgetType, "form");
+  assert.match(String(form?.settings.css_classes), /figmapress-native-form/);
   assert.deepEqual(form?.settings.submit_actions, ["save-to-database"]);
   assert.equal(fields[0]?.custom_id, "name");
   assert.equal(fields[0]?.required, "true");
@@ -231,6 +232,26 @@ test("fallback navigation becomes a native Pro menu with logo and CTA", () => {
   );
   const menu = navigation?.elements.find((item) => item.widgetType === "nav-menu");
   assert.equal(menu?.settings.menu, "137");
+  assert.equal(navigation?.settings.html_tag, "header");
+  assert.match(String(menu?.settings.css_classes), /figmapress-native-nav-menu/);
+});
+
+test("mobile native menu expands the Figma icon to a centered 44px touch target", () => {
+  const result = adaptElementorTemplateToNativeWidgets(template(widget(
+    "n7654321",
+    "figmapress-nav",
+    {
+      layout_variant: "mobile",
+      design_geometry: JSON.stringify({
+        root: { width: 440, height: 100 },
+        toggle: { x: 91, y: 18, width: 4, height: 20 },
+      }),
+    },
+  )), { capabilities: allCapabilities, menuId: 137 });
+  const menu = result.content[0]?.elements.find((item) => item.widgetType === "nav-menu");
+  assert.deepEqual(menu?.settings._element_custom_width, { unit: "%", size: 10, sizes: [] });
+  assert.deepEqual(menu?.settings._offset_x, { unit: "%", size: 88, sizes: [] });
+  assert.deepEqual(menu?.settings.min_height, { unit: "%", size: 44, sizes: [] });
 });
 
 test("unsupported destination keeps safe fallback widgets", () => {

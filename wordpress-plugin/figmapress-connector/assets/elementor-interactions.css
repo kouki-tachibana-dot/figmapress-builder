@@ -592,6 +592,37 @@ html {
     .figmapress-carousel__dot {
         transition: none;
     }
+
+    .figmapress-native-accordion,
+    .figmapress-native-accordion * {
+        scroll-behavior: auto !important;
+        transition-duration: .01ms !important;
+    }
+}
+
+.figmapress-native-nav-menu .elementor-menu-toggle:focus-visible,
+.figmapress-native-form :is(input, select, textarea, button):focus-visible {
+    outline: 3px solid #0b6ed0;
+    outline-offset: 3px;
+}
+
+@media (max-width: 767px) {
+    .figmapress-native-nav-menu .elementor-menu-toggle {
+        min-height: 44px;
+        min-width: 44px;
+    }
+
+    .figmapress-native-form :is(input:not([type="radio"]):not([type="checkbox"]), select, textarea, button) {
+        min-height: 44px;
+    }
+
+    .figmapress-native-form .elementor-field-type-radio label,
+    .figmapress-native-form .elementor-field-type-acceptance label,
+    .figmapress-native-form .elementor-field-type-checkbox label {
+        align-items: center;
+        display: inline-flex;
+        min-height: 44px;
+    }
 }
 
 #thoughts,

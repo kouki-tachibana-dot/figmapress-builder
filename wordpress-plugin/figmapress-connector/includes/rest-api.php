@@ -1494,6 +1494,8 @@ function figmapress_connector_rest_confirm_elementor_page( WP_REST_Request $requ
     $request_lock_key = 'figmapress_request_' . substr( hash_hmac( 'sha256', $source_key, wp_salt( 'nonce' ) ), 0, 32 );
     delete_option( $request_lock_key );
     delete_post_meta( $post_id, '_figmapress_prepared' );
+    update_post_meta( $post_id, '_figmapress_css_version', substr( $expected_hash, 0, 12 ) );
+    figmapress_connector_clear_elementor_cache( $post_id );
     $media_progress = figmapress_connector_deferred_media_progress(
         get_post_meta( $post_id, '_figmapress_media_total', true )
     );
@@ -2055,6 +2057,7 @@ function figmapress_connector_store_elementor_document( $post_id, $content, $pag
         );
     }
     $encoded_bytes = strlen( $encoded_content );
+    $encoded_hash  = hash( 'sha256', $encoded_content );
 
     // Store the complete editable document before calling Elementor's
     // Document API. On shared hosts a multi-megabyte absolute-positioned page
@@ -2074,7 +2077,7 @@ function figmapress_connector_store_elementor_document( $post_id, $content, $pag
         update_post_meta( $post_id, '_figmapress_stored_request_id', $request_id );
         update_post_meta( $post_id, '_figmapress_stored_source_key', $source_key );
         update_post_meta( $post_id, '_figmapress_stored_bytes', $encoded_bytes );
-        update_post_meta( $post_id, '_figmapress_stored_hash', hash( 'sha256', $encoded_content ) );
+        update_post_meta( $post_id, '_figmapress_stored_hash', $encoded_hash );
     }
     $direct_meta_write = update_metadata(
         'post',
@@ -2155,6 +2158,8 @@ function figmapress_connector_store_elementor_document( $post_id, $content, $pag
             )
         );
     }
+
+    update_post_meta( $post_id, '_figmapress_css_version', substr( $encoded_hash, 0, 12 ) );
 
     return $stored_elements;
 }

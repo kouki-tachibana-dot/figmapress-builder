@@ -45,6 +45,7 @@ interface RenderContext {
   fallbackMenuTexts: FigmaNode[];
   navigationNode: FigmaNode | null;
   contactFormNode: FigmaNode | null;
+  primaryHeadingNodeId: string | null;
   anchorTargets: Map<string, SectionAnchor>;
   emittedAnchorIds: Set<string>;
 }
@@ -327,6 +328,7 @@ function createRenderContext(
   fallbackMenuTexts: FigmaNode[],
 ): RenderContext {
   const anchorTargets = discoverSectionAnchorTargets(root);
+  const navigationNode = findFigmaNavigationNode(root, fallbackMenuTexts);
   return {
     ids,
     root,
@@ -335,8 +337,9 @@ function createRenderContext(
     variant,
     anchorSuffix,
     fallbackMenuTexts,
-    navigationNode: findFigmaNavigationNode(root, fallbackMenuTexts),
+    navigationNode,
     contactFormNode: findFigmaContactFormNode(root),
+    primaryHeadingNodeId: findPrimaryHeadingNode(root, navigationNode)?.id ?? null,
     anchorTargets,
     emittedAnchorIds: new Set([`top${anchorSuffix}`]),
   };
@@ -1963,7 +1966,8 @@ function textElement(
   const overflowWrap = textOverflowWrap(node);
   const wordBreak = textWordBreak(node);
   const verticalAlign = textVerticalAlign(style.textAlignVertical);
-  settings.editor = `<div data-figmapress-text-box="${escapeAttribute(node.id)}" style="box-sizing:border-box;display:flex;flex-direction:column;font-family:${escapeAttribute(cssFont(style.fontFamily))};hyphens:none;justify-content:${verticalAlign};line-break:strict;margin:0;max-width:100%;${textBoxHeight(node, bounds, context)}overflow:${textOverflow(node)};overflow-wrap:${overflowWrap};text-orientation:mixed;white-space:${whiteSpace};width:100%;word-break:${wordBreak};writing-mode:horizontal-tb"><span style="display:block;font-size:0;line-height:0;max-width:100%">${linkedContent}</span></div>`;
+  const semanticTag = headingTag(node, fontSize, context);
+  settings.editor = `<${semanticTag} data-figmapress-text-box="${escapeAttribute(node.id)}" style="box-sizing:border-box;display:flex;flex-direction:column;font-family:${escapeAttribute(cssFont(style.fontFamily))};hyphens:none;justify-content:${verticalAlign};line-break:strict;margin:0;max-width:100%;${textBoxHeight(node, bounds, context)}overflow:${textOverflow(node)};overflow-wrap:${overflowWrap};text-orientation:mixed;white-space:${whiteSpace};width:100%;word-break:${wordBreak};writing-mode:horizontal-tb"><span style="display:block;font-size:0;line-height:0;max-width:100%">${linkedContent}</span></${semanticTag}>`;
   return widget(context.ids, node.id, "text-editor", settings);
 }
 
@@ -2852,12 +2856,51 @@ function previewEffects(node: FigmaNode, target: "box" | "text" = "box"): string
   return `${declarations.join(";")};`;
 }
 
-function headingTag(node: FigmaNode, fontSize: number): string {
+const KNOWN_SECTION_HEADING = /^(?:経営理念|代表挨拶|会社概要|店舗案内|法人向けサービスについて|資料ダウンロード|請求書フォーマット|選ばれる理由|事業内容|施工事例|解体工事|お知らせ|お問い合わせ|役員一覧)$/;
+
+function headingTag(node: FigmaNode, fontSize: number, context: RenderContext): "h1" | "h2" | "h3" | "div" {
+  if (node.id === context.primaryHeadingNodeId) return "h1";
   const name = node.name.toLowerCase();
-  if (/h1|headline|main.?title|メイン|見出し/.test(name) && fontSize >= 34) return "h1";
-  if (/h2|section.?title|heading|title|見出し/.test(name) && fontSize >= 24) return "h2";
+  const content = node.characters?.trim() ?? "";
+  if (/h2|section.?title|section.?heading|小?見出し/.test(name) && fontSize >= 20) return "h2";
+  if (KNOWN_SECTION_HEADING.test(content) && fontSize >= 18) return "h2";
   if (/h3|subtitle|sub.?title|小見出し/.test(name) && fontSize >= 18) return "h3";
   return "div";
+}
+
+function findPrimaryHeadingNode(root: FigmaNode, navigationNode: FigmaNode | null): FigmaNode | null {
+  const rootBounds = root.absoluteBoundingBox;
+  if (!rootBounds) return null;
+  const navigationIds = new Set(
+    navigationNode ? [navigationNode.id, ...descendants(navigationNode).map((node) => node.id)] : [],
+  );
+  const knownPageTitle = /^(?:会社案内|選ばれる理由|事業内容|施工事例|解体工事|お知らせ|お問い合わせ|役員一覧)$/;
+  return descendants(root)
+    .filter((node) =>
+      node.type === "TEXT"
+      && node.visible !== false
+      && Boolean(node.characters?.trim())
+      && Boolean(node.absoluteBoundingBox)
+      && !navigationIds.has(node.id)
+      && (node.characters?.trim().length ?? 0) <= 80
+      && (node.absoluteBoundingBox?.y ?? Infinity) <= rootBounds.y + rootBounds.height * 0.25
+    )
+    .map((node) => {
+      const bounds = node.absoluteBoundingBox as FigmaBounds;
+      const style = node.style ?? {};
+      const fontSize = textFontSize(style, textRuns(node), bounds);
+      const text = node.characters?.trim() ?? "";
+      const name = node.name.toLowerCase();
+      const explicit = /(?:^|[\/_\s-])(?:h1|page.?title|main.?title|hero.?title)(?:$|[\/_\s-])|ページタイトル|メインタイトル/.test(name);
+      const japanese = /[ぁ-んァ-ヶ一-龠]/.test(text);
+      const score = Number(explicit) * 1_000_000
+        + Number(knownPageTitle.test(text)) * 500_000
+        + Number(japanese) * 20_000
+        + fontSize * 100
+        - ((bounds.y - rootBounds.y) / Math.max(1, rootBounds.height)) * 10_000;
+      return { node, score };
+    })
+    .sort((left, right) => right.score - left.score)[0]?.node ?? null;
 }
 
 function htmlTag(node: FigmaNode): string {

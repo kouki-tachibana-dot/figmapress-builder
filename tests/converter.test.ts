@@ -366,7 +366,12 @@ test("real Figma bounds produce a high-fidelity editable Elementor document", as
   const truncatedNotice = elements.find((element) => String(element.settings.editor).includes("固定高で安全"));
   const measuredWrappedParagraph = elements.find((element) => String(element.settings.editor).includes("実測高が複数行"));
   const portrait = elements.find((element) => element.widgetType === "image");
+  const h1Widgets = elements.filter(
+    (element) => element.widgetType === "text-editor" && /^<h1\b/.test(String(element.settings.editor)),
+  );
   assert.match(String(heading?.settings.editor), /white-space:pre/);
+  assert.equal(h1Widgets.length, 1);
+  assert.match(String(h1Widgets[0]?.settings.editor), /^<h1\b[^>]*data-figmapress-text-box=/);
   assert.match(String(heading?.settings.editor), /writing-mode:horizontal-tb/);
   assert.match(String(heading?.settings.editor), /line-break:strict/);
   assert.equal(heading?.settings.css_classes, "figmapress-text figmapress-text--horizontal");

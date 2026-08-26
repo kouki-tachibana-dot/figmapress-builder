@@ -75,6 +75,25 @@ function percentSize(value: number): { unit: "%"; size: number; sizes: number[] 
   return { unit: "%", size: value, sizes: [] };
 }
 
+function cssClasses(value: unknown, required: string): string {
+  return [...new Set(`${string(value)} ${required}`.trim().split(/\s+/).filter(Boolean))].join(" ");
+}
+
+function minimumCenteredBox(
+  box: DesignBox,
+  minimumWidth: number,
+  minimumHeight: number,
+): DesignBox {
+  const width = Math.max(box.width, minimumWidth);
+  const height = Math.max(box.height, minimumHeight);
+  return {
+    x: Math.max(0, Math.min(100 - width, box.x - (width - box.width) / 2)),
+    y: Math.max(0, Math.min(100 - height, box.y - (height - box.height) / 2)),
+    width,
+    height,
+  };
+}
+
 function positioned(box: DesignBox | null): ElementorSettings {
   if (!box) return { _element_width: "initial", _element_custom_width: percentSize(100) };
   return {
@@ -118,6 +137,7 @@ function nativeAccordion(element: ElementorElement): ElementorElement {
     widgetType: "nested-accordion",
     settings: {
       ...settings,
+      css_classes: cssClasses(settings.css_classes, "figmapress-native-accordion"),
       items: items.map((item, index) => ({
         _id: string(item._id, hashId(`${element.id}:tab:${index}`)),
         item_title: string(item.title, `項目 ${index + 1}`),
@@ -173,6 +193,7 @@ function nativeForm(element: ElementorElement): ElementorElement {
     widgetType: "form",
     settings: {
       ...settings,
+      css_classes: cssClasses(settings.css_classes, "figmapress-native-form"),
       form_name: string(settings.title, "お問い合わせ"),
       form_fields: fields.map((field, index) => {
         const sourceType = string(field.type, "text");
@@ -247,7 +268,11 @@ function nativeNavigation(
   const itemBox = unionDesignBoxes(itemGeometry.map(designBox));
   const toggleBox = designBox(geometry.toggle);
   const menuBox = variant === "mobile"
-    ? toggleBox ?? { x: 80, y: 18, width: 16, height: 64 }
+    ? minimumCenteredBox(
+        toggleBox ?? { x: 80, y: 18, width: 16, height: 64 },
+        rootWidth > 0 ? 4400 / rootWidth : 10,
+        rootHeight > 0 ? 4400 / rootHeight : 44,
+      )
     : itemBox ?? { x: 24, y: 15, width: 56, height: 70 };
   const firstItemFontPercent = Number(itemGeometry[0]?.fontSize) || 0;
   const menuFontSize = rootWidth > 0 && firstItemFontPercent > 0
@@ -280,6 +305,7 @@ function nativeNavigation(
     isInner: false,
     settings: {
       ...positioned(menuBox),
+      css_classes: "figmapress-native-nav-menu",
       menu: String(menuId),
       layout: variant === "mobile" ? "dropdown" : "horizontal",
       align_items: variant === "mobile" ? "stretch" : "center",
@@ -350,6 +376,8 @@ function nativeNavigation(
     isInner: true,
     settings: {
       ...containerSettings,
+      css_classes: cssClasses(containerSettings.css_classes, "figmapress-native-header"),
+      html_tag: "header",
       display: "flex",
       flex_direction: "row",
       flex_justify_content: "space-between",

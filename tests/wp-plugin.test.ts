@@ -528,12 +528,34 @@ test("functional widgets include keyboard, reduced-motion, and timeout safeguard
   assert.match(script, /AbortController/);
   assert.match(script, /controller\.abort\(\)/);
   assert.match(script, /aria-busy/);
+  assert.match(script, /figmapress-native-nav-menu/);
+  assert.match(script, /aria-controls/);
+  assert.match(script, /メニューを開く/);
+  assert.match(script, /figmapress-native-form/);
+  assert.match(script, /autocompleteById/);
+  assert.match(script, /aria-required/);
   assert.match(style, /prefers-reduced-motion:\s*reduce/);
   assert.match(style, /focus-visible/);
+  assert.match(style, /figmapress-native-nav-menu[\s\S]*?min-height:\s*44px/);
+  assert.match(style, /figmapress-native-form[\s\S]*?min-height:\s*44px/);
   assert.match(style, /figmapress-nav__state:checked/);
   assert.match(style, /figmapress-nav__state \+ \.figmapress-nav__toggle[\s\S]*?pointer-events:\s*none/);
   assert.match(widgets, /class="figmapress-nav__state"/);
   assert.match(style, /\.figmapress-carousel/);
+});
+
+test("owned Elementor CSS is content-versioned after every durable save", async () => {
+  const [plugin, rest] = await Promise.all([
+    readFile(pluginPath, "utf8"),
+    readFile(restApiPath, "utf8"),
+  ]);
+  assert.match(plugin, /style_loader_src/);
+  assert.match(plugin, /elementor-post-/);
+  assert.match(plugin, /_figmapress_css_version/);
+  assert.match(plugin, /add_query_arg\( 'figmapress', \$version, \$src \)/);
+  assert.match(rest, /\$encoded_hash\s*=\s*hash\( 'sha256', \$encoded_content \)/);
+  assert.match(rest, /update_post_meta\( \$post_id, '_figmapress_css_version', substr\( \$encoded_hash, 0, 12 \) \)/);
+  assert.match(rest, /update_post_meta\( \$post_id, '_figmapress_css_version', substr\( \$expected_hash, 0, 12 \) \)/);
 });
 
 test("mobile navigation keeps its CTA and device-specific anchor targets", async () => {
