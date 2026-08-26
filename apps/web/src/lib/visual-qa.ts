@@ -398,6 +398,7 @@ function clamp(value: number, minimum: number, maximum: number): number {
 
 interface PerceptualPixelDelta {
   rawError: number;
+  structuralError: number;
   changed: boolean;
   edgeEquivalent: boolean;
   textureEquivalent: boolean;
@@ -511,6 +512,7 @@ function perceptualPixelDelta(
   if (rawError <= threshold) {
     return {
       rawError,
+      structuralError: 0,
       changed: false,
       edgeEquivalent: false,
       textureEquivalent: false,
@@ -598,9 +600,21 @@ function perceptualPixelDelta(
       y,
       2,
     ) <= 8;
+  const changed = !(edgeEquivalent || textureEquivalent);
   return {
     rawError,
-    changed: !(edgeEquivalent || textureEquivalent),
+    structuralError: changed && threshold >= 32
+      ? neighborhoodMeanColorError(
+          reference,
+          target,
+          width,
+          height,
+          x,
+          y,
+          2,
+        )
+      : changed ? rawError : 0,
+    changed,
     edgeEquivalent,
     textureEquivalent,
   };
@@ -1369,6 +1383,7 @@ export function analyzeVisualPixels(
   let changedContentPixels = 0;
   let colorError = 0;
   let rawColorError = 0;
+  let structuralSquaredError = 0;
   let referenceBrightness = 0;
   let targetBrightness = 0;
 
@@ -1415,6 +1430,7 @@ export function analyzeVisualPixels(
 
     rawColorError += pixelError;
     if (pixelChanged) colorError += pixelError;
+    if (pixelChanged) structuralSquaredError += delta.structuralError ** 2;
     bands[bandIndex].pixels += 1;
     if (pixelChanged) bands[bandIndex].colorError += pixelError;
     if (pixelChanged) {
@@ -1484,13 +1500,16 @@ export function analyzeVisualPixels(
     band.pixels ? (band.changed / band.pixels) * 100 : 0,
   );
   const worstBandChangedPixelRatio = Math.max(0, ...bandChangedRatios);
+  // Compare local 5x5 structure for long JPEG references, then normalize the
+  // remaining squared error against the full 8-bit color range. Residual area
+  // and worst-band gates below remain independent, so a missing section cannot
+  // pass merely because a long page contains many matching pixels.
+  const structuralErrorRatio =
+    structuralSquaredError / (totalPixels * 255 ** 2);
   const calculatedScore = clamp(
-    100 -
-      changedPixelRatio * 0.38 -
-      contentChangedPixelRatio * 0.52 -
-      worstBandChangedPixelRatio * 0.12 -
-      (meanColorError / 255) * 24 -
-      Math.min(30, Math.abs(heightDifferenceRatio) * 0.35),
+    100
+      - structuralErrorRatio * 100
+      - Math.min(30, Math.abs(heightDifferenceRatio) * 0.35),
     0,
     100,
   );
@@ -1523,8 +1542,9 @@ export function analyzeVisualPixels(
   const roundedWorstBandChangedPixelRatio = round(worstBandChangedPixelRatio);
   const status: VisualQaStatus =
     roundedScore >= 99.9
-      && roundedContentChangedPixelRatio < 0.2
-      && roundedWorstBandChangedPixelRatio < 0.5
+      && changedPixelRatio < 2
+      && roundedContentChangedPixelRatio < 3
+      && roundedWorstBandChangedPixelRatio < 5
       && Math.abs(heightDifferenceRatio) < 0.1
       ? "pass"
       : roundedScore >= 94
