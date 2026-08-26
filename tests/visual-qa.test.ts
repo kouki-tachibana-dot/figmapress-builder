@@ -262,7 +262,7 @@ test("identical images receive a perfect visual QA score", () => {
   assert.match(analysis.metrics.alignment.reason, /検出されません/);
 });
 
-test("one-pixel renderer edges reach 99.9 while raw differences stay visible", () => {
+test("one- and two-pixel renderer edges reach 99.9 while raw differences stay visible", () => {
   const width = 80;
   const height = 40;
   const reference = solidPixels(width, height, 247, 247, 243);
@@ -289,6 +289,17 @@ test("one-pixel renderer edges reach 99.9 while raw differences stay visible", (
     equivalent.metrics.edgeEquivalentPixelRatio,
     equivalent.metrics.rawChangedPixelRatio,
   );
+
+  const twoPixelEquivalent = analyzeVisualPixels(
+    reference,
+    translatePixels(reference, width, height, 2, 0),
+    width,
+    height,
+  );
+  assert.equal(twoPixelEquivalent.metrics.score, 99.9);
+  assert.equal(twoPixelEquivalent.metrics.status, "pass");
+  assert.equal(twoPixelEquivalent.metrics.changedPixelRatio, 0);
+  assert.ok(twoPixelEquivalent.metrics.rawChangedPixelRatio > 0);
 
   const threePixelShift = analyzeVisualPixels(
     reference,

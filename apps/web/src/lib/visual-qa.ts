@@ -422,11 +422,12 @@ function minimumNeighborhoodError(
   height: number,
   x: number,
   y: number,
+  radius = 1,
 ): number {
   const sampleOffset = (y * width + x) * 4;
   let minimum = Number.POSITIVE_INFINITY;
-  for (let candidateY = Math.max(0, y - 1); candidateY <= Math.min(height - 1, y + 1); candidateY += 1) {
-    for (let candidateX = Math.max(0, x - 1); candidateX <= Math.min(width - 1, x + 1); candidateX += 1) {
+  for (let candidateY = Math.max(0, y - radius); candidateY <= Math.min(height - 1, y + radius); candidateY += 1) {
+    for (let candidateX = Math.max(0, x - radius); candidateX <= Math.min(width - 1, x + radius); candidateX += 1) {
       minimum = Math.min(
         minimum,
         pixelColorError(
@@ -439,6 +440,30 @@ function minimumNeighborhoodError(
     }
   }
   return minimum;
+}
+
+function neighborhoodEdgeStrength(
+  pixels: Uint8ClampedArray,
+  width: number,
+  height: number,
+  x: number,
+  y: number,
+  radius: number,
+): number {
+  let minimum = Number.POSITIVE_INFINITY;
+  let maximum = Number.NEGATIVE_INFINITY;
+  for (let candidateY = Math.max(0, y - radius); candidateY <= Math.min(height - 1, y + radius); candidateY += 1) {
+    for (let candidateX = Math.max(0, x - radius); candidateX <= Math.min(width - 1, x + radius); candidateX += 1) {
+      const offset = (candidateY * width + candidateX) * 4;
+      const luminance =
+        pixels[offset] * 0.2126
+        + pixels[offset + 1] * 0.7152
+        + pixels[offset + 2] * 0.0722;
+      minimum = Math.min(minimum, luminance);
+      maximum = Math.max(maximum, luminance);
+    }
+  }
+  return maximum - minimum;
 }
 
 function perceptualPixelDelta(
@@ -477,7 +502,25 @@ function perceptualPixelDelta(
     x,
     y,
   );
-  const edgeEquivalent = Math.max(referenceToTarget, targetToReference) <= threshold;
+  let edgeEquivalent = Math.max(referenceToTarget, targetToReference) <= threshold;
+  if (!edgeEquivalent) {
+    // A 1440px Figma frame is exported near 960px while the editable browser
+    // page is rasterized on the same grid. The two resamplers can spread a
+    // genuine shared edge across two pixels. Extend equivalence to radius two
+    // only when both images contain a real local edge and its color exists in
+    // both directions. Flat missing content and shifts of three pixels or more
+    // therefore remain material differences.
+    const radius = 2;
+    const hasSharedRendererEdge =
+      neighborhoodEdgeStrength(reference, width, height, x, y, radius) >= 12
+      && neighborhoodEdgeStrength(target, width, height, x, y, radius) >= 12;
+    if (hasSharedRendererEdge) {
+      edgeEquivalent = Math.max(
+        minimumNeighborhoodError(reference, target, width, height, x, y, radius),
+        minimumNeighborhoodError(target, reference, width, height, x, y, radius),
+      ) <= threshold;
+    }
+  }
   return {
     rawError,
     changed: !edgeEquivalent,
@@ -1068,6 +1111,7 @@ export function analyzeVisualRegions(
 
       let pixels = 0;
       let changed = 0;
+      let rawChanged = 0;
       let colorError = 0;
       for (let y = startY; y < endY; y += 1) {
         for (let x = startX; x < endX; x += 1) {
@@ -1081,6 +1125,7 @@ export function analyzeVisualRegions(
             threshold,
           );
           pixels += 1;
+          if (delta.rawError > threshold) rawChanged += 1;
           if (delta.changed) {
             changed += 1;
             colorError += delta.rawError;
@@ -1089,6 +1134,7 @@ export function analyzeVisualRegions(
       }
 
       const changedPixelRatio = round((changed / pixels) * 100);
+      const rawChangedPixelRatio = round((rawChanged / pixels) * 100);
       const impactRatio = round((changed / pagePixels) * 100, 2);
       let alignment: VisualQaAlignment | undefined;
       const regionWidth = endX - startX;
@@ -1097,7 +1143,7 @@ export function analyzeVisualRegions(
         maximumAlignmentShift >= 2
         && regionWidth >= 64
         && regionHeight >= 64
-        && changedPixelRatio >= 4
+        && rawChangedPixelRatio >= 4
         && impactRatio >= 0.03
       ) {
         const referenceCrop = cropPixelBuffer(
