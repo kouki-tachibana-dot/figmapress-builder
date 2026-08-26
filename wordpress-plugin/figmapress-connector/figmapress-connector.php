@@ -3,7 +3,7 @@
  * Plugin Name:       FigmaPress Connector
  * Plugin URI:        https://github.com/kouki-tachibana-dot/figmapress-builder
  * Description:       Connects FigmaPress to Gutenberg and Elementor draft pages.
- * Version:           0.19.1
+ * Version:           0.19.2
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Update URI:        https://figmapress-builder.vercel.app/downloads/figmapress-connector.json
@@ -20,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 define( 'FIGMAPRESS_CONNECTOR_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FIGMAPRESS_CONNECTOR_URL', plugin_dir_url( __FILE__ ) );
-define( 'FIGMAPRESS_CONNECTOR_VERSION', '0.19.1' );
+define( 'FIGMAPRESS_CONNECTOR_VERSION', '0.19.2' );
 
 require_once FIGMAPRESS_CONNECTOR_DIR . 'includes/pairing.php';
 require_once FIGMAPRESS_CONNECTOR_DIR . 'includes/rest-api.php';
@@ -374,7 +374,8 @@ function figmapress_connector_effects_css( $effects ) {
         }
     }
 
-    $shadows = array();
+    $shadows      = array();
+    $text_shadows = array();
     foreach ( isset( $effects['shadows'] ) && is_array( $effects['shadows'] ) ? array_slice( $effects['shadows'], 0, 8 ) : array() as $shadow ) {
         if ( ! is_array( $shadow ) ) {
             continue;
@@ -391,10 +392,14 @@ function figmapress_connector_effects_css( $effects ) {
         if ( null === $x || null === $y || null === $blur || null === $spread || '' === $color ) {
             continue;
         }
-        $shadows[] = $x . 'px ' . $y . 'px ' . $blur . 'px ' . $spread . 'px ' . $color . ( 'inner' === $type ? ' inset' : '' );
+        $shadows[]      = $x . 'px ' . $y . 'px ' . $blur . 'px ' . $spread . 'px ' . $color . ( 'inner' === $type ? ' inset' : '' );
+        $text_shadows[] = $x . 'px ' . $y . 'px ' . $blur . 'px ' . $color;
     }
     if ( $shadows ) {
-        $declarations[] = 'box-shadow:' . implode( ',', $shadows );
+        $shadow_target = isset( $effects['shadowTarget'] ) ? sanitize_key( $effects['shadowTarget'] ) : 'box';
+        $declarations[] = 'text' === $shadow_target
+            ? 'text-shadow:' . implode( ',', $text_shadows )
+            : 'box-shadow:' . implode( ',', $shadows );
     }
 
     $blur = isset( $effects['blur'] )

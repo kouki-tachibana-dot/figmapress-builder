@@ -1156,6 +1156,64 @@ test("Figma opacity, multiple shadows, and blur effects stay aligned in preview 
   );
 });
 
+test("Figma text shadows stay text shadows instead of rectangular widget shadows", async () => {
+  const file: MockFigmaFile = {
+    document: {
+      id: "0:0",
+      name: "Text shadow page",
+      type: "DOCUMENT",
+      children: [{
+        id: "1:0",
+        name: "Page",
+        type: "CANVAS",
+        children: [{
+          id: "2:0",
+          name: "PC-page",
+          type: "FRAME",
+          absoluteBoundingBox: { x: 0, y: 0, width: 440, height: 320 },
+          children: [{
+            id: "3:0",
+            name: "Philosophy copy",
+            type: "TEXT",
+            characters: "サービスの求道者であろう。",
+            absoluteBoundingBox: { x: 40, y: 80, width: 360, height: 48 },
+            fills: [{ type: "SOLID", color: { r: 1, g: 1, b: 1 } }],
+            style: {
+              fontFamily: "Noto Serif JP",
+              fontSize: 20,
+              fontWeight: 900,
+              lineHeightPx: 28,
+            },
+            effects: [{
+              type: "DROP_SHADOW",
+              color: { r: 0, g: 0, b: 0, a: 1 },
+              offset: { x: 0, y: 0 },
+              radius: 3,
+              spread: 0,
+            }],
+          }],
+        }],
+      }],
+    },
+  };
+
+  const result = await convertFile(file);
+  const settings = result.elementorTemplate.content[0]?.elements[0]?.settings;
+  assert.equal(settings?.figmapress_effects?.shadowTarget, "text");
+  assert.equal(settings?.text_shadow_text_shadow_type, "yes");
+  assert.deepEqual(settings?.text_shadow_text_shadow, {
+    horizontal: 0,
+    vertical: 0,
+    blur: 3,
+    color: "#000000",
+  });
+  assert.match(result.previewHtml, /text-shadow:0px 0px 3px #000000/);
+  assert.doesNotMatch(
+    result.previewHtml,
+    /data-figmapress-kind="text"[^>]*box-shadow:/,
+  );
+});
+
 test("paired PC and SP frames become device-specific Elementor layouts", async () => {
   const text = (
     id: string,

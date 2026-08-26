@@ -712,6 +712,8 @@ test("Connector renders only structured and bounded Figma effects", async () => 
   assert.match(plugin, /array_slice\( \$effects\['shadows'\], 0, 8 \)/);
   assert.match(plugin, /in_array\( \$type, array\( 'drop', 'inner' \), true \)/);
   assert.match(plugin, /'box-shadow:' \. implode/);
+  assert.match(plugin, /'text-shadow:' \. implode/);
+  assert.match(plugin, /\$effects\['shadowTarget'\]/);
   assert.match(plugin, /'opacity:' \. \$opacity/);
   assert.match(plugin, /'filter:blur\(' \. \$blur/);
   assert.match(plugin, /'backdrop-filter:blur\(' \. \$background_blur/);

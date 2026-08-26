@@ -3,7 +3,7 @@ Contributors: figmapress
 Tags: blocks, figma, gutenberg, elementor
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 0.19.1
+Stable tag: 0.19.2
 License: GPLv2 or later
 
 Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
@@ -15,6 +15,10 @@ Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
    create a draft page containing figmapress/* blocks.
 
 == Changelog ==
+
+= 0.19.2 =
+* Figmaの文字シャドウをElementorでも文字シャドウとして保存し、文字領域の外側に四角い影が出る問題を解消しました。
+* 文字は編集可能なElementorテキストのまま、Figmaと同じ影の位置・ぼかし・色を保持します。
 
 = 0.19.1 =
 * 共有サーバー向け大容量分割保存でも、登録済みのAccordion、Form、Nav Menu、Image Carouselを安全に許可します。

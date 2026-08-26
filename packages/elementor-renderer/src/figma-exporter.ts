@@ -1951,7 +1951,7 @@ function textElement(
     align: textAlign(style.textAlignHorizontal),
   };
   applyTypographyFlags(settings, style);
-  applyEffects(settings, node);
+  applyEffects(settings, node, "text");
   applyRotation(settings, node, parentBounds);
 
   const content = richRuns.map((run) => runHtml(run, context)).join("").replace(/\n/g, "<br>");
@@ -2213,7 +2213,7 @@ function previewNode(
       .map((run) => runHtml(run, context))
       .join("")
       .replace(/\n/g, "<br>");
-    return previewActionWrapper(`<div ${attributes} data-figmapress-kind="text" style="${position};box-sizing:border-box;color:${escapeAttribute(solidColor(style.fills ?? node.fills) ?? "#111111")};display:flex;flex-direction:column;font-family:${escapeAttribute(cssFont(style.fontFamily))};font-size:calc(var(--figma-unit) * ${round(fontSize)});font-style:${style.italic ? "italic" : "normal"};font-weight:${round(style.fontWeight ?? 400)};hyphens:none;justify-content:${textVerticalAlign(style.textAlignVertical)};letter-spacing:calc(var(--figma-unit) * ${round(style.letterSpacing ?? 0)});line-break:strict;line-height:${round(textLineHeight(style, runs, fontSize) / fontSize)};max-width:100%;overflow:${textOverflow(node)};overflow-wrap:${textOverflowWrap(node)};text-align:${textAlign(style.textAlignHorizontal)};text-decoration:${textDecoration(style.textDecoration)};text-orientation:mixed;text-transform:${textTransform(style.textCase)};white-space:${textWhiteSpace(node)};word-break:${textWordBreak(node)};writing-mode:horizontal-tb;${previewTransform(node, parentBounds)}${previewEffects(node)}"><span style="display:block;font-size:0;line-height:0;max-width:100%">${content}</span></div>`, node, functionalLink(node, context));
+    return previewActionWrapper(`<div ${attributes} data-figmapress-kind="text" style="${position};box-sizing:border-box;color:${escapeAttribute(solidColor(style.fills ?? node.fills) ?? "#111111")};display:flex;flex-direction:column;font-family:${escapeAttribute(cssFont(style.fontFamily))};font-size:calc(var(--figma-unit) * ${round(fontSize)});font-style:${style.italic ? "italic" : "normal"};font-weight:${round(style.fontWeight ?? 400)};hyphens:none;justify-content:${textVerticalAlign(style.textAlignVertical)};letter-spacing:calc(var(--figma-unit) * ${round(style.letterSpacing ?? 0)});line-break:strict;line-height:${round(textLineHeight(style, runs, fontSize) / fontSize)};max-width:100%;overflow:${textOverflow(node)};overflow-wrap:${textOverflowWrap(node)};text-align:${textAlign(style.textAlignHorizontal)};text-decoration:${textDecoration(style.textDecoration)};text-orientation:mixed;text-transform:${textTransform(style.textCase)};white-space:${textWhiteSpace(node)};word-break:${textWordBreak(node)};writing-mode:horizontal-tb;${previewTransform(node, parentBounds)}${previewEffects(node, "text")}"><span style="display:block;font-size:0;line-height:0;max-width:100%">${content}</span></div>`, node, functionalLink(node, context));
   }
 
   const children = (node.children ?? []).map((child) => previewNode(child, bounds, node, context)).join("");
@@ -2798,31 +2798,37 @@ function figmaEffectColor(color: FigmaColor | undefined): FigmaGradientColor {
 function applyEffects(
   settings: ElementorSettings,
   node: FigmaNode,
-  target: "container" | "image" | "widget" = "widget",
+  target: "container" | "image" | "text" | "widget" = "widget",
 ): void {
   const effects = figmaEffects(node);
   if (!effects) return;
   const connectorEffects = target === "image" && typeof effects.opacity === "number"
     ? Object.fromEntries(Object.entries(effects).filter(([key]) => key !== "opacity"))
-    : effects;
+    : target === "text" && effects.shadows?.length
+      ? { ...effects, shadowTarget: "text" }
+      : effects;
   if (Object.keys(connectorEffects).length) settings.figmapress_effects = connectorEffects;
   const shadow = effects.shadows?.[0];
-  if (!shadow || target !== "container") return;
-  const prefix = "box_shadow";
-  settings[`${prefix}_box_shadow_type`] = "yes";
-  settings[`${prefix}_box_shadow`] = {
+  if (!shadow || (target !== "container" && target !== "text")) return;
+  const shadowValue = {
     horizontal: shadow.x,
     vertical: shadow.y,
     blur: shadow.blur,
-    spread: shadow.spread,
     color: gradientColorCss(shadow.color),
   };
+  if (target === "text") {
+    settings.text_shadow_text_shadow_type = "yes";
+    settings.text_shadow_text_shadow = shadowValue;
+    return;
+  }
+  settings.box_shadow_box_shadow_type = "yes";
+  settings.box_shadow_box_shadow = { ...shadowValue, spread: shadow.spread };
   if (shadow.type === "inner") {
-    settings[`${prefix}_box_shadow_position`] = "inset";
+    settings.box_shadow_box_shadow_position = "inset";
   }
 }
 
-function previewEffects(node: FigmaNode): string {
+function previewEffects(node: FigmaNode, target: "box" | "text" = "box"): string {
   const effects = figmaEffects(node);
   if (!effects) return "";
   const declarations: string[] = [];
@@ -2832,11 +2838,11 @@ function previewEffects(node: FigmaNode): string {
       `${round(shadow.x)}px`,
       `${round(shadow.y)}px`,
       `${round(shadow.blur)}px`,
-      `${round(shadow.spread)}px`,
+      target === "box" ? `${round(shadow.spread)}px` : "",
       gradientColorCss(shadow.color),
-      shadow.type === "inner" ? "inset" : "",
+      target === "box" && shadow.type === "inner" ? "inset" : "",
     ].filter(Boolean).join(" "));
-    declarations.push(`box-shadow:${shadows.join(",")}`);
+    declarations.push(`${target === "text" ? "text" : "box"}-shadow:${shadows.join(",")}`);
   }
   if (effects.blur) declarations.push(`filter:blur(${round(effects.blur)}px)`);
   if (effects.backgroundBlur) {
