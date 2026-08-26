@@ -246,6 +246,16 @@ function figmapress_connector_rest_status() {
                 'active'  => did_action( 'elementor/loaded' ) > 0 || defined( 'ELEMENTOR_VERSION' ),
                 'version' => defined( 'ELEMENTOR_VERSION' ) ? ELEMENTOR_VERSION : null,
             ),
+            'elementorPro'      => array(
+                'active'  => defined( 'ELEMENTOR_PRO_VERSION' ),
+                'version' => defined( 'ELEMENTOR_PRO_VERSION' ) ? ELEMENTOR_PRO_VERSION : null,
+            ),
+            'nativeWidgets'     => array(
+                'accordion'     => figmapress_connector_registered_elementor_widget( 'nested-accordion' ),
+                'form'          => figmapress_connector_registered_elementor_widget( 'form' ),
+                'navMenu'       => figmapress_connector_registered_elementor_widget( 'nav-menu' ),
+                'imageCarousel' => figmapress_connector_registered_elementor_widget( 'image-carousel' ),
+            ),
             'functionalWidgets' => array(
                 'navigation'  => class_exists( 'FigmaPress_Nav_Widget' ),
                 'links'       => class_exists( 'FigmaPress_Link_Widget' ),
@@ -276,6 +286,23 @@ function figmapress_connector_rest_status() {
             ),
         )
     );
+}
+
+/**
+ * Report the destination's real Elementor registry instead of assuming a
+ * widget exists from plugin version strings alone. This also protects sites
+ * where an Elementor experiment or compatibility rule disables a widget.
+ */
+function figmapress_connector_registered_elementor_widget( $widget_name ) {
+    if ( ! class_exists( '\\Elementor\\Plugin' ) || ! isset( \Elementor\Plugin::$instance->widgets_manager ) ) {
+        return false;
+    }
+    try {
+        $widgets = \Elementor\Plugin::$instance->widgets_manager->get_widget_types();
+        return is_array( $widgets ) && isset( $widgets[ $widget_name ] );
+    } catch ( Throwable $error ) {
+        return false;
+    }
 }
 
 function figmapress_connector_site_source_key_pattern() {
@@ -2302,6 +2329,11 @@ function figmapress_connector_sanitize_elementor_elements( $elements, &$count ) 
         'figmapress-contact-form',
         'figmapress-accordion',
     );
+    foreach ( array( 'nested-accordion', 'form', 'nav-menu', 'image-carousel' ) as $native_widget ) {
+        if ( figmapress_connector_registered_elementor_widget( $native_widget ) ) {
+            $allowed_widgets[] = $native_widget;
+        }
+    }
     foreach ( $elements as $element ) {
         if ( ! is_array( $element ) || $count >= 1200 ) {
             continue;
@@ -2445,6 +2477,13 @@ function figmapress_connector_collect_elementor_image_urls( $elements, &$urls, $
                 foreach ( array( 'previous_icon', 'next_icon' ) as $icon_key ) {
                     if ( isset( $settings[ $icon_key ] ) ) {
                         $image_slots[] = $settings[ $icon_key ];
+                    }
+                }
+            }
+            if ( 'image-carousel' === $widget_type && isset( $settings['carousel'] ) && is_array( $settings['carousel'] ) ) {
+                foreach ( $settings['carousel'] as $item ) {
+                    if ( is_array( $item ) && isset( $item['image'] ) ) {
+                        $image_slots[] = $item['image'];
                     }
                 }
             }
@@ -2598,6 +2637,14 @@ function figmapress_connector_apply_elementor_image_map( &$elements, $localized_
                 }
             }
         }
+        if ( 'widget' === ( isset( $element['elType'] ) ? $element['elType'] : '' ) && 'image-carousel' === ( isset( $element['widgetType'] ) ? $element['widgetType'] : '' ) && isset( $element['settings']['carousel'] ) && is_array( $element['settings']['carousel'] ) ) {
+            foreach ( $element['settings']['carousel'] as &$carousel_item ) {
+                if ( isset( $carousel_item['image'] ) ) {
+                    figmapress_connector_apply_image_map_setting( $carousel_item['image'], $localized_images );
+                }
+            }
+            unset( $carousel_item );
+        }
         if ( 'container' === ( isset( $element['elType'] ) ? $element['elType'] : '' ) && isset( $element['settings']['background_image'] ) ) {
             figmapress_connector_apply_image_map_setting( $element['settings']['background_image'], $localized_images );
         }
@@ -2682,6 +2729,14 @@ function figmapress_connector_localize_elementor_images( &$elements, $post_id, &
                     figmapress_connector_localize_image_setting( $element['settings'][ $icon_key ], $post_id, $warnings, $imported_media, $deadline, $localized_images, $media_failures );
                 }
             }
+        }
+        if ( 'widget' === $element['elType'] && 'image-carousel' === ( isset( $element['widgetType'] ) ? $element['widgetType'] : '' ) && isset( $element['settings']['carousel'] ) && is_array( $element['settings']['carousel'] ) ) {
+            foreach ( $element['settings']['carousel'] as &$carousel_item ) {
+                if ( isset( $carousel_item['image'] ) ) {
+                    figmapress_connector_localize_image_setting( $carousel_item['image'], $post_id, $warnings, $imported_media, $deadline, $localized_images, $media_failures );
+                }
+            }
+            unset( $carousel_item );
         }
         if ( 'container' === $element['elType'] && isset( $element['settings']['background_image'] ) ) {
             figmapress_connector_localize_image_setting( $element['settings']['background_image'], $post_id, $warnings, $imported_media, $deadline, $localized_images, $media_failures );

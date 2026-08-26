@@ -1,5 +1,38 @@
 # FigmaPress 実運用品質向上計画
 
+## Elementor Proネイティブ機能再構築（v0.28.0）
+
+### 正本と対象
+
+- 視覚の正本はFigma「株式会社建工101」`PaNNOGcUo5Uyg5UrEsYeyd`の各PC/SPフレームとする。
+- 機能の正本は接続先で実際に登録されているElementor / Elementor Proウィジェットとする。Elementor Proが有効でも、未登録のWidget IDを保存しない。
+- 対象は既存9下書き `#184626`〜`#184634` と未割り当てメニュー。公開ページ、公開メニュー位置、フォーム実送信は変更しない。
+
+### 実測した問題
+
+- Connector `0.18.2` はElementor Pro `4.2.2`を認識せず、Pro不要の独自ナビ・フォーム・アコーディオンを常に優先している。
+- 会社案内 `#184627` はテキスト127・画像96・独自ナビ2・リンク1だけで、Elementor/Proアコーディオン、Proフォーム、Pro Nav Menuは0件だった。
+- Figmaの請求書フォーマットには「令和7年度」から「令和3年度」までの反復項目があるが、既存判定は西暦4桁かつ特定レイヤー名だけを認識するため機能化されない。
+
+### 実装方針
+
+1. Connectorの接続診断へElementor Proの有効状態、バージョン、登録済みネイティブWidget一覧を追加する。
+2. 一般名グループでも、元号／西暦年度が3件以上並び、各見出しに対応内容がある構造をアコーディオンとして検出する。
+3. AccordionはElementor標準 `accordion` を使い、`tabs[].tab_title/tab_content`として保存する。独自WidgetはPro/標準Widgetを利用できない環境だけの後方互換にする。
+4. Elementor Proが実際に登録している場合、問い合わせをPro `form`、WordPressメニューをPro `nav-menu`へ変換する。フォームはまずSubmissions保存を使い、宛先未確認のメール送信設定を作らない。
+5. Connectorは接続先で登録済みのネイティブWidgetだけを許可し、未知・未登録Widgetを保存前に拒否する。
+6. サイト準備後に確定するWordPressメニューIDを9ページのPro Nav Menuへ注入し、PC/SP両方で同じ未割り当てメニューを使用する。
+7. 変換前検査と保存後スナップショットで、機能種別・Widget ID・項目数・初期化状態を検査する。
+
+### 完了条件
+
+- 会社案内の年度一覧が見た目だけでなく開閉し、マウス、Enter、Spaceで操作できる。
+- Pro FormはPC/SP各1件、全Figma項目、必須条件、メール・電話型、同意項目、送信ボタン、Submissions保存を保持する。
+- Pro Nav Menuは9ページの実WordPressメニューIDを参照し、PC/SPで開閉・ページ移動できる。
+- ElementorナビゲータでAccordion、Form、Nav MenuがネイティブWidget名として個別選択・編集できる。
+- 1440px、1024px、390pxで横はみ出し、縦書き、重なり、画像欠落がなく、Figma PC/SP差分ゲートを悪化させない。
+- テスト、型検査、lint、本番ビルド、PHP構文、脆弱性監査、WordPress保存後の実操作試験に合格する。
+
 ## 知覚構造99.9%と独立欠落ゲート（v0.27.8）
 
 - PC/SPの知覚点は、JPEG基準画像では中心5×5の局所構造誤差、PNG基準画像では原画素誤差を用い、8bit色域に対する正規化二乗誤差から算出する。

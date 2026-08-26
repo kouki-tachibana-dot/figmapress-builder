@@ -31,6 +31,13 @@ test("browser connection probes the Connector directly with Basic auth", async (
       wordpressVersion: "7.0.1",
       canEditPages: true,
       elementor: { active: true, version: "3.30.0" },
+      elementorPro: { active: true, version: "3.30.0" },
+      nativeWidgets: {
+        accordion: true,
+        form: true,
+        navMenu: true,
+        imageCarousel: true,
+      },
       functionalWidgets: {
         navigation: true,
         links: true,
@@ -53,6 +60,13 @@ test("browser connection probes the Connector directly with Basic auth", async (
   const status = await probeWordPressDirect(config);
   assert.equal(status.connectorInstalled, true);
   assert.equal(status.canEditPages, true);
+  assert.deepEqual(status.elementorPro, { active: true, version: "3.30.0" });
+  assert.deepEqual(status.nativeWidgets, {
+    accordion: true,
+    form: true,
+    navMenu: true,
+    imageCarousel: true,
+  });
   assert.deepEqual(status.functionalWidgets, {
     navigation: true,
     links: true,

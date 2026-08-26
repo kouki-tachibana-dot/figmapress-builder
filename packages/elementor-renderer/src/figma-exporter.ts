@@ -1066,11 +1066,41 @@ function largestVisualNode(node: FigmaNode, assets: FigmaRenderAssets): FigmaNod
     .sort((left, right) => area(right) - area(left))[0] ?? null;
 }
 
+const ACCORDION_YEAR_TITLE = /^\s*(?:(?:19|20)\d{2}|令和\s*(?:元|\d+)|平成\s*(?:元|\d+)|昭和\s*(?:元|\d+))\s*年度\s*$/;
+
+function accordionYearTitles(node: FigmaNode): FigmaNode[] {
+  return descendants(node).filter((child) =>
+    child.type === "TEXT"
+    && ACCORDION_YEAR_TITLE.test(child.characters ?? "")
+    && Boolean(child.absoluteBoundingBox)
+  );
+}
+
+/**
+ * Identify the closest Figma group that owns an accordion-like year list.
+ * Real client files often retain generic names such as `Group 152`, so the
+ * repeated Japanese/Western fiscal-year structure is authoritative too.
+ */
+export function figmaNodeHasAccordionPlan(node: FigmaNode): boolean {
+  const titles = accordionYearTitles(node);
+  if (titles.length < 3) return false;
+  const explicitlyNamed = /(?:\{wp:accordion\}|profile|プロフィール|faq|よくある質問)/i.test(node.name);
+  const structurallyNamed = /(?:invoice|format|download|document|請求|年度|資料)/i.test(node.name);
+  if (!explicitlyNamed && !structurallyNamed && !/^group\s*\d*$/i.test(node.name.trim())) {
+    return false;
+  }
+  return !descendants(node).some((candidate) =>
+    candidate !== node
+    && candidate.type !== "TEXT"
+    && accordionYearTitles(candidate).length >= 3
+  );
+}
+
 function accordionPlan(node: FigmaNode): AccordionPlan | null {
-  if (!/(?:\{wp:accordion\}|profile|プロフィール|faq|よくある質問)/i.test(node.name)) return null;
+  if (!figmaNodeHasAccordionPlan(node)) return null;
   const all = descendants(node);
   const titles = all
-    .filter((child) => child.type === "TEXT" && /^\s*\d{4}年度\s*$/.test(child.characters ?? ""))
+    .filter((child) => child.type === "TEXT" && ACCORDION_YEAR_TITLE.test(child.characters ?? ""))
     .filter((child) => child.absoluteBoundingBox)
     .sort((left, right) => (left.absoluteBoundingBox?.y ?? 0) - (right.absoluteBoundingBox?.y ?? 0));
   if (titles.length < 3) return null;

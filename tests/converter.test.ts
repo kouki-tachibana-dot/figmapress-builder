@@ -1337,14 +1337,20 @@ test("Figma interaction layers become functional Elementor widgets", async () =>
               name: "Sec/Profile Sec",
               type: "FRAME",
               absoluteBoundingBox: { x: 0, y: 515, width: 1920, height: 1000 },
-              children: [
-                text("30:1", "{acf:section_heading}", "2019年度", 360, 700),
-                text("30:2", "{acf:section_heading}", "活動内容", 360, 750, 400, 40),
-                text("30:3", "{acf:section_heading}", "2020年度", 360, 830),
-                text("30:4", "{acf:section_heading}", "2021年度", 360, 910),
-                text("30:5", "{acf:section_heading}", "2022年度", 360, 990),
-                { id: "30:6", name: "Divider", type: "LINE", absoluteBoundingBox: { x: 266, y: 810, width: 1389, height: 1 } },
-              ],
+              children: [{
+                id: "30:group",
+                name: "Group 152",
+                type: "GROUP",
+                absoluteBoundingBox: { x: 266, y: 680, width: 1389, height: 420 },
+                children: [
+                  text("30:1", "{acf:section_heading}", "令和7年度", 360, 700),
+                  text("30:2", "{acf:section_heading}", "活動内容", 360, 750, 400, 40),
+                  text("30:3", "{acf:section_heading}", "令和6年度", 360, 830),
+                  text("30:4", "{acf:section_heading}", "令和5年度", 360, 910),
+                  text("30:5", "{acf:section_heading}", "令和4年度", 360, 990),
+                  { id: "30:6", name: "Divider", type: "LINE", absoluteBoundingBox: { x: 266, y: 810, width: 1389, height: 1 } },
+                ],
+              }],
             },
             {
               id: "35:0",

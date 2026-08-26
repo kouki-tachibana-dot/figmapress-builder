@@ -16,6 +16,7 @@ import {
   applyElementorSectionVisualCorrections,
   applyElementorTextGeometryCorrections,
   applyElementorVisualCorrections,
+  adaptElementorTemplateToNativeWidgets,
   applyPreviewDecorationGeometryCorrections,
   applyPreviewMediaGeometryCorrections,
   applyPreviewSectionVisualCorrections,
@@ -101,7 +102,7 @@ type PageTemplateEntry = {
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
-const APP_RELEASE = "0.27.14";
+const APP_RELEASE = "0.28.0";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -111,7 +112,7 @@ const FIGMA_HEADER_MEDIA_CONNECTOR_VERSION = "0.16.18";
 const MULTI_PAGE_CONNECTOR_VERSION = "0.17.18";
 const FIGMA_PAGE_SET_CONNECTOR_VERSION = "0.17.28";
 const DYNAMIC_FORM_CONNECTOR_VERSION = "0.17.30";
-const NATIVE_ELEMENTOR_CONNECTOR_VERSION = "0.18.2";
+const NATIVE_ELEMENTOR_CONNECTOR_VERSION = "0.19.0";
 
 function safeWordPressSiteBridgeUrl(baseUrl: string): string {
   try {
@@ -486,6 +487,13 @@ interface WordPressStatus {
   connectorVersion?: string;
   wordpressVersion?: string;
   elementor: { active: boolean; version?: string };
+  elementorPro?: { active: boolean; version?: string };
+  nativeWidgets?: {
+    accordion: boolean;
+    form: boolean;
+    navMenu: boolean;
+    imageCarousel?: boolean;
+  };
   functionalWidgets?: {
     navigation: boolean;
     links?: boolean;
@@ -1022,6 +1030,18 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const connectorSupportsNativeElementor = versionAtLeast(
     wpStatus?.connectorVersion,
     NATIVE_ELEMENTOR_CONNECTOR_VERSION,
+  );
+  const nativeWidgetCapabilities = wpStatus?.nativeWidgets ?? {
+    accordion: false,
+    form: false,
+    navMenu: false,
+    imageCarousel: false,
+  };
+  const connectorSupportsRequiredProWidgets = Boolean(
+    wpStatus?.elementorPro?.active
+    && nativeWidgetCapabilities.accordion
+    && nativeWidgetCapabilities.form
+    && nativeWidgetCapabilities.navMenu,
   );
   const connectorSupportsDynamicForms = versionAtLeast(
     wpStatus?.connectorVersion,
@@ -1917,6 +1937,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     if (!connectorSupportsDynamicForms) {
       throw new Error(`Figmaフォームの全項目送信にはConnector v${DYNAMIC_FORM_CONNECTOR_VERSION}以上が必要です。`);
     }
+    if (!connectorSupportsRequiredProWidgets) {
+      throw new Error("Elementor ProのAccordion・Form・Nav Menuを確認できません。Connector最新版へ更新後、Elementor Proを有効にして再診断してください。");
+    }
     const siteInput = {
       siteKey: conversionSiteSourceKey,
       title: plan.title,
@@ -2028,12 +2051,25 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
           `「${page.title}」のリンク検査に失敗しました（未解決${linkAudit.unresolvedPlaceholders.length}・移動先なし${linkAudit.missingAnchors.length}・不正URL${linkAudit.unsafe.length}）。WordPressには保存していません。`,
         );
       }
+      const nativeLinkedTemplate = adaptElementorTemplateToNativeWidgets(
+        linkedTemplate,
+        {
+          capabilities: nativeWidgetCapabilities,
+          menuId: prepared.menu?.id,
+        },
+      );
+      const nativeWidgetAudit = auditNativeElementorTemplate(nativeLinkedTemplate);
+      if (!nativeWidgetAudit.valid) {
+        throw new Error(
+          `「${page.title}」のElementor Pro構造に問題があります（${nativeWidgetAudit.errors.slice(0, 4).join("、")}）。WordPressには保存していません。`,
+        );
+      }
       const requestId = createRequestId();
       const input = {
         target: "elementor" as const,
         title: page.title,
         slug: target.slug,
-        template: linkedTemplate,
+        template: nativeLinkedTemplate,
         pageTemplate: "elementor_canvas" as const,
         requestId,
         sourceKey: target.sourceKey,
@@ -2184,13 +2220,22 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       const page = output.blueprint.pages[0];
       const requestId = draftRequestId || createRequestId();
       if (!draftRequestId) setDraftRequestId(requestId);
+      const nativeOutput = wpTarget === "elementor"
+        ? {
+            ...output,
+            elementorTemplate: adaptElementorTemplateToNativeWidgets(
+              output.elementorTemplate,
+              { capabilities: nativeWidgetCapabilities },
+            ),
+          }
+        : output;
       const payload = wpTarget === "elementor"
         ? {
             target: wpTarget,
             ...credentials,
             title: page?.title || output.summary.pageTitle,
             slug: page?.slug || "/",
-            template: output.elementorTemplate,
+            template: nativeOutput.elementorTemplate,
             pageTemplate: "elementor_canvas",
             requestId,
             sourceKey: conversionSourceKey,
@@ -2220,7 +2265,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
               target: "elementor" as const,
               title: payload.title,
               slug: payload.slug,
-              template: output.elementorTemplate,
+              template: nativeOutput.elementorTemplate,
               pageTemplate: "elementor_canvas" as const,
               requestId,
               sourceKey: conversionSourceKey,
@@ -2279,7 +2324,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
             credentials,
             createdResult,
             requestId,
-            output,
+            nativeOutput,
           );
         }
       }
@@ -3716,6 +3761,10 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                     <span>WP {wpStatus.wordpressVersion || "確認済み"}</span>
                     <span>Connector {wpStatus.connectorInstalled ? `v${wpStatus.connectorVersion || "installed"}` : "未導入"}</span>
                     <span>Elementor {wpStatus.elementor.active ? `v${wpStatus.elementor.version || "active"}` : "未導入"}</span>
+                    <span>Elementor Pro {wpStatus.elementorPro?.active ? `v${wpStatus.elementorPro.version || "active"}` : "未導入"}</span>
+                    {wpStatus.nativeWidgets && (
+                      <span>ネイティブWidget {Object.values(wpStatus.nativeWidgets).filter(Boolean).length}/4</span>
+                    )}
                     {wpStatus.functionalWidgets && (
                       <span>機能Widget {Object.values(wpStatus.functionalWidgets).filter(Boolean).length}/5</span>
                     )}
@@ -3774,6 +3823,11 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                 <div className="alert alert--error" role="alert">
                   画像に焼き込まず、実テキストとElementorコンテナで保存するにはConnector v{NATIVE_ELEMENTOR_CONNECTOR_VERSION}以上が必要です。<a href="/downloads/figmapress-connector.zip" download>最新版ZIPをダウンロード</a>して更新し、再診断してください。
                 </div>
+              )}
+              {wpStatus && wpTarget === "elementor" && wpBuildMode === "site" && wpStatus.connectorInstalled && connectorSupportsNativeElementor && !connectorSupportsRequiredProWidgets && (
+                <p className="notice notice--error">
+                  Elementor ProのAccordion・Form・Nav Menuを実ウィジェットとして保存できません。Elementor Proを有効にし、<a href="/downloads/figmapress-connector.zip" download>Connector最新版ZIPをダウンロード</a>して更新後、再診断してください。
+                </p>
               )}
               {wpStatus && wpTarget === "elementor" && conversionRequiresDynamicForms && wpStatus.connectorInstalled && !connectorSupportsDynamicForms && (
                 <div className="alert alert--error" role="alert">
@@ -3974,7 +4028,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                 <span>常に <code>status: draft</code></span>
                 <button
                   className="button button--dark"
-                  disabled={!confirmed || wpBusy || visualQaBlocksDraft || multiPageBlocked || !wpStatus || !wpStatus.connectorInstalled || !wpStatus.canEditPages || (wpTarget === "elementor" && (!wpStatus.elementor.active || !connectorSupportsInteractions || !connectorSupportsNativeElementor || (conversionRequiresDynamicForms && !connectorSupportsDynamicForms) || (visualQaReferenceCount > 0 && !connectorSupportsActualVisualQa)))}
+                  disabled={!confirmed || wpBusy || visualQaBlocksDraft || multiPageBlocked || !wpStatus || !wpStatus.connectorInstalled || !wpStatus.canEditPages || (wpTarget === "elementor" && (!wpStatus.elementor.active || !connectorSupportsInteractions || !connectorSupportsNativeElementor || (wpBuildMode === "site" && !connectorSupportsRequiredProWidgets) || (conversionRequiresDynamicForms && !connectorSupportsDynamicForms) || (visualQaReferenceCount > 0 && !connectorSupportsActualVisualQa)))}
                   type="submit"
                 >
                   {wpBusy

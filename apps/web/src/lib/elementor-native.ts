@@ -11,6 +11,11 @@ const SUPPORTED_WIDGETS = new Set([
   "text-editor",
   "button",
   "image",
+  "accordion",
+  "nested-accordion",
+  "form",
+  "nav-menu",
+  "image-carousel",
   "figmapress-nav",
   "figmapress-contact-form",
   "figmapress-accordion",
@@ -155,7 +160,7 @@ export function auditNativeElementorTemplate(
         if (!element.widgetType || !SUPPORTED_WIDGETS.has(element.widgetType)) {
           errors.push(`未対応のElementorウィジェット「${element.widgetType ?? "なし"}」があります。`);
         }
-        if (element.elements.length > 0) {
+        if (element.elements.length > 0 && element.widgetType !== "nested-accordion") {
           errors.push(`ウィジェット「${element.id}」に未対応の子要素があります。`);
         }
         if (element.widgetType === "text-editor" || element.widgetType === "heading") {

@@ -1,4 +1,5 @@
 export * from "./exporter";
+export * from "./elementor-native-widgets";
 export * from "./figma-exporter";
 export * from "./multipage";
 export * from "./quality";

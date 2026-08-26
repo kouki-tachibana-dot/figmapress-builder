@@ -27,6 +27,13 @@ test("WordPress connection probe reports Connector and Elementor versions", asyn
       wordpressVersion: "7.0.1",
       canEditPages: true,
       elementor: { active: true, version: "3.30.0" },
+      elementorPro: { active: true, version: "3.30.0" },
+      nativeWidgets: {
+        accordion: true,
+        form: true,
+        navMenu: true,
+        imageCarousel: true,
+      },
       functionalWidgets: {
         navigation: true,
         links: true,
@@ -50,6 +57,13 @@ test("WordPress connection probe reports Connector and Elementor versions", asyn
   assert.equal(status.authenticated, true);
   assert.equal(status.connectorInstalled, true);
   assert.equal(status.elementor.active, true);
+  assert.deepEqual(status.elementorPro, { active: true, version: "3.30.0" });
+  assert.deepEqual(status.nativeWidgets, {
+    accordion: true,
+    form: true,
+    navMenu: true,
+    imageCarousel: true,
+  });
   assert.deepEqual(status.functionalWidgets, {
     navigation: true,
     links: true,

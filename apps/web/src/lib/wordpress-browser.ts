@@ -12,6 +12,13 @@ export interface BrowserWordPressStatus {
   connectorVersion?: string;
   wordpressVersion?: string;
   elementor: { active: boolean; version?: string };
+  elementorPro?: { active: boolean; version?: string };
+  nativeWidgets?: {
+    accordion: boolean;
+    form: boolean;
+    navMenu: boolean;
+    imageCarousel?: boolean;
+  };
   functionalWidgets?: {
     navigation: boolean;
     links?: boolean;
@@ -376,6 +383,13 @@ export async function probeWordPressDirect(
     user?: { id?: unknown; name?: unknown };
     pairing?: { supported?: unknown; active?: unknown };
     elementor?: { active?: unknown; version?: unknown };
+    elementorPro?: { active?: unknown; version?: unknown };
+    nativeWidgets?: {
+      accordion?: unknown;
+      form?: unknown;
+      navMenu?: unknown;
+      imageCarousel?: unknown;
+    };
     functionalWidgets?: {
       navigation?: unknown;
       links?: unknown;
@@ -410,6 +424,18 @@ export async function probeWordPressDirect(
       active: status.elementor?.active === true,
       version: typeof status.elementor?.version === "string" ? status.elementor.version : undefined,
     },
+    elementorPro: status.elementorPro ? {
+      active: status.elementorPro.active === true,
+      version: typeof status.elementorPro.version === "string" ? status.elementorPro.version : undefined,
+    } : undefined,
+    nativeWidgets: status.nativeWidgets ? {
+      accordion: status.nativeWidgets.accordion === true,
+      form: status.nativeWidgets.form === true,
+      navMenu: status.nativeWidgets.navMenu === true,
+      ...(status.nativeWidgets.imageCarousel !== undefined
+        ? { imageCarousel: status.nativeWidgets.imageCarousel === true }
+        : {}),
+    } : undefined,
     functionalWidgets: status.functionalWidgets ? {
       navigation: status.functionalWidgets.navigation === true,
       ...(status.functionalWidgets.links !== undefined

@@ -83,12 +83,13 @@ function inspectTemplateFunctionalInventory(
         recordUrl(element.settings.cta_url);
         recordSemanticUrl(element.settings.cta_label, element.settings.cta_url);
       }
+      if (element.widgetType === "nav-menu") result.navigationWidgets += 1;
       if (element.widgetType === "figmapress-link") {
         recordSemanticUrl(element.settings.link_label, element.settings.link_url);
       }
-      if (element.widgetType === "figmapress-contact-form") result.contactForms += 1;
-      if (element.widgetType === "figmapress-carousel") result.carousels += 1;
-      if (element.widgetType === "figmapress-accordion") result.accordions += 1;
+      if (element.widgetType === "figmapress-contact-form" || element.widgetType === "form") result.contactForms += 1;
+      if (element.widgetType === "figmapress-carousel" || element.widgetType === "image-carousel") result.carousels += 1;
+      if (element.widgetType === "figmapress-accordion" || element.widgetType === "accordion" || element.widgetType === "nested-accordion") result.accordions += 1;
       visit(element.elements);
     }
   };

@@ -4,6 +4,7 @@ import type {
 } from "@figmapress/figma-parser";
 import {
   figmaTextShouldWrap,
+  figmaNodeHasAccordionPlan,
   findFigmaContactFormNode,
   findFigmaNavigationMenuTexts,
   findFigmaNavigationNode,
@@ -553,7 +554,7 @@ function countFunctionalWidgets(elements: ElementorElement[]): {
   const result = { navigation: 0, links: 0, carousel: 0, contactForm: 0, accordion: 0 };
   const visit = (items: ElementorElement[]): void => {
     for (const item of items) {
-      if (item.widgetType === "figmapress-nav") result.navigation += 1;
+      if (item.widgetType === "figmapress-nav" || item.widgetType === "nav-menu") result.navigation += 1;
       if (item.widgetType === "figmapress-link") result.links += 1;
       if (
         item.widgetType === "image"
@@ -567,9 +568,9 @@ function countFunctionalWidgets(elements: ElementorElement[]): {
       if (item.widgetType === "text-editor" && typeof item.settings.editor === "string") {
         result.links += (item.settings.editor.match(/data-figmapress-functional-link/g) ?? []).length;
       }
-      if (item.widgetType === "figmapress-carousel") result.carousel += 1;
-      if (item.widgetType === "figmapress-contact-form") result.contactForm += 1;
-      if (item.widgetType === "figmapress-accordion") result.accordion += 1;
+      if (item.widgetType === "figmapress-carousel" || item.widgetType === "image-carousel") result.carousel += 1;
+      if (item.widgetType === "figmapress-contact-form" || item.widgetType === "form") result.contactForm += 1;
+      if (item.widgetType === "figmapress-accordion" || item.widgetType === "accordion" || item.widgetType === "nested-accordion") result.accordion += 1;
       visit(item.elements);
     }
   };
@@ -608,12 +609,7 @@ function countExpectedFunctionalWidgets(roots: FigmaNode[]): {
       && !/(?:item|prev|previous|next|arrow|dot|項目|前へ|次へ)/i.test(node.name)
     );
     result.contactForm += findFigmaContactFormNode(root) ? 1 : 0;
-    result.accordion += countOutermostMatches(root, (node) =>
-      /(?:\{wp:accordion\}|profile|プロフィール|faq|よくある質問)/i.test(node.name)
-      && nodeDescendants(node).filter((child) =>
-        child.type === "TEXT" && /^\s*\d{4}年度\s*$/.test(child.characters ?? "")
-      ).length >= 3
-    );
+    result.accordion += countOutermostMatches(root, figmaNodeHasAccordionPlan);
   }
   return result;
 }

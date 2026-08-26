@@ -137,9 +137,17 @@ test("Connector accepts and registers functional Elementor widgets", async () =>
     "figmapress-carousel",
     "figmapress-contact-form",
     "figmapress-accordion",
+    "nested-accordion",
+    "form",
+    "nav-menu",
+    "image-carousel",
   ]) {
     assert.match(rest, new RegExp(`'${widget}'`));
   }
+  assert.match(rest, /function figmapress_connector_registered_elementor_widget/);
+  assert.match(rest, /'elementorPro'\s*=>\s*array/);
+  assert.match(rest, /'nativeWidgets'\s*=>\s*array/);
+  assert.match(rest, /get_widget_types\(\)/);
 });
 
 test("Connector accepts only native Elementor documents with real text", async () => {
