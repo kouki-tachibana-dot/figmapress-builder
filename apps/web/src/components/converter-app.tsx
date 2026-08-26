@@ -102,7 +102,7 @@ type PageTemplateEntry = {
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
-const APP_RELEASE = "0.28.11";
+const APP_RELEASE = "0.28.12";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -112,7 +112,7 @@ const FIGMA_HEADER_MEDIA_CONNECTOR_VERSION = "0.16.18";
 const MULTI_PAGE_CONNECTOR_VERSION = "0.17.18";
 const FIGMA_PAGE_SET_CONNECTOR_VERSION = "0.17.28";
 const DYNAMIC_FORM_CONNECTOR_VERSION = "0.17.30";
-const NATIVE_ELEMENTOR_CONNECTOR_VERSION = "0.19.3";
+const NATIVE_ELEMENTOR_CONNECTOR_VERSION = "0.19.4";
 
 function safeWordPressSiteBridgeUrl(baseUrl: string): string {
   try {

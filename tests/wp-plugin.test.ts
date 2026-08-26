@@ -31,6 +31,14 @@ const interactionStylePath = new URL(
   "../wordpress-plugin/figmapress-connector/assets/elementor-interactions.css",
   import.meta.url,
 );
+const accessibilityScriptPath = new URL(
+  "../wordpress-plugin/figmapress-connector/assets/elementor-accessibility-0194.js",
+  import.meta.url,
+);
+const accessibilityStylePath = new URL(
+  "../wordpress-plugin/figmapress-connector/assets/elementor-accessibility-0194.css",
+  import.meta.url,
+);
 const elementorWidgetsPath = new URL(
   "../wordpress-plugin/figmapress-connector/includes/elementor-widgets.php",
   import.meta.url,
@@ -174,6 +182,28 @@ test("Connector keeps the mobile navigation above later Elementor content", asyn
     styles,
     /\.elementor-widget-figmapress-nav\s*\{[^}]*z-index:\s*1000\s*!important;/s,
   );
+});
+
+test("Connector bypasses stripped asset versions and retries native Elementor UX", async () => {
+  const [plugin, script, style] = await Promise.all([
+    readFile(pluginPath, "utf8"),
+    readFile(accessibilityScriptPath, "utf8"),
+    readFile(accessibilityStylePath, "utf8"),
+  ]);
+
+  assert.match(plugin, /elementor-accessibility-0194\.css/);
+  assert.match(plugin, /elementor-accessibility-0194\.js/);
+  assert.match(plugin, /wp_enqueue_style\( 'figmapress-elementor-accessibility-0194' \)/);
+  assert.match(plugin, /wp_enqueue_script\( 'figmapress-elementor-accessibility-0194' \)/);
+  assert.match(script, /window\.addEventListener\("elementor\/frontend\/init", boot\)/);
+  assert.match(script, /\[250, 750, 1500, 3000\]/);
+  assert.match(script, /toggle\.setAttribute\("aria-controls", dropdown\.id\)/);
+  assert.match(script, /"メニューを開く"/);
+  assert.match(script, /event\.key !== "Escape"/);
+  assert.match(script, /CSS\.escape\(field\.id\)/);
+  assert.match(script, /field\.setAttribute\("aria-required", "true"\)/);
+  assert.match(style, /min-height:\s*44px\s*!important/);
+  assert.match(style, /min-width:\s*44px\s*!important/);
 });
 
 test("Connector routes only owned Elementor pages away from the memory-heavy block editor", async () => {
