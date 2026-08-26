@@ -817,3 +817,49 @@ test("rendered responsive assets are budgeted across desktop and mobile roots", 
   assert.ok(ids.includes("desktop:mask"));
   assert.ok(ids.includes("mobile:mask"));
 });
+
+test("unused mobile render capacity is reassigned to a denser desktop page", () => {
+  const visualChildren = (prefix: string, count: number) =>
+    Array.from({ length: count }, (_, index) => ({
+      id: `${prefix}:${index}`,
+      name: `${prefix} ${index}`,
+      type: "VECTOR",
+      absoluteBoundingBox: { x: index * 2, y: 40, width: 1, height: 1 },
+    }));
+  const responsiveRoot = (
+    id: string,
+    name: string,
+    width: number,
+    visuals: ReturnType<typeof visualChildren>,
+  ) => ({
+    id,
+    name,
+    type: "FRAME",
+    absoluteBoundingBox: { x: 0, y: 0, width, height: 1000 },
+    children: [{
+      id: `${id}:text`,
+      name: "Heading",
+      type: "TEXT",
+      characters: name,
+      absoluteBoundingBox: { x: 0, y: 0, width: 100, height: 20 },
+    }, ...visuals],
+  });
+  const ids = collectRenderedNodeIds({
+    id: "0:0",
+    name: "Document",
+    type: "DOCUMENT",
+    children: [{
+      id: "1:0",
+      name: "Page",
+      type: "CANVAS",
+      children: [
+        responsiveRoot("2:0", "PC-page", 1440, visualChildren("desktop", 100)),
+        responsiveRoot("3:0", "SP-page", 440, visualChildren("mobile", 20)),
+      ],
+    }],
+  });
+
+  assert.equal(ids.length, 120);
+  assert.equal(ids.filter((id) => id.startsWith("desktop:")).length, 100);
+  assert.equal(ids.filter((id) => id.startsWith("mobile:")).length, 20);
+});

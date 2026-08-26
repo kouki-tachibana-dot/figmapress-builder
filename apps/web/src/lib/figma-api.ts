@@ -423,10 +423,30 @@ export function collectRenderedNodeIds(document: FigmaNode): string[] {
 
   const responsive = responsivePageRoots(document);
   if (responsive.desktop && responsive.mobile) {
-    const desktopLimit = Math.floor(MAX_RENDERED_NODES / 2);
+    const desktopCandidates = collect(responsive.desktop, MAX_RENDERED_NODES);
+    const mobileCandidates = collect(responsive.mobile, MAX_RENDERED_NODES);
+    if (desktopCandidates.length + mobileCandidates.length <= MAX_RENDERED_NODES) {
+      return [...desktopCandidates, ...mobileCandidates];
+    }
+    let desktopLimit = Math.min(
+      desktopCandidates.length,
+      Math.floor(MAX_RENDERED_NODES / 2),
+    );
+    let mobileLimit = Math.min(
+      mobileCandidates.length,
+      MAX_RENDERED_NODES - desktopLimit,
+    );
+    let remaining = MAX_RENDERED_NODES - desktopLimit - mobileLimit;
+    const desktopExtra = Math.min(
+      remaining,
+      desktopCandidates.length - desktopLimit,
+    );
+    desktopLimit += desktopExtra;
+    remaining -= desktopExtra;
+    mobileLimit += Math.min(remaining, mobileCandidates.length - mobileLimit);
     return [
       ...collect(responsive.desktop, desktopLimit),
-      ...collect(responsive.mobile, MAX_RENDERED_NODES - desktopLimit),
+      ...collect(responsive.mobile, mobileLimit),
     ];
   }
   return collect(document, MAX_RENDERED_NODES);
