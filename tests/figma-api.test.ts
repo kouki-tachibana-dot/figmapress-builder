@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  collectUncoveredVisibleImageRefs,
   collectVisibleImageRefs,
   collectRenderedNodeIds,
   fetchFigmaFile,
@@ -36,6 +37,31 @@ test("visible Figma image refs exclude hidden artwork and remove duplicates", ()
   }), ["hero"]);
 });
 
+test("rendered ancestors cover every visible image fill in their subtree", () => {
+  const document = {
+    id: "0:0",
+    name: "Document",
+    type: "DOCUMENT" as const,
+    children: [{
+      id: "1:1",
+      name: "Rendered group",
+      type: "GROUP" as const,
+      children: [{
+        id: "2:1",
+        name: "Photo",
+        type: "RECTANGLE" as const,
+        fills: [{ type: "IMAGE" as const, imageRef: "photo" }],
+      }],
+    }],
+  };
+  assert.deepEqual(collectUncoveredVisibleImageRefs(document, {}, { "1:1": "rendered" }), []);
+  assert.deepEqual(collectUncoveredVisibleImageRefs(document, {}, {}), ["photo"]);
+  assert.deepEqual(
+    collectUncoveredVisibleImageRefs(document, { photo: "original" }, {}),
+    [],
+  );
+});
+
 test("Figma image URLs retry and never accept a page with missing visible images", async (context) => {
   let imageUrlRequests = 0;
   context.mock.method(globalThis, "fetch", async (input) => {
@@ -57,7 +83,6 @@ test("Figma image URLs retry and never accept a page with missing visible images
           name: "Hero",
           type: "RECTANGLE",
           fills: [{ type: "IMAGE", imageRef: "hero" }],
-          absoluteBoundingBox: { x: 0, y: 0, width: 1440, height: 900 },
         }],
       },
     });
@@ -91,7 +116,6 @@ test("Figma conversion fails instead of silently dropping visible images", async
           name: "Hero",
           type: "RECTANGLE",
           fills: [{ type: "IMAGE", imageRef: "hero" }],
-          absoluteBoundingBox: { x: 0, y: 0, width: 1440, height: 900 },
         }],
       },
     });
@@ -111,6 +135,50 @@ test("Figma conversion fails instead of silently dropping visible images", async
       assert.equal((error as { status?: number }).status, 502);
       return true;
     },
+  );
+});
+
+test("selected-page renders replace a slow whole-file image-fill request", async (context) => {
+  let wholeFileImageRequests = 0;
+  context.mock.method(globalThis, "fetch", async (input) => {
+    const url = String(input);
+    if (url.includes("/v1/images/")) {
+      return Response.json({ images: { "1:1": "https://s3-alpha-sig.figma.com/hero.png" } });
+    }
+    if (url.endsWith("/images")) {
+      wholeFileImageRequests += 1;
+      return new Response(null, { status: 503 });
+    }
+    return Response.json({
+      name: "Rendered image fallback",
+      document: {
+        id: "0:0",
+        name: "Document",
+        type: "DOCUMENT",
+        children: [{
+          id: "1:1",
+          name: "Hero",
+          type: "RECTANGLE",
+          fills: [{ type: "IMAGE", imageRef: "hero" }],
+          absoluteBoundingBox: { x: 0, y: 0, width: 1440, height: 900 },
+        }],
+      },
+    });
+  });
+
+  const result = await fetchFigmaFile(
+    "https://www.figma.com/design/AbCdEf123456/Rendered",
+    "figd_test_token_value",
+    "pat",
+    undefined,
+    { includeVisualReferences: false },
+  );
+
+  assert.equal(wholeFileImageRequests, 0);
+  assert.equal(result.renderedNodeUrls["1:1"], "https://s3-alpha-sig.figma.com/hero.png");
+  assert.deepEqual(
+    collectUncoveredVisibleImageRefs(result.file.document, result.imageUrls, result.renderedNodeUrls),
+    [],
   );
 });
 
@@ -206,7 +274,7 @@ test("Figma OAuth uses Bearer auth without exposing the token as a PAT header", 
     "oauth",
   );
 
-  assert.ok(requestedHeaders.length >= 2);
+  assert.ok(requestedHeaders.length >= 1);
   for (const headers of requestedHeaders) {
     assert.equal(
       headers.get("Authorization"),
@@ -370,7 +438,7 @@ test("Figma authentication errors distinguish OAuth draft state from PAT permiss
   );
 });
 
-test("Figma image, render, and visual reference requests start concurrently", async (context) => {
+test("Figma render and visual reference requests start concurrently", async (context) => {
   const waitingResponses: Array<(response: Response) => void> = [];
   const secondaryRequests: string[] = [];
   context.mock.method(globalThis, "fetch", async (input) => {
@@ -417,9 +485,14 @@ test("Figma image, render, and visual reference requests start concurrently", as
   );
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  assert.equal(secondaryRequests.length, 3);
+  assert.equal(secondaryRequests.length, 2);
   for (const resolve of waitingResponses) {
-    resolve(Response.json({ images: {} }));
+    resolve(Response.json({
+      images: {
+        "2:2": "https://s3-alpha-sig.figma.com/page.png",
+        "3:3": "https://s3-alpha-sig.figma.com/artwork.png",
+      },
+    }));
   }
   await resultPromise;
 });

@@ -304,6 +304,34 @@ export function collectVisibleImageRefs(document: FigmaNode): string[] {
   return [...refs];
 }
 
+export function collectUncoveredVisibleImageRefs(
+  document: FigmaNode,
+  imageUrls: Record<string, string>,
+  renderedNodeUrls: Record<string, string>,
+): string[] {
+  const refs = new Set<string>();
+  const visit = (node: FigmaNode, renderedAncestor: boolean): void => {
+    if (node.visible === false) return;
+    const rendered = renderedAncestor || Boolean(renderedNodeUrls[node.id]);
+    if (!rendered) {
+      for (const fill of node.fills ?? []) {
+        if (
+          fill.visible !== false
+          && fill.type === "IMAGE"
+          && typeof fill.imageRef === "string"
+          && fill.imageRef
+          && !imageUrls[fill.imageRef]
+        ) {
+          refs.add(fill.imageRef);
+        }
+      }
+    }
+    for (const child of node.children ?? []) visit(child, rendered);
+  };
+  visit(document, false);
+  return [...refs];
+}
+
 function hasImageFill(node: FigmaNode): boolean {
   if (hasOwnImageFill(node)) return true;
   return (node.children ?? []).some(hasImageFill);
@@ -407,7 +435,7 @@ export function collectRenderedNodeIds(document: FigmaNode): string[] {
 async function fetchRenderedNodeUrls(
   key: string,
   document: FigmaNode,
-  init: RequestInit,
+  getInit: () => RequestInit,
   warnings: string[],
 ): Promise<Record<string, string>> {
   const ids = collectRenderedNodeIds(document);
@@ -421,8 +449,10 @@ async function fetchRenderedNodeUrls(
     batches.push(ids.slice(index, index + 35));
   }
 
-  try {
-    const results = await Promise.all(batches.map(async (batch) => {
+  const results = await Promise.all(batches.map(async (batch) => {
+    const batchResult: Record<string, string> = {};
+    for (let attempt = 1; attempt <= FIGMA_IMAGE_URL_ATTEMPTS; attempt += 1) {
+      try {
       const query = new URLSearchParams({
         ids: batch.join(","),
         format: "png",
@@ -431,22 +461,42 @@ async function fetchRenderedNodeUrls(
       });
       const response = await fetch(
         `https://api.figma.com/v1/images/${encodeURIComponent(key)}?${query.toString()}`,
-        init,
+          getInit(),
       );
-      if (!response.ok) return {};
-      const data = await readLimitedJson(response);
-      if (!isRecord(data) || !isRecord(data.images)) return {};
-      return Object.fromEntries(
-        Object.entries(data.images).filter(
-          (entry): entry is [string, string] => typeof entry[1] === "string",
-        ),
-      );
-    }));
-    return Object.assign({}, ...results) as Record<string, string>;
-  } catch {
-    warnings.push("Figmaのベクター・マスク画像を取得できなかったため、一部を簡略化しました。");
-    return {};
+        if (response.ok) {
+          const data = await readLimitedJson(response);
+          if (isRecord(data) && isRecord(data.images)) {
+            Object.assign(
+              batchResult,
+              Object.fromEntries(
+                Object.entries(data.images).filter(
+                  (entry): entry is [string, string] => typeof entry[1] === "string",
+                ),
+              ),
+            );
+          }
+          if (batch.every((nodeId) => batchResult[nodeId])) break;
+        } else if (response.status < 500 && response.status !== 429) {
+          break;
+        }
+      } catch {
+        // Retry a fresh request below. A timed-out AbortSignal cannot be reused.
+      }
+      if (attempt < FIGMA_IMAGE_URL_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 250));
+      }
+    }
+    return batchResult;
+  }));
+  const renderedNodeUrls = Object.assign({}, ...results) as Record<string, string>;
+  const missingNodeIds = ids.filter((nodeId) => !renderedNodeUrls[nodeId]);
+  if (missingNodeIds.length) {
+    throw new RequestError(
+      `Figmaの画像・ベクターを完全に取得できませんでした（${missingNodeIds.length}件不足）。欠落させずに再試行してください。`,
+      502,
+    );
   }
+  return renderedNodeUrls;
 }
 
 async function fetchVisualReferences(
@@ -589,11 +639,11 @@ export async function fetchFigmaFile(
       ? `Bearer ${token.trim()}`
       : token.trim(),
   );
-  const requestInit = (): RequestInit => ({
+  const requestInit = (timeoutMs = 20_000): RequestInit => ({
     headers,
     cache: "no-store",
     redirect: "error",
-    signal: AbortSignal.timeout(20_000),
+    signal: AbortSignal.timeout(timeoutMs),
   });
 
   let fileResponse: Response;
@@ -698,26 +748,36 @@ export async function fetchFigmaFile(
     }
   }
   const normalizedData = data as RawFigmaFile;
-  const expectedImageRefs = collectVisibleImageRefs(normalizedData.document);
+  const plannedRenderedNodeUrls = Object.fromEntries(
+    collectRenderedNodeIds(normalizedData.document).map((nodeId) => [nodeId, "planned"]),
+  );
+  const imageRefsRequiringRawUrls = collectUncoveredVisibleImageRefs(
+    normalizedData.document,
+    {},
+    plannedRenderedNodeUrls,
+  );
   const imageUrlsPromise = (async (): Promise<Record<string, string>> => {
-    let lastStatus = 0;
+    if (!imageRefsRequiringRawUrls.length) return {};
+    let lastImageUrls: Record<string, string> = {};
     for (let attempt = 1; attempt <= FIGMA_IMAGE_URL_ATTEMPTS; attempt += 1) {
       try {
         const imageResponse = await fetch(
           `https://api.figma.com/v1/files/${encodeURIComponent(key)}/images`,
-          requestInit(),
+          requestInit(7_000),
         );
-        lastStatus = imageResponse.status;
         if (imageResponse.ok) {
           const imageData = await readLimitedJson(imageResponse);
           if (!isRecord(imageData) || !isRecord(imageData.images)) {
             throw new RequestError("Figma画像APIから不正な応答が返されました。", 502);
           }
-          return Object.fromEntries(
+          lastImageUrls = Object.fromEntries(
             Object.entries(imageData.images).filter(
               (entry): entry is [string, string] => typeof entry[1] === "string",
             ),
           );
+          if (imageRefsRequiringRawUrls.every((imageRef) => lastImageUrls[imageRef])) {
+            return lastImageUrls;
+          }
         }
         if (imageResponse.status < 500 && imageResponse.status !== 429) {
           throw figmaError(imageResponse.status, authentication);
@@ -726,25 +786,20 @@ export async function fetchFigmaFile(
         if (error instanceof RequestError && error.status < 500 && error.status !== 429) {
           throw error;
         }
-        if (attempt === FIGMA_IMAGE_URL_ATTEMPTS) break;
       }
       if (attempt < FIGMA_IMAGE_URL_ATTEMPTS) {
         await new Promise((resolve) => setTimeout(resolve, attempt * 250));
       }
     }
-    throw new RequestError(
-      lastStatus === 429
-        ? "Figma画像APIが混雑しています。画像を欠落させずに再試行してください。"
-        : "Figma画像を完全に取得できませんでした。画像を欠落させずに再試行してください。",
-      502,
-    );
+    warnings.push("Figma画像URLの全体取得を完了できなかったため、選択ページの完全レンダーで補完しました。");
+    return lastImageUrls;
   })();
   const [imageUrls, renderedNodeUrls, visualReferences] = await Promise.all([
     imageUrlsPromise,
     fetchRenderedNodeUrls(
       key,
       normalizedData.document,
-      requestInit(),
+      requestInit,
       warnings,
     ),
     options.includeVisualReferences === false
@@ -756,7 +811,11 @@ export async function fetchFigmaFile(
           warnings,
         ),
   ]);
-  const missingImageRefs = expectedImageRefs.filter((imageRef) => !imageUrls[imageRef]);
+  const missingImageRefs = collectUncoveredVisibleImageRefs(
+    normalizedData.document,
+    imageUrls,
+    renderedNodeUrls,
+  );
   if (missingImageRefs.length) {
     throw new RequestError(
       `Figma画像を完全に取得できませんでした（${missingImageRefs.length}件不足）。画像を欠落させずに再試行してください。`,
