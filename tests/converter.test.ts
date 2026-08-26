@@ -327,7 +327,7 @@ test("real Figma bounds produce a high-fidelity editable Elementor document", as
 
   const result = await convertFile(
     file,
-    { pageTitle: "竹内きよ子様" },
+    { pageTitle: "明石をずーっと元気なまちに！" },
     { "portrait-ref": "https://images.example/portrait-original.png" },
     [],
     { "3:1": "https://images.example/portrait-rendered.png" },
@@ -371,6 +371,7 @@ test("real Figma bounds produce a high-fidelity editable Elementor document", as
   );
   assert.match(String(heading?.settings.editor), /white-space:pre/);
   assert.equal(h1Widgets.length, 1);
+  assert.equal(h1Widgets[0]?.id, heading?.id);
   assert.match(String(h1Widgets[0]?.settings.editor), /^<h1\b[^>]*data-figmapress-text-box=/);
   assert.match(String(heading?.settings.editor), /writing-mode:horizontal-tb/);
   assert.match(String(heading?.settings.editor), /line-break:strict/);

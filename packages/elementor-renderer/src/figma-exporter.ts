@@ -241,6 +241,7 @@ export class FigmaElementorExporter {
           responsive ? "desktop" : "single",
           responsive ? "-desktop" : "",
           fallbackMenuTexts,
+          title,
         ),
         responsive ? { hide_mobile: "hidden-mobile" } : {},
       ),
@@ -255,6 +256,7 @@ export class FigmaElementorExporter {
           "mobile",
           "-mobile",
           fallbackMenuTexts,
+          title,
         ),
         {
           hide_desktop: "hidden-desktop",
@@ -300,6 +302,7 @@ export function renderFigmaPreview(
       responsive ? "desktop" : "single",
       responsive ? "-desktop" : "",
       fallbackMenuTexts,
+      root.name,
     ),
     responsive ? " figmapress-figma-preview--desktop" : "",
   );
@@ -313,6 +316,7 @@ export function renderFigmaPreview(
       "mobile",
       "-mobile",
       fallbackMenuTexts,
+      root.name,
     ),
     " figmapress-figma-preview--mobile",
   );
@@ -326,6 +330,7 @@ function createRenderContext(
   variant: RenderContext["variant"],
   anchorSuffix: string,
   fallbackMenuTexts: FigmaNode[],
+  pageTitle: string,
 ): RenderContext {
   const anchorTargets = discoverSectionAnchorTargets(root);
   const navigationNode = findFigmaNavigationNode(root, fallbackMenuTexts);
@@ -339,7 +344,7 @@ function createRenderContext(
     fallbackMenuTexts,
     navigationNode,
     contactFormNode: findFigmaContactFormNode(root),
-    primaryHeadingNodeId: findPrimaryHeadingNode(root, navigationNode)?.id ?? null,
+    primaryHeadingNodeId: findPrimaryHeadingNode(root, navigationNode, pageTitle)?.id ?? null,
     anchorTargets,
     emittedAnchorIds: new Set([`top${anchorSuffix}`]),
   };
@@ -2868,9 +2873,18 @@ function headingTag(node: FigmaNode, fontSize: number, context: RenderContext): 
   return "div";
 }
 
-function findPrimaryHeadingNode(root: FigmaNode, navigationNode: FigmaNode | null): FigmaNode | null {
+function normalizedHeadingText(value: string): string {
+  return value.normalize("NFKC").replace(/[\s\u3000・｜|／/「」『』【】（）()、。,.!！?？:：;；_-]+/g, "");
+}
+
+function findPrimaryHeadingNode(
+  root: FigmaNode,
+  navigationNode: FigmaNode | null,
+  pageTitle: string,
+): FigmaNode | null {
   const rootBounds = root.absoluteBoundingBox;
   if (!rootBounds) return null;
+  const normalizedPageTitle = normalizedHeadingText(pageTitle);
   const navigationIds = new Set(
     navigationNode ? [navigationNode.id, ...descendants(navigationNode).map((node) => node.id)] : [],
   );
@@ -2881,9 +2895,15 @@ function findPrimaryHeadingNode(root: FigmaNode, navigationNode: FigmaNode | nul
       && node.visible !== false
       && Boolean(node.characters?.trim())
       && Boolean(node.absoluteBoundingBox)
-      && !navigationIds.has(node.id)
       && (node.characters?.trim().length ?? 0) <= 80
-      && (node.absoluteBoundingBox?.y ?? Infinity) <= rootBounds.y + rootBounds.height * 0.25
+      && (
+        !navigationIds.has(node.id)
+        || normalizedHeadingText(node.characters?.trim() ?? "") === normalizedPageTitle
+      )
+      && (
+        (node.absoluteBoundingBox?.y ?? Infinity) <= rootBounds.y + rootBounds.height * 0.4
+        || normalizedHeadingText(node.characters?.trim() ?? "") === normalizedPageTitle
+      )
     )
     .map((node) => {
       const bounds = node.absoluteBoundingBox as FigmaBounds;
@@ -2891,9 +2911,16 @@ function findPrimaryHeadingNode(root: FigmaNode, navigationNode: FigmaNode | nul
       const fontSize = textFontSize(style, textRuns(node), bounds);
       const text = node.characters?.trim() ?? "";
       const name = node.name.toLowerCase();
+      const normalizedText = normalizedHeadingText(text);
+      const matchesPageTitle = normalizedPageTitle.length >= 2 && (
+        normalizedText === normalizedPageTitle
+        || (normalizedPageTitle.length >= 12 && normalizedText.includes(normalizedPageTitle))
+        || (normalizedText.length >= 12 && normalizedPageTitle.includes(normalizedText))
+      );
       const explicit = /(?:^|[\/_\s-])(?:h1|page.?title|main.?title|hero.?title)(?:$|[\/_\s-])|ページタイトル|メインタイトル/.test(name);
       const japanese = /[ぁ-んァ-ヶ一-龠]/.test(text);
-      const score = Number(explicit) * 1_000_000
+      const score = Number(matchesPageTitle) * 2_000_000
+        + Number(explicit) * 1_000_000
         + Number(knownPageTitle.test(text)) * 500_000
         + Number(japanese) * 20_000
         + fontSize * 100
