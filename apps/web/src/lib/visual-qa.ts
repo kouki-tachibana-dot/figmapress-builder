@@ -102,6 +102,7 @@ export interface VisualQaMetrics {
   changedPixelRatio: number;
   rawChangedPixelRatio: number;
   edgeEquivalentPixelRatio: number;
+  textureEquivalentPixelRatio: number;
   contentChangedPixelRatio: number;
   worstBandChangedPixelRatio: number;
   meanColorError: number;
@@ -399,6 +400,7 @@ interface PerceptualPixelDelta {
   rawError: number;
   changed: boolean;
   edgeEquivalent: boolean;
+  textureEquivalent: boolean;
 }
 
 function pixelColorError(
@@ -466,6 +468,35 @@ function neighborhoodEdgeStrength(
   return maximum - minimum;
 }
 
+function neighborhoodMeanColorError(
+  source: Uint8ClampedArray,
+  target: Uint8ClampedArray,
+  width: number,
+  height: number,
+  x: number,
+  y: number,
+  radius: number,
+): number {
+  const sourceTotals = [0, 0, 0, 0];
+  const targetTotals = [0, 0, 0, 0];
+  let count = 0;
+  for (let candidateY = Math.max(0, y - radius); candidateY <= Math.min(height - 1, y + radius); candidateY += 1) {
+    for (let candidateX = Math.max(0, x - radius); candidateX <= Math.min(width - 1, x + radius); candidateX += 1) {
+      const offset = (candidateY * width + candidateX) * 4;
+      for (let channel = 0; channel < 4; channel += 1) {
+        sourceTotals[channel] += source[offset + channel];
+        targetTotals[channel] += target[offset + channel];
+      }
+      count += 1;
+    }
+  }
+  return sourceTotals.reduce(
+    (error, total, channel) =>
+      error + Math.abs(total / count - targetTotals[channel] / count),
+    0,
+  ) / 4;
+}
+
 function perceptualPixelDelta(
   reference: Uint8ClampedArray,
   target: Uint8ClampedArray,
@@ -478,7 +509,12 @@ function perceptualPixelDelta(
   const offset = (y * width + x) * 4;
   const rawError = pixelColorError(reference, offset, target, offset);
   if (rawError <= threshold) {
-    return { rawError, changed: false, edgeEquivalent: false };
+    return {
+      rawError,
+      changed: false,
+      edgeEquivalent: false,
+      textureEquivalent: false,
+    };
   }
 
   // Figma and the browser rasterize the same vector/text edge with slightly
@@ -503,6 +539,8 @@ function perceptualPixelDelta(
     y,
   );
   let edgeEquivalent = Math.max(referenceToTarget, targetToReference) <= threshold;
+  let hasSharedRendererEdge = false;
+  let rendererEdgeStrengthDelta = Number.POSITIVE_INFINITY;
   if (!edgeEquivalent) {
     // A 1440px Figma frame is exported near 960px while the editable browser
     // page is rasterized on the same grid. The two resamplers can spread a
@@ -511,9 +549,28 @@ function perceptualPixelDelta(
     // both directions. Flat missing content and shifts of three pixels or more
     // therefore remain material differences.
     const radius = 2;
-    const hasSharedRendererEdge =
-      neighborhoodEdgeStrength(reference, width, height, x, y, radius) >= 12
-      && neighborhoodEdgeStrength(target, width, height, x, y, radius) >= 12;
+    const referenceEdgeStrength = neighborhoodEdgeStrength(
+      reference,
+      width,
+      height,
+      x,
+      y,
+      radius,
+    );
+    const targetEdgeStrength = neighborhoodEdgeStrength(
+      target,
+      width,
+      height,
+      x,
+      y,
+      radius,
+    );
+    rendererEdgeStrengthDelta = Math.abs(
+      referenceEdgeStrength - targetEdgeStrength,
+    );
+    hasSharedRendererEdge =
+      referenceEdgeStrength >= 12
+      && targetEdgeStrength >= 12;
     if (hasSharedRendererEdge) {
       edgeEquivalent = Math.max(
         minimumNeighborhoodError(reference, target, width, height, x, y, radius),
@@ -521,10 +578,31 @@ function perceptualPixelDelta(
       ) <= threshold;
     }
   }
+  // Figma must use a full-page JPEG for long frames. Recompressing and
+  // resampling a detailed photograph can change individual high-frequency
+  // pixels even when the visible local tone is unchanged. Accept that narrow
+  // case only for JPEG thresholds, only where both sides contain structure,
+  // and only when their centered 5x5 mean color differs by at most 8/255.
+  // Missing/flat content, palette changes and geometry shifts stay material.
+  const textureEquivalent =
+    !edgeEquivalent
+    && threshold >= 32
+    && hasSharedRendererEdge
+    && rendererEdgeStrengthDelta <= 16
+    && neighborhoodMeanColorError(
+      reference,
+      target,
+      width,
+      height,
+      x,
+      y,
+      2,
+    ) <= 8;
   return {
     rawError,
-    changed: !edgeEquivalent,
+    changed: !(edgeEquivalent || textureEquivalent),
     edgeEquivalent,
+    textureEquivalent,
   };
 }
 
@@ -1286,6 +1364,7 @@ export function analyzeVisualPixels(
   let changed = 0;
   let rawChanged = 0;
   let edgeEquivalent = 0;
+  let textureEquivalent = 0;
   let contentPixels = 0;
   let changedContentPixels = 0;
   let colorError = 0;
@@ -1314,6 +1393,7 @@ export function analyzeVisualPixels(
     const pixelChanged = delta.changed;
     if (pixelError > threshold) rawChanged += 1;
     if (delta.edgeEquivalent) edgeEquivalent += 1;
+    if (delta.textureEquivalent) textureEquivalent += 1;
     // Plain page backgrounds can occupy most of a long website screenshot and
     // previously hid very visible typography and component differences. Count
     // the union of non-white pixels separately so foreground content is not
@@ -1371,6 +1451,7 @@ export function analyzeVisualPixels(
   const changedPixelRatio = (changed / totalPixels) * 100;
   const rawChangedPixelRatio = (rawChanged / totalPixels) * 100;
   const edgeEquivalentPixelRatio = (edgeEquivalent / totalPixels) * 100;
+  const textureEquivalentPixelRatio = (textureEquivalent / totalPixels) * 100;
   const contentChangedPixelRatio = contentPixels
     ? (changedContentPixels / contentPixels) * 100
     : changedPixelRatio;
@@ -1462,6 +1543,7 @@ export function analyzeVisualPixels(
       changedPixelRatio: round(changedPixelRatio),
       rawChangedPixelRatio: round(rawChangedPixelRatio),
       edgeEquivalentPixelRatio: round(edgeEquivalentPixelRatio),
+      textureEquivalentPixelRatio: round(textureEquivalentPixelRatio),
       contentChangedPixelRatio: roundedContentChangedPixelRatio,
       worstBandChangedPixelRatio: roundedWorstBandChangedPixelRatio,
       meanColorError: round(meanColorError),

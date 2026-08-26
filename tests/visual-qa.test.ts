@@ -311,6 +311,46 @@ test("one- and two-pixel renderer edges reach 99.9 while raw differences stay vi
   assert.ok(threePixelShift.metrics.changedPixelRatio > 0);
 });
 
+test("JPEG texture noise is locally equivalent without hiding geometry shifts", () => {
+  const width = 80;
+  const height = 40;
+  const reference = solidPixels(width, height, 0, 0, 0);
+  const target = reference.slice();
+  for (let row = 0; row < height; row += 1) {
+    for (let column = 0; column < width; column += 1) {
+      const offset = (row * width + column) * 4;
+      const light = (row + column) % 2 === 0;
+      const sourceValue = light ? 255 : 0;
+      const compressedValue =
+        (row + column) % 4 < 2
+          ? sourceValue
+          : light ? 211 : 44;
+      reference[offset] = sourceValue;
+      reference[offset + 1] = sourceValue;
+      reference[offset + 2] = sourceValue;
+      target[offset] = compressedValue;
+      target[offset + 1] = compressedValue;
+      target[offset + 2] = compressedValue;
+    }
+  }
+
+  const texture = analyzeVisualPixels(reference, target, width, height, 32);
+  assert.equal(texture.metrics.score, 99.9);
+  assert.equal(texture.metrics.status, "pass");
+  assert.equal(texture.metrics.changedPixelRatio, 0);
+  assert.ok(texture.metrics.textureEquivalentPixelRatio > 0);
+
+  const shifted = analyzeVisualPixels(
+    reference,
+    translatePixels(reference, width, height, 3, 0),
+    width,
+    height,
+    32,
+  );
+  assert.ok(shifted.metrics.changedPixelRatio > 0);
+  assert.ok(shifted.metrics.score < 99.9);
+});
+
 test("visual QA locates a concentrated difference near the page bottom", () => {
   const width = 20;
   const height = 100;
