@@ -401,7 +401,11 @@ function previewRoot(
   const background = gradient
     ? `background-image:${escapeAttribute(gradient)};`
     : `background:${escapeAttribute(solidColor(root.fills) ?? "#FFFFFF")};`;
-  return `<div class="figmapress-figma-preview${className}" data-figmapress-layout="${context.variant}" style="--figma-unit:calc(100cqw / ${round(rootBounds.width)});aspect-ratio:${round(rootBounds.width)}/${round(rootBounds.height)};${background}${previewAutoLayout(root)}${previewEffects(root)}">${rootRenderNodes(root, context).map((node) => previewNode(node, rootBounds, root, context)).join("")}</div>`;
+  // Visual QA must preserve the exact Figma paint tree. Synthetic navigation,
+  // form and accordion grouping is reserved for the Elementor document; using
+  // that grouped tree here can change root-level stacking even when every node
+  // keeps the correct geometry.
+  return `<div class="figmapress-figma-preview${className}" data-figmapress-layout="${context.variant}" style="--figma-unit:calc(100cqw / ${round(rootBounds.width)});aspect-ratio:${round(rootBounds.width)}/${round(rootBounds.height)};${background}${previewAutoLayout(root)}${previewEffects(root)}">${(root.children ?? []).map((node) => previewNode(node, rootBounds, root, context)).join("")}</div>`;
 }
 
 function rootRenderNodes(root: FigmaNode, context: RenderContext): FigmaNode[] {
@@ -433,29 +437,7 @@ function rootRenderNodes(root: FigmaNode, context: RenderContext): FigmaNode[] {
     }
   }
 
-  const isRootBackgroundLayer = (node: FigmaNode): boolean => {
-    if (containsText(node)) return false;
-    return [node, ...descendants(node)].some((surface) => {
-      const bounds = surface.absoluteBoundingBox;
-      if (!bounds || surface.type === "TEXT") return false;
-      const hasPaint = Boolean(
-        solidColor(surface.fills)
-        || figmaGradient(surface)
-        || ownImagePaint(surface),
-      );
-      return hasPaint
-        && bounds.width >= context.rootBounds.width * 0.72
-        && bounds.height >= context.rootBounds.height * 0.45;
-    });
-  };
-  return result
-    .map((node, index) => ({ node, index }))
-    .sort((left, right) =>
-      Number(!isRootBackgroundLayer(left.node))
-      - Number(!isRootBackgroundLayer(right.node))
-      || left.index - right.index
-    )
-    .map(({ node }) => node);
+  return result;
 }
 
 function renderElement(

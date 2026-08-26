@@ -1658,7 +1658,7 @@ test("root-level corporate inquiry fields become complete responsive forms", asy
       absoluteBoundingBox: { x: x + width * 0.46, y: 1048, width: width * 0.08, height: 24 },
       style: { fontSize: 18, fontWeight: 700 },
     });
-    children.push({
+    children.unshift({
       id: `${id}:large-background`,
       name: "Rectangle 227",
       type: "RECTANGLE",
@@ -1770,6 +1770,10 @@ test("root-level corporate inquiry fields become complete responsive forms", asy
   );
   assert.ok(desktopBackground >= 0 && desktopBackground < desktopFirstLabel);
   assert.ok(mobileBackground >= 0 && mobileBackground < mobileFirstLabel);
+  assert.doesNotMatch(
+    result.previewHtml,
+    /data-figmapress-node-name="\{wp:form\} inferred loose contact form"/,
+  );
   assert.equal(
     result.qualityReport?.checks.find((check) => check.id === "component-geometry")?.status,
     "pass",
