@@ -348,7 +348,9 @@ function renderRootElement(
   visibility: ElementorSettings,
 ): ElementorElement {
   const rootBounds = context.rootBounds;
+  const rootAccordion = accordionPlan(root);
   const children = rootRenderNodes(root, context)
+    .filter((node) => !rootAccordion || !isInsideInteractionBounds(node, rootAccordion.bounds))
     .map((node) => renderElement(node, rootBounds, root, context))
     .filter((element): element is ElementorElement => element !== null)
     .map((element) => ({
@@ -358,6 +360,16 @@ function renderRootElement(
         figmapress_section: "yes",
       },
     }));
+  if (rootAccordion) {
+    const accordion = accordionElement(root, rootAccordion, rootBounds, root, context);
+    children.push({
+      ...accordion,
+      settings: {
+        ...accordion.settings,
+        figmapress_section: "yes",
+      },
+    });
+  }
   return {
     id: context.ids.create(`${root.id}:root`),
     elType: "container",

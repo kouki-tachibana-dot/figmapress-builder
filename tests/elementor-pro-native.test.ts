@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   adaptElementorTemplateToNativeWidgets,
+  FigmaElementorExporter,
   figmaNodeHasAccordionPlan,
   type ElementorElement,
   type ElementorTemplate,
 } from "@figmapress/elementor-renderer";
-import type { FigmaNode } from "@figmapress/figma-parser";
+import type { FigmaNode, MockFigmaFile } from "@figmapress/figma-parser";
 import { auditNativeElementorTemplate } from "../apps/web/src/lib/elementor-native.ts";
 
 function widget(
@@ -95,6 +96,65 @@ test("fiscal-year columns do not depend on editable Figma layer names", () => {
       year("h5", "令和5年度", 980, 300),
     ],
   }), false);
+});
+
+test("a fiscal-year column on the responsive root becomes a native accordion", () => {
+  const year = (id: string, value: string, y: number): FigmaNode => ({
+    id,
+    name: value,
+    type: "TEXT",
+    characters: value,
+    absoluteBoundingBox: { x: 280, y, width: 160, height: 30 },
+  });
+  const file: MockFigmaFile = {
+    name: "Company",
+    document: {
+      id: "document",
+      name: "Document",
+      type: "DOCUMENT",
+      children: [{
+        id: "canvas",
+        name: "Page 02",
+        type: "CANVAS",
+        children: [{
+          id: "desktop",
+          name: "Desktop 1440 / Company",
+          type: "FRAME",
+          absoluteBoundingBox: { x: 0, y: 0, width: 1440, height: 1000 },
+          children: [
+            year("y7", "令和7年度", 180),
+            year("y6", "令和6年度", 300),
+            year("y5", "令和5年度", 420),
+            year("y4", "令和4年度", 540),
+            year("y3", "令和3年度", 660),
+            {
+              id: "pdf",
+              name: "Invoice PDF",
+              type: "TEXT",
+              characters: "令和7年度 ご請求書フォーマット.pdf",
+              absoluteBoundingBox: { x: 500, y: 220, width: 360, height: 30 },
+            },
+          ],
+        }],
+      }],
+    },
+  };
+  const fallback = new FigmaElementorExporter().toTemplate(file, "Company");
+  const result = adaptElementorTemplateToNativeWidgets(fallback, {
+    capabilities: allCapabilities,
+  });
+  const widgets: ElementorElement[] = [];
+  const visit = (elements: ElementorElement[]): void => {
+    for (const element of elements) {
+      if (element.elType === "widget") widgets.push(element);
+      visit(element.elements);
+    }
+  };
+  visit(result.content);
+  const accordion = widgets.find((widget) => widget.widgetType === "nested-accordion");
+  assert.ok(accordion);
+  assert.equal((accordion.settings.items as unknown[]).length, 5);
+  assert.equal(accordion.elements.length, 5);
 });
 
 test("fallback accordion becomes an editable Elementor Accordion widget", () => {
