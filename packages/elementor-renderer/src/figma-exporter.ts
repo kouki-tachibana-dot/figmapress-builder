@@ -1084,9 +1084,19 @@ function accordionYearTitles(node: FigmaNode): FigmaNode[] {
 export function figmaNodeHasAccordionPlan(node: FigmaNode): boolean {
   const titles = accordionYearTitles(node);
   if (titles.length < 3) return false;
-  const explicitlyNamed = /(?:\{wp:accordion\}|profile|プロフィール|faq|よくある質問)/i.test(node.name);
-  const structurallyNamed = /(?:invoice|format|download|document|請求|年度|資料)/i.test(node.name);
-  if (!explicitlyNamed && !structurallyNamed && !/^group\s*\d*$/i.test(node.name.trim())) {
+  const bounds = titles
+    .map((title) => title.absoluteBoundingBox)
+    .filter((box): box is FigmaBounds => Boolean(box));
+  const centerXs = bounds.map((box) => box.x + box.width / 2);
+  const centerYs = bounds.map((box) => box.y + box.height / 2);
+  const widths = bounds.map((box) => box.width).sort((left, right) => left - right);
+  const medianWidth = widths[Math.floor(widths.length / 2)] ?? 0;
+  const horizontalSpread = Math.max(...centerXs) - Math.min(...centerXs);
+  const verticalSpread = Math.max(...centerYs) - Math.min(...centerYs);
+  // A repeated fiscal-year column is a stronger signal than mutable layer
+  // names such as `Desktop 1440` or `Frame 225`. Keep the geometric guard so
+  // a horizontal chronology is not converted into an accordion by mistake.
+  if (horizontalSpread > Math.max(360, medianWidth * 2.5) || verticalSpread < 80) {
     return false;
   }
   return !descendants(node).some((candidate) =>

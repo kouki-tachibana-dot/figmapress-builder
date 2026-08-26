@@ -64,6 +64,39 @@ test("generic Japanese fiscal-year group is recognized as an accordion", () => {
   }), false);
 });
 
+test("fiscal-year columns do not depend on editable Figma layer names", () => {
+  const year = (id: string, value: string, x: number, y: number): FigmaNode => ({
+    id,
+    name: value,
+    type: "TEXT",
+    characters: value,
+    absoluteBoundingBox: { x, y, width: 150, height: 28 },
+  });
+  const arbitraryFrame: FigmaNode = {
+    id: "company-desktop",
+    name: "Desktop 1440 / Section 06",
+    type: "FRAME",
+    absoluteBoundingBox: { x: 0, y: 0, width: 1440, height: 900 },
+    children: [
+      year("y7", "令和7年度", 280, 180),
+      year("y6", "令和6年度", 280, 300),
+      year("y5", "令和5年度", 280, 420),
+      year("y4", "令和4年度", 280, 540),
+      year("y3", "令和3年度", 280, 660),
+    ],
+  };
+  assert.equal(figmaNodeHasAccordionPlan(arbitraryFrame), true);
+  assert.equal(figmaNodeHasAccordionPlan({
+    ...arbitraryFrame,
+    id: "horizontal-history",
+    children: [
+      year("h7", "令和7年度", 100, 300),
+      year("h6", "令和6年度", 540, 300),
+      year("h5", "令和5年度", 980, 300),
+    ],
+  }), false);
+});
+
 test("fallback accordion becomes an editable Elementor Accordion widget", () => {
   const result = adaptElementorTemplateToNativeWidgets(template(widget(
     "a1234567",
