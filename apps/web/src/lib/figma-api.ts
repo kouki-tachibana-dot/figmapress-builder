@@ -331,7 +331,15 @@ export function collectUncoveredVisibleImageRefs(
     }
     for (const child of node.children ?? []) visit(child, rendered);
   };
-  visit(document, false);
+  const responsive = responsivePageRoots(document);
+  const roots = [responsive.desktop, responsive.mobile].filter(
+    (node): node is FigmaNode => Boolean(node),
+  );
+  if (roots.length) {
+    for (const root of roots) visit(root, false);
+  } else {
+    visit(document, false);
+  }
   return [...refs];
 }
 

@@ -93,6 +93,34 @@ test("non-painting image refs do not block an otherwise complete page", () => {
   assert.deepEqual(collectUncoveredVisibleImageRefs(document, {}, {}), ["visible"]);
 });
 
+test("component scraps outside the selected responsive page do not count as missing", () => {
+  const document = {
+    id: "0:0",
+    name: "Document",
+    type: "DOCUMENT" as const,
+    children: [{
+      id: "1:0",
+      name: "Canvas",
+      type: "CANVAS" as const,
+      children: [{
+        id: "2:0",
+        name: "PC-page",
+        type: "FRAME" as const,
+        absoluteBoundingBox: { x: 0, y: 0, width: 1440, height: 2000 },
+        children: [],
+      }, {
+        id: "3:0",
+        name: "Component sample",
+        type: "COMPONENT" as const,
+        absoluteBoundingBox: { x: 1600, y: 0, width: 300, height: 200 },
+        fills: [{ type: "IMAGE" as const, imageRef: "unused-sample" }],
+      }],
+    }],
+  };
+
+  assert.deepEqual(collectUncoveredVisibleImageRefs(document, {}, {}), []);
+});
+
 test("Figma image URLs retry and never accept a page with missing visible images", async (context) => {
   let imageUrlRequests = 0;
   context.mock.method(globalThis, "fetch", async (input) => {
