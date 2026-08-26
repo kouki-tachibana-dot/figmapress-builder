@@ -55,7 +55,7 @@ test("browser Visual QA waits for the srcdoc DOM separately from slow media", as
   assert.match(source, /waitForImage\(image, 8_000\)/);
   assert.match(source, /reference\.format === "jpg" \? 32 : 24/);
   assert.match(source, /45_000/);
-  assert.match(source, /Promise\.all\(\[\s*html2canvas/);
+  assert.match(source, /image\.fetchPriority = "high"/);
   assert.match(source, /loadReferenceImage\(reference\.url\)/);
   assert.match(source, /verifiedExactSnapshot/);
   assert.match(source, /data-figmapress-exact-snapshot/);
@@ -85,6 +85,19 @@ test("browser Visual QA measures on the Figma reference pixel grid", async () =>
   assert.match(source, /MAX_CAPTURE_PIXELS = 8_000_000/);
   assert.match(source, /Math\.min\(reference\.width, renderWidth\)/);
   assert.doesNotMatch(source, /variant === "mobile" \? 440 : 800/);
+});
+
+test("browser Visual QA prioritizes the Figma reference before preview assets", async () => {
+  const source = await readFile(browserVisualQaPath, "utf8");
+  const referenceLoad = source.indexOf(
+    "const referenceImage = await loadReferenceImage(reference.url)",
+  );
+  const previewFrame = source.indexOf(
+    'const frame = document.createElement("iframe")',
+  );
+  assert.notEqual(referenceLoad, -1);
+  assert.notEqual(previewFrame, -1);
+  assert.ok(referenceLoad < previewFrame);
 });
 
 test("actual-page Visual QA refuses a misleading score when snapshot images are omitted", async () => {

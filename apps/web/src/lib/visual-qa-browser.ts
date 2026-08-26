@@ -217,6 +217,7 @@ function renderedContentHeight(element: HTMLElement): number {
 async function loadReferenceImage(url: string): Promise<HTMLImageElement> {
   const image = new Image();
   image.decoding = "async";
+  image.fetchPriority = "high";
   image.src = proxiedImageUrl(url);
   await new Promise<void>((resolve, reject) => {
     const timeout = window.setTimeout(
@@ -337,6 +338,11 @@ export async function runVisualQa(
   // Ignore its small block/compression noise while keeping the stricter
   // lossless threshold for ordinary PNG references.
   const pixelThreshold = reference.format === "jpg" ? 32 : 24;
+  // Fetch the visual source of truth before the preview starts requesting up
+  // to one hundred proxied assets. Long pages otherwise place this request at
+  // the back of the same-origin browser queue and can report a false 45s
+  // timeout even though the Figma image itself is valid.
+  const referenceImage = await loadReferenceImage(reference.url);
   const frame = document.createElement("iframe");
   frame.setAttribute("aria-hidden", "true");
   frame.setAttribute("sandbox", "allow-same-origin");
@@ -533,25 +539,19 @@ export async function runVisualQa(
           .slice(0, 24)
       : [];
 
-    // Long Figma references can take several seconds to traverse the image
-    // proxy. Load the reference while html2canvas renders the generated page
-    // so network latency does not unnecessarily extend the QA run.
-    const [targetCanvas, referenceImage] = await Promise.all([
-      html2canvas(frameDocument.documentElement, {
-        allowTaint: false,
-        backgroundColor: "#ffffff",
-        height: renderHeight,
-        logging: false,
-        scale: captureScale,
-        useCORS: true,
-        width: renderWidth,
-        windowHeight: renderHeight,
-        windowWidth: renderWidth,
-        x: 0,
-        y: 0,
-      }),
-      loadReferenceImage(reference.url),
-    ]);
+    const targetCanvas = await html2canvas(frameDocument.documentElement, {
+      allowTaint: false,
+      backgroundColor: "#ffffff",
+      height: renderHeight,
+      logging: false,
+      scale: captureScale,
+      useCORS: true,
+      width: renderWidth,
+      windowHeight: renderHeight,
+      windowWidth: renderWidth,
+      x: 0,
+      y: 0,
+    });
     const referenceCanvas = document.createElement("canvas");
     referenceCanvas.width = width;
     referenceCanvas.height = height;
