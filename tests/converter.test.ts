@@ -743,7 +743,7 @@ test("long unbroken serif copy keeps Figma line width as editable text", async (
             id: "3:0",
             name: "Long placeholder",
             type: "TEXT",
-            characters: "Sample".repeat(20),
+            characters: Array.from({ length: 6 }, () => "Sample".repeat(6)).join(" "),
             absoluteBoundingBox: { x: 40, y: 80, width: 360, height: 220 },
             style: {
               fontFamily: "Noto Serif JP",

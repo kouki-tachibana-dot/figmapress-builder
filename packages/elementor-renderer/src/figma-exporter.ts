@@ -2308,7 +2308,12 @@ function flexAlignment(value: string | undefined): string {
 
 function textRuns(node: FigmaNode): RichRun[] {
   const value = node.characters ?? "";
-  const calibrateLongLatin = /[A-Za-z0-9]{80,}/.test(value);
+  const latinBlocks = value.match(/[A-Za-z0-9]{30,}/g) ?? [];
+  const calibrateLongLatin = latinBlocks.some((block) => block.length >= 80)
+    || (
+      latinBlocks.length >= 2
+      && latinBlocks.reduce((total, block) => total + block.length, 0) >= 120
+    );
   const calibratedStyle = (style: FigmaTypeStyle): FigmaTypeStyle => {
     const fontSize = positive(style.fontSize) ? style.fontSize : 0;
     const serif = /serif|mincho/i.test(style.fontFamily ?? "");
