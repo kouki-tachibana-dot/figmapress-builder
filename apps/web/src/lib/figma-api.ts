@@ -233,7 +233,7 @@ const FIGMA_RENDER_GROUP_TYPES = new Set([
   "GROUP",
   "INSTANCE",
 ]);
-const MAX_RENDERED_NODES = 120;
+const MAX_RENDERED_NODES = 160;
 
 interface RenderCandidate {
   id: string;
@@ -410,7 +410,9 @@ export function collectRenderedNodeIds(document: FigmaNode): string[] {
         candidates.push({
           id: node.id,
           order: currentOrder,
-          priority: renderPriority(node) + (prioritizedVisual ? 1_000 : 0),
+          // Functional arrows and icons outrank decorative vectors, but never
+          // displace actual photos or adjusted image fills from the export.
+          priority: renderPriority(node) + (prioritizedVisual ? 150 : 0),
         });
         return;
       }

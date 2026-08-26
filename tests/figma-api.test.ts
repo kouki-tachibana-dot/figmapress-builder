@@ -114,7 +114,7 @@ test("Figma image URLs retry and never accept a page with missing visible images
         id: "0:0",
         name: "Document",
         type: "DOCUMENT",
-        children: Array.from({ length: 121 }, (_, index) => ({
+        children: Array.from({ length: 161 }, (_, index) => ({
           id: `1:${index}`,
           name: `Hero ${index}`,
           type: "RECTANGLE",
@@ -153,7 +153,7 @@ test("Figma conversion fails instead of silently dropping visible images", async
         id: "0:0",
         name: "Document",
         type: "DOCUMENT",
-        children: Array.from({ length: 121 }, (_, index) => ({
+        children: Array.from({ length: 161 }, (_, index) => ({
           id: `1:${index}`,
           name: `Hero ${index}`,
           type: "RECTANGLE",
@@ -722,7 +722,7 @@ test("complex visual groups are rendered once while editable text stays native",
 });
 
 test("functional carousel visuals outrank decorative assets in the render budget", () => {
-  const decorations = Array.from({ length: 125 }, (_, index) => ({
+  const decorations = Array.from({ length: 165 }, (_, index) => ({
     id: `decorative:${index}`,
     name: `Decoration ${index}`,
     type: "VECTOR",
@@ -770,10 +770,41 @@ test("functional carousel visuals outrank decorative assets in the render budget
     }],
   });
 
-  assert.equal(ids.length, 120);
+  assert.equal(ids.length, 160);
   assert.ok(!ids.includes("carousel:0"));
   assert.ok(slides.every((slide) => ids.includes(slide.id)));
-  assert.ok(!ids.includes("decorative:124"));
+  assert.ok(!ids.includes("decorative:164"));
+});
+
+test("real image fills outrank functional vector decoration at the render limit", () => {
+  const functionalVectors = Array.from({ length: 159 }, (_, index) => ({
+    id: `carousel-vector:${index}`,
+    name: `Carousel Arrow ${index}`,
+    type: "VECTOR",
+    absoluteBoundingBox: { x: index, y: 0, width: 8, height: 8 },
+  }));
+  const ids = collectRenderedNodeIds({
+    id: "0:0",
+    name: "Document",
+    type: "DOCUMENT",
+    children: [...functionalVectors, {
+      id: "photo:1",
+      name: "Company photo 1",
+      type: "RECTANGLE",
+      absoluteBoundingBox: { x: 0, y: 20, width: 800, height: 600 },
+      fills: [{ type: "IMAGE", imageRef: "photo-1" }],
+    }, {
+      id: "photo:2",
+      name: "Company photo 2",
+      type: "RECTANGLE",
+      absoluteBoundingBox: { x: 810, y: 20, width: 800, height: 600 },
+      fills: [{ type: "IMAGE", imageRef: "photo-2" }],
+    }],
+  });
+
+  assert.equal(ids.length, 160);
+  assert.ok(ids.includes("photo:1"));
+  assert.ok(ids.includes("photo:2"));
 });
 
 test("rendered responsive assets are budgeted across desktop and mobile roots", () => {
@@ -854,9 +885,9 @@ test("rendered responsive assets are budgeted across desktop and mobile roots", 
     }],
   });
 
-  assert.equal(ids.length, 120);
-  assert.equal(ids.filter((id) => id.startsWith("desktop:")).length, 60);
-  assert.equal(ids.filter((id) => id.startsWith("mobile:")).length, 60);
+  assert.equal(ids.length, 160);
+  assert.equal(ids.filter((id) => id.startsWith("desktop:")).length, 80);
+  assert.equal(ids.filter((id) => id.startsWith("mobile:")).length, 80);
   assert.ok(ids.includes("desktop:mask"));
   assert.ok(ids.includes("mobile:mask"));
 });
