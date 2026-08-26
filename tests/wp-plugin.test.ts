@@ -345,6 +345,20 @@ test("Connector streams trusted Elementor uploads without hydrating the full pag
   assert.match(handler, /'_elementor_data'/);
   assert.match(handler, /'_figmapress_stored_hash'/);
   assert.match(handler, /figmapress_connector_deferred_media_progress\( \$media_total \)/);
+  for (const widget of [
+    "nested-accordion",
+    "form",
+    "nav-menu",
+    "image-carousel",
+  ]) {
+    assert.match(
+      handler,
+      new RegExp(`\\\\\"widgetType\\\\\":\\\\\"${widget}\\\\\"`),
+      `streamed uploads must count the native ${widget} widget`,
+    );
+  }
+  assert.match(handler, /\$unsupported_native_widget/);
+  assert.match(handler, /figmapress_connector_registered_elementor_widget\( \$native_widget \)/);
   assert.doesNotMatch(handler, /'remainingMedia'\s*=>\s*0/);
   assert.doesNotMatch(handler, /'mediaComplete'\s*=>\s*true/);
   assert.doesNotMatch(handler, /json_decode\([^;]*option_value/);

@@ -907,16 +907,43 @@ function figmapress_connector_stream_elementor_upload( $upload_id, $index, $tota
                 ((LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"widgetType\":\"figmapress-link\"', ''))) / 30) +
                 ((LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"widgetType\":\"figmapress-carousel\"', ''))) / 34) +
                 ((LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"widgetType\":\"figmapress-contact-form\"', ''))) / 38) +
-                ((LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"widgetType\":\"figmapress-accordion\"', ''))) / 35) AS allowed_widgets
+                ((LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"widgetType\":\"figmapress-accordion\"', ''))) / 35) +
+                ((LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"widgetType\":\"nested-accordion\"', ''))) / 31) +
+                ((LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"widgetType\":\"form\"', ''))) / 19) +
+                ((LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"widgetType\":\"nav-menu\"', ''))) / 23) +
+                ((LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"widgetType\":\"image-carousel\"', ''))) / 29) AS allowed_widgets,
+                (LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"widgetType\":\"nested-accordion\"', ''))) / 31 AS nested_accordion_widget_count,
+                (LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"widgetType\":\"form\"', ''))) / 19 AS form_widget_count,
+                (LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"widgetType\":\"nav-menu\"', ''))) / 23 AS nav_menu_widget_count,
+                (LENGTH(option_value) - LENGTH(REPLACE(option_value, '\"widgetType\":\"image-carousel\"', ''))) / 29 AS image_carousel_widget_count
              FROM {$wpdb->options} WHERE option_name = %s LIMIT 1",
             $data_key
         ),
         ARRAY_A
     );
+    $native_widget_counts = array(
+        'nested-accordion' => 'nested_accordion_widget_count',
+        'form'             => 'form_widget_count',
+        'nav-menu'         => 'nav_menu_widget_count',
+        'image-carousel'   => 'image_carousel_widget_count',
+    );
+    $unsupported_native_widget = false;
+    if ( is_array( $structure ) ) {
+        foreach ( $native_widget_counts as $native_widget => $count_key ) {
+            if (
+                absint( isset( $structure[ $count_key ] ) ? $structure[ $count_key ] : 0 ) > 0
+                && ! figmapress_connector_registered_elementor_widget( $native_widget )
+            ) {
+                $unsupported_native_widget = true;
+                break;
+            }
+        }
+    }
     if (
         ! current_user_can( 'unfiltered_html' ) || ! is_array( $structure ) ||
         absint( $structure['element_count'] ) !== absint( $structure['allowed_elements'] ) ||
         absint( $structure['widget_count'] ) !== absint( $structure['allowed_widgets'] ) ||
+        $unsupported_native_widget ||
         absint( $structure['text_widget_count'] ) < 1 ||
         absint( $structure['element_count'] ) > 1200
     ) {
