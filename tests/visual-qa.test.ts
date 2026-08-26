@@ -74,6 +74,19 @@ test("browser Visual QA waits for the srcdoc DOM separately from slow media", as
   assert.match(source, /previewImageUrl: targetCanvas\.toDataURL/);
 });
 
+test("browser Visual QA measures on the Figma reference pixel grid", async () => {
+  const source = await readFile(
+    new URL(
+      "../apps/web/src/lib/visual-qa-browser.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(source, /MAX_CAPTURE_PIXELS = 8_000_000/);
+  assert.match(source, /Math\.min\(reference\.width, renderWidth\)/);
+  assert.doesNotMatch(source, /variant === "mobile" \? 440 : 800/);
+});
+
 test("actual-page Visual QA refuses a misleading score when snapshot images are omitted", async () => {
   const source = await readFile(
     new URL("../apps/web/src/components/converter-app.tsx", import.meta.url),
@@ -234,6 +247,44 @@ test("identical images receive a perfect visual QA score", () => {
   assert.deepEqual(analysis.metrics.hotspots, []);
   assert.equal(analysis.metrics.alignment.safeToApply, false);
   assert.match(analysis.metrics.alignment.reason, /検出されません/);
+});
+
+test("one-pixel renderer edges reach 99.9 while raw differences stay visible", () => {
+  const width = 80;
+  const height = 40;
+  const reference = solidPixels(width, height, 247, 247, 243);
+  for (let row = 10; row < 30; row += 1) {
+    for (let column = 15; column < 60; column += 1) {
+      const offset = (row * width + column) * 4;
+      reference[offset] = 25;
+      reference[offset + 1] = 80;
+      reference[offset + 2] = 140;
+    }
+  }
+
+  const onePixelShift = translatePixels(reference, width, height, 1, 0);
+  const equivalent = analyzeVisualPixels(
+    reference,
+    onePixelShift,
+    width,
+    height,
+  );
+  assert.equal(equivalent.metrics.score, 99.9);
+  assert.equal(equivalent.metrics.changedPixelRatio, 0);
+  assert.ok(equivalent.metrics.rawChangedPixelRatio > 0);
+  assert.equal(
+    equivalent.metrics.edgeEquivalentPixelRatio,
+    equivalent.metrics.rawChangedPixelRatio,
+  );
+
+  const threePixelShift = analyzeVisualPixels(
+    reference,
+    translatePixels(reference, width, height, 3, 0),
+    width,
+    height,
+  );
+  assert.ok(threePixelShift.metrics.score < 99.9);
+  assert.ok(threePixelShift.metrics.changedPixelRatio > 0);
 });
 
 test("visual QA locates a concentrated difference near the page bottom", () => {
@@ -415,6 +466,19 @@ test("Elementor visual QA gate blocks only incomplete or unacknowledged failures
   assert.deepEqual(
     { state: pending.state, blocksDraft: pending.blocksDraft },
     { state: "pending", blocksDraft: true },
+  );
+
+  const review = resolveVisualQaDraftGate({
+    enabled: true,
+    referenceCount: 2,
+    resultStatuses: ["pass", "review"],
+    busy: false,
+    error: false,
+    acknowledged: false,
+  });
+  assert.deepEqual(
+    { state: review.state, blocksDraft: review.blocksDraft },
+    { state: "warning", blocksDraft: true },
   );
 
   const failed = resolveVisualQaDraftGate({
@@ -982,6 +1046,22 @@ test("section visual correction rollback guard checks the targeted node", () => 
         sections: [{
           ...before[0].sections[0],
           changedPixelRatio: 33,
+        }],
+      }],
+      [{ variant: "desktop", nodeId: "hero" }],
+    ),
+    false,
+  );
+  assert.equal(
+    shouldKeepSectionVisualCorrections(
+      before,
+      [{
+        ...before[0],
+        score: 81.9,
+        sections: [{
+          ...before[0].sections[0],
+          changedPixelRatio: 27,
+          impactRatio: 6.5,
         }],
       }],
       [{ variant: "desktop", nodeId: "hero" }],

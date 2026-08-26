@@ -33,7 +33,10 @@ export interface VisualQaBrowserResult extends VisualQaMetrics {
   diffImageUrl: string;
 }
 
-const MAX_CAPTURE_PIXELS = 4_000_000;
+// Figma's reference exporter already caps long images at eight million
+// pixels. Measure on that exact pixel grid instead of shrinking desktop
+// references to 800px and resampling the reference a second time.
+const MAX_CAPTURE_PIXELS = 8_000_000;
 
 function proxiedImageUrl(value: string): string {
   try {
@@ -234,7 +237,6 @@ async function loadReferenceImage(url: string): Promise<HTMLImageElement> {
 
 function captureSize(
   reference: VisualQaReference,
-  variant: "desktop" | "mobile",
 ): {
   width: number;
   height: number;
@@ -242,10 +244,12 @@ function captureSize(
   renderHeight: number;
   captureScale: number;
 } {
-  const preferredWidth = variant === "mobile" ? 440 : 800;
   const renderWidth = Math.max(1, Math.round(reference.sourceWidth));
   const renderHeight = Math.max(1, Math.round(reference.sourceHeight));
-  let width = Math.max(1, Math.round(Math.min(reference.width, preferredWidth)));
+  let width = Math.max(
+    1,
+    Math.round(Math.min(reference.width, renderWidth)),
+  );
   let height = Math.max(1, Math.round(width * (reference.height / reference.width)));
   if (width * height > MAX_CAPTURE_PIXELS) {
     const scale = Math.sqrt(MAX_CAPTURE_PIXELS / (width * height));
@@ -328,7 +332,7 @@ export async function runVisualQa(
     renderWidth,
     renderHeight,
     captureScale,
-  } = captureSize(reference, variant);
+  } = captureSize(reference);
   // JPEG is the only Figma-supported reference format for very long pages.
   // Ignore its small block/compression noise while keeping the stricter
   // lossless threshold for ordinary PNG references.

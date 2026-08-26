@@ -101,7 +101,7 @@ type PageTemplateEntry = {
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
-const APP_RELEASE = "0.27.3";
+const APP_RELEASE = "0.27.4";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -3368,10 +3368,12 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                         </span>
                       </div>
                       <dl className="visual-qa-metrics">
-                        <div><dt>差分面積</dt><dd>{result.changedPixelRatio}%</dd></div>
+                        <div><dt>実質差分面積</dt><dd>{result.changedPixelRatio}%</dd></div>
+                        <div><dt>生RGBA差分</dt><dd>{result.rawChangedPixelRatio}%</dd></div>
+                        <div><dt>エッジ等価</dt><dd>{result.edgeEquivalentPixelRatio}%</dd></div>
                         <div><dt>内容領域差分</dt><dd>{result.contentChangedPixelRatio}%</dd></div>
                         <div><dt>最大区間差分</dt><dd>{result.worstBandChangedPixelRatio}%</dd></div>
-                        <div><dt>平均色差</dt><dd>{result.meanColorError}</dd></div>
+                        <div><dt>実質／生平均色差</dt><dd>{result.meanColorError}／{result.rawMeanColorError}</dd></div>
                         <div><dt>全体高差</dt><dd>{result.heightDifferenceRatio > 0 ? "+" : ""}{result.heightDifferenceRatio}%</dd></div>
                         <div><dt>描画幅／測定幅</dt><dd>{result.renderWidth}px／{result.width}px</dd></div>
                       </dl>

@@ -16,7 +16,8 @@ export function resolveVisualQaDraftGate(input: {
   error: boolean;
   acknowledged: boolean;
 }): VisualQaDraftGate {
-  const hasFailure = input.error || input.resultStatuses.includes("fail");
+  const hasFailure = input.error
+    || input.resultStatuses.some((status) => status !== "pass");
   const complete =
     input.referenceCount > 0 &&
     !input.busy &&
@@ -99,9 +100,12 @@ export interface VisualQaMetrics {
   width: number;
   height: number;
   changedPixelRatio: number;
+  rawChangedPixelRatio: number;
+  edgeEquivalentPixelRatio: number;
   contentChangedPixelRatio: number;
   worstBandChangedPixelRatio: number;
   meanColorError: number;
+  rawMeanColorError: number;
   brightnessDelta: number;
   generatedHeight: number;
   heightDifferenceRatio: number;
@@ -167,8 +171,8 @@ export function shouldKeepVisualCorrections(
     const corrected = afterByVariant.get(variant);
     if (!baseline || !corrected) return false;
     if (
-      corrected.score < baseline.score - 0.2
-      || corrected.changedPixelRatio > baseline.changedPixelRatio + 0.2
+      corrected.score < baseline.score
+      || corrected.changedPixelRatio > baseline.changedPixelRatio
     ) {
       return false;
     }
@@ -195,8 +199,8 @@ export function shouldKeepSectionVisualCorrections(
     const correctedPage = afterByVariant.get(target.variant);
     if (!baselinePage || !correctedPage) return false;
     if (
-      correctedPage.score < baselinePage.score - 0.2
-      || correctedPage.changedPixelRatio > baselinePage.changedPixelRatio + 0.2
+      correctedPage.score < baselinePage.score
+      || correctedPage.changedPixelRatio > baselinePage.changedPixelRatio
     ) {
       return false;
     }
@@ -240,8 +244,8 @@ export function shouldKeepTextGeometryCorrections(
     const correctedPage = afterByVariant.get(target.variant);
     if (!baselinePage || !correctedPage) return false;
     if (
-      correctedPage.score < baselinePage.score - 0.15
-      || correctedPage.changedPixelRatio > baselinePage.changedPixelRatio + 0.15
+      correctedPage.score < baselinePage.score
+      || correctedPage.changedPixelRatio > baselinePage.changedPixelRatio
     ) {
       return false;
     }
@@ -284,8 +288,8 @@ export function shouldKeepMediaGeometryCorrections(
     const correctedPage = afterByVariant.get(target.variant);
     if (!baselinePage || !correctedPage) return false;
     if (
-      correctedPage.score < baselinePage.score - 0.15
-      || correctedPage.changedPixelRatio > baselinePage.changedPixelRatio + 0.15
+      correctedPage.score < baselinePage.score
+      || correctedPage.changedPixelRatio > baselinePage.changedPixelRatio
     ) {
       return false;
     }
@@ -328,8 +332,8 @@ export function shouldKeepDecorationGeometryCorrections(
     const correctedPage = afterByVariant.get(target.variant);
     if (!baselinePage || !correctedPage) return false;
     if (
-      correctedPage.score < baselinePage.score - 0.15
-      || correctedPage.changedPixelRatio > baselinePage.changedPixelRatio + 0.15
+      correctedPage.score < baselinePage.score
+      || correctedPage.changedPixelRatio > baselinePage.changedPixelRatio
     ) {
       return false;
     }
@@ -389,6 +393,96 @@ function round(value: number, digits = 1): number {
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
+}
+
+interface PerceptualPixelDelta {
+  rawError: number;
+  changed: boolean;
+  edgeEquivalent: boolean;
+}
+
+function pixelColorError(
+  source: Uint8ClampedArray,
+  sourceOffset: number,
+  target: Uint8ClampedArray,
+  targetOffset: number,
+): number {
+  return (
+    Math.abs(source[sourceOffset] - target[targetOffset])
+    + Math.abs(source[sourceOffset + 1] - target[targetOffset + 1])
+    + Math.abs(source[sourceOffset + 2] - target[targetOffset + 2])
+    + Math.abs(source[sourceOffset + 3] - target[targetOffset + 3])
+  ) / 4;
+}
+
+function minimumNeighborhoodError(
+  sample: Uint8ClampedArray,
+  candidates: Uint8ClampedArray,
+  width: number,
+  height: number,
+  x: number,
+  y: number,
+): number {
+  const sampleOffset = (y * width + x) * 4;
+  let minimum = Number.POSITIVE_INFINITY;
+  for (let candidateY = Math.max(0, y - 1); candidateY <= Math.min(height - 1, y + 1); candidateY += 1) {
+    for (let candidateX = Math.max(0, x - 1); candidateX <= Math.min(width - 1, x + 1); candidateX += 1) {
+      minimum = Math.min(
+        minimum,
+        pixelColorError(
+          sample,
+          sampleOffset,
+          candidates,
+          (candidateY * width + candidateX) * 4,
+        ),
+      );
+    }
+  }
+  return minimum;
+}
+
+function perceptualPixelDelta(
+  reference: Uint8ClampedArray,
+  target: Uint8ClampedArray,
+  width: number,
+  height: number,
+  x: number,
+  y: number,
+  threshold: number,
+): PerceptualPixelDelta {
+  const offset = (y * width + x) * 4;
+  const rawError = pixelColorError(reference, offset, target, offset);
+  if (rawError <= threshold) {
+    return { rawError, changed: false, edgeEquivalent: false };
+  }
+
+  // Figma and the browser rasterize the same vector/text edge with slightly
+  // different sub-pixel coverage. Treat it as equivalent only when the color
+  // at this coordinate can be found within one pixel in both directions. The
+  // symmetric check keeps missing content, color changes, and larger geometry
+  // shifts visible while removing renderer-only edge noise.
+  const referenceToTarget = minimumNeighborhoodError(
+    reference,
+    target,
+    width,
+    height,
+    x,
+    y,
+  );
+  const targetToReference = minimumNeighborhoodError(
+    target,
+    reference,
+    width,
+    height,
+    x,
+    y,
+  );
+  const edgeEquivalent = Math.max(referenceToTarget, targetToReference) <= threshold;
+  return {
+    rawError,
+    changed: !edgeEquivalent,
+    edgeEquivalent,
+  };
 }
 
 function locationLabel(startPercent: number, endPercent: number): string {
@@ -977,17 +1071,20 @@ export function analyzeVisualRegions(
       let colorError = 0;
       for (let y = startY; y < endY; y += 1) {
         for (let x = startX; x < endX; x += 1) {
-          const offset = (y * width + x) * 4;
-          const pixelError =
-            (
-              Math.abs(reference[offset] - target[offset]) +
-              Math.abs(reference[offset + 1] - target[offset + 1]) +
-              Math.abs(reference[offset + 2] - target[offset + 2]) +
-              Math.abs(reference[offset + 3] - target[offset + 3])
-            ) / 4;
+          const delta = perceptualPixelDelta(
+            reference,
+            target,
+            width,
+            height,
+            x,
+            y,
+            threshold,
+          );
           pixels += 1;
-          colorError += pixelError;
-          if (pixelError > threshold) changed += 1;
+          if (delta.changed) {
+            changed += 1;
+            colorError += delta.rawError;
+          }
         }
       }
 
@@ -1141,9 +1238,12 @@ export function analyzeVisualPixels(
   );
   const diffPixels = new Uint8ClampedArray(expectedLength);
   let changed = 0;
+  let rawChanged = 0;
+  let edgeEquivalent = 0;
   let contentPixels = 0;
   let changedContentPixels = 0;
   let colorError = 0;
+  let rawColorError = 0;
   let referenceBrightness = 0;
   let targetBrightness = 0;
 
@@ -1154,12 +1254,20 @@ export function analyzeVisualPixels(
       bandCount - 1,
       Math.floor((row / height) * bandCount),
     );
-    const redError = Math.abs(reference[offset] - target[offset]);
-    const greenError = Math.abs(reference[offset + 1] - target[offset + 1]);
-    const blueError = Math.abs(reference[offset + 2] - target[offset + 2]);
-    const alphaError = Math.abs(reference[offset + 3] - target[offset + 3]);
-    const pixelError = (redError + greenError + blueError + alphaError) / 4;
-    const pixelChanged = pixelError > threshold;
+    const column = pixel % width;
+    const delta = perceptualPixelDelta(
+      reference,
+      target,
+      width,
+      height,
+      column,
+      row,
+      threshold,
+    );
+    const pixelError = delta.rawError;
+    const pixelChanged = delta.changed;
+    if (pixelError > threshold) rawChanged += 1;
+    if (delta.edgeEquivalent) edgeEquivalent += 1;
     // Plain page backgrounds can occupy most of a long website screenshot and
     // previously hid very visible typography and component differences. Count
     // the union of non-white pixels separately so foreground content is not
@@ -1179,9 +1287,10 @@ export function analyzeVisualPixels(
       if (pixelChanged) changedContentPixels += 1;
     }
 
-    colorError += pixelError;
+    rawColorError += pixelError;
+    if (pixelChanged) colorError += pixelError;
     bands[bandIndex].pixels += 1;
-    bands[bandIndex].colorError += pixelError;
+    if (pixelChanged) bands[bandIndex].colorError += pixelError;
     if (pixelChanged) {
       changed += 1;
       bands[bandIndex].changed += 1;
@@ -1214,10 +1323,13 @@ export function analyzeVisualPixels(
 
   const totalPixels = width * height;
   const changedPixelRatio = (changed / totalPixels) * 100;
+  const rawChangedPixelRatio = (rawChanged / totalPixels) * 100;
+  const edgeEquivalentPixelRatio = (edgeEquivalent / totalPixels) * 100;
   const contentChangedPixelRatio = contentPixels
     ? (changedContentPixels / contentPixels) * 100
     : changedPixelRatio;
   const meanColorError = colorError / totalPixels;
+  const rawMeanColorError = rawColorError / totalPixels;
   const brightnessDelta = (targetBrightness - referenceBrightness) / totalPixels;
   const normalizedGeneratedHeight =
     Number.isFinite(generatedHeight) && generatedHeight > 0
@@ -1245,7 +1357,7 @@ export function analyzeVisualPixels(
     band.pixels ? (band.changed / band.pixels) * 100 : 0,
   );
   const worstBandChangedPixelRatio = Math.max(0, ...bandChangedRatios);
-  const score = clamp(
+  const calculatedScore = clamp(
     100 -
       changedPixelRatio * 0.38 -
       contentChangedPixelRatio * 0.52 -
@@ -1255,6 +1367,9 @@ export function analyzeVisualPixels(
     0,
     100,
   );
+  // 100 means byte-for-byte equality. Perceptually equivalent anti-aliasing
+  // may reach the product gate but remains distinguishable from exact pixels.
+  const score = rawChanged > 0 ? Math.min(99.9, calculatedScore) : calculatedScore;
   const hotspotFloor = Math.max(2, changedPixelRatio * 1.05);
   const hotspots = bands
     .map((band, index): VisualQaHotspot => {
@@ -1280,15 +1395,15 @@ export function analyzeVisualPixels(
   const roundedContentChangedPixelRatio = round(contentChangedPixelRatio);
   const roundedWorstBandChangedPixelRatio = round(worstBandChangedPixelRatio);
   const status: VisualQaStatus =
-    roundedScore >= 94
-      && roundedContentChangedPixelRatio < 8
-      && roundedWorstBandChangedPixelRatio < 12
-      && Math.abs(heightDifferenceRatio) < 3
+    roundedScore >= 99.9
+      && roundedContentChangedPixelRatio < 0.2
+      && roundedWorstBandChangedPixelRatio < 0.5
+      && Math.abs(heightDifferenceRatio) < 0.1
       ? "pass"
-      : roundedScore >= 75
-        && roundedContentChangedPixelRatio < 32
-        && roundedWorstBandChangedPixelRatio < 50
-        && Math.abs(heightDifferenceRatio) < 12
+      : roundedScore >= 94
+        && roundedContentChangedPixelRatio < 8
+        && roundedWorstBandChangedPixelRatio < 12
+        && Math.abs(heightDifferenceRatio) < 3
         ? "review"
         : "fail";
 
@@ -1299,9 +1414,12 @@ export function analyzeVisualPixels(
       width,
       height,
       changedPixelRatio: round(changedPixelRatio),
+      rawChangedPixelRatio: round(rawChangedPixelRatio),
+      edgeEquivalentPixelRatio: round(edgeEquivalentPixelRatio),
       contentChangedPixelRatio: roundedContentChangedPixelRatio,
       worstBandChangedPixelRatio: roundedWorstBandChangedPixelRatio,
       meanColorError: round(meanColorError),
+      rawMeanColorError: round(rawMeanColorError),
       brightnessDelta: round(brightnessDelta),
       generatedHeight: Math.round(normalizedGeneratedHeight),
       heightDifferenceRatio: round(heightDifferenceRatio),
