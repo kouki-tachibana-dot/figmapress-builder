@@ -1664,9 +1664,9 @@ test("root-level corporate inquiry fields become complete responsive forms", asy
       type: "RECTANGLE",
       absoluteBoundingBox: {
         x: x + width * 0.05,
-        y: 250,
+        y: 0,
         width: width * 0.9,
-        height: 780,
+        height: 2400,
       },
       fills: [{ type: "SOLID", color: { r: 1, g: 1, b: 1 }, opacity: 0.95 }],
     });
@@ -1674,7 +1674,7 @@ test("root-level corporate inquiry fields become complete responsive forms", asy
       id,
       name,
       type: "FRAME",
-      absoluteBoundingBox: { x, y: 0, width, height: 1200 },
+      absoluteBoundingBox: { x, y: 0, width, height: 2400 },
       children,
     };
   };

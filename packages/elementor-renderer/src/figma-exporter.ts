@@ -412,25 +412,50 @@ function rootRenderNodes(root: FigmaNode, context: RenderContext): FigmaNode[] {
         child.id === node.id || descendants(child).some((nested) => nested.id === node.id)
       ),
     ));
-  if (!syntheticNodes.length) return children;
-  const consumedByNode = syntheticNodes.map((node) => ({
-    node,
-    ids: new Set((node.children ?? []).map((child) => child.id)),
-  }));
-  const consumedIds = new Set(consumedByNode.flatMap(({ ids }) => [...ids]));
-  const insertions = new Map<number, FigmaNode[]>();
-  for (const entry of consumedByNode) {
-    const firstIndex = children.findIndex((child) => entry.ids.has(child.id));
-    const index = firstIndex >= 0 ? firstIndex : 0;
-    insertions.set(index, [...(insertions.get(index) ?? []), entry.node]);
+  let result = children;
+  if (syntheticNodes.length) {
+    const consumedByNode = syntheticNodes.map((node) => ({
+      node,
+      ids: new Set((node.children ?? []).map((child) => child.id)),
+    }));
+    const consumedIds = new Set(consumedByNode.flatMap(({ ids }) => [...ids]));
+    const insertions = new Map<number, FigmaNode[]>();
+    for (const entry of consumedByNode) {
+      const firstIndex = children.findIndex((child) => entry.ids.has(child.id));
+      const index = firstIndex >= 0 ? firstIndex : 0;
+      insertions.set(index, [...(insertions.get(index) ?? []), entry.node]);
+    }
+    result = [];
+    for (let index = 0; index < children.length; index += 1) {
+      result.push(...(insertions.get(index) ?? []));
+      const child = children[index];
+      if (child && !consumedIds.has(child.id)) result.push(child);
+    }
   }
-  const result: FigmaNode[] = [];
-  for (let index = 0; index < children.length; index += 1) {
-    result.push(...(insertions.get(index) ?? []));
-    const child = children[index];
-    if (child && !consumedIds.has(child.id)) result.push(child);
-  }
-  return result;
+
+  const isRootBackgroundLayer = (node: FigmaNode): boolean => {
+    if (containsText(node)) return false;
+    return [node, ...descendants(node)].some((surface) => {
+      const bounds = surface.absoluteBoundingBox;
+      if (!bounds || surface.type === "TEXT") return false;
+      const hasPaint = Boolean(
+        solidColor(surface.fills)
+        || figmaGradient(surface)
+        || ownImagePaint(surface),
+      );
+      return hasPaint
+        && bounds.width >= context.rootBounds.width * 0.72
+        && bounds.height >= context.rootBounds.height * 0.45;
+    });
+  };
+  return result
+    .map((node, index) => ({ node, index }))
+    .sort((left, right) =>
+      Number(!isRootBackgroundLayer(left.node))
+      - Number(!isRootBackgroundLayer(right.node))
+      || left.index - right.index
+    )
+    .map(({ node }) => node);
 }
 
 function renderElement(
