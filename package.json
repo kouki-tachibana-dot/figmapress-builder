@@ -1,6 +1,6 @@
 {
   "name": "figmapress-builder",
-  "version": "0.28.3",
+  "version": "0.28.4",
   "private": true,
   "packageManager": "npm@10.9.4",
   "engines": {

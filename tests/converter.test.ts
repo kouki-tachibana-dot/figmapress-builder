@@ -724,6 +724,58 @@ test("Japanese Figma text records its webfont and deterministic glyph fallback",
   assert.match(result.previewHtml, /font-family:Inter,&#039;Noto Sans JP&#039;/);
 });
 
+test("long unbroken serif copy keeps Figma line width as editable text", async () => {
+  const file: MockFigmaFile = {
+    document: {
+      id: "0:0",
+      name: "Long serif metric calibration",
+      type: "DOCUMENT",
+      children: [{
+        id: "1:0",
+        name: "Page",
+        type: "CANVAS",
+        children: [{
+          id: "2:0",
+          name: "SP-page",
+          type: "FRAME",
+          absoluteBoundingBox: { x: 0, y: 0, width: 440, height: 500 },
+          children: [{
+            id: "3:0",
+            name: "Long placeholder",
+            type: "TEXT",
+            characters: "Sample".repeat(20),
+            absoluteBoundingBox: { x: 40, y: 80, width: 360, height: 220 },
+            style: {
+              fontFamily: "Noto Serif JP",
+              fontSize: 14,
+              fontWeight: 400,
+              letterSpacing: 0.7,
+              lineHeightPx: 26,
+            },
+          }],
+        }],
+      }],
+    },
+  };
+
+  const result = await convertFile(file);
+  const textWidget = result.elementorTemplate.content[0]?.elements[0];
+  assert.equal(textWidget?.widgetType, "text-editor");
+  assert.deepEqual(textWidget?.settings.typography_letter_spacing, {
+    unit: "vw",
+    size: 0.239,
+    sizes: [],
+  });
+  assert.match(
+    String(textWidget?.settings.editor),
+    /letter-spacing:0\.239vw/,
+  );
+  assert.match(
+    result.previewHtml,
+    /letter-spacing:calc\(var\(--figma-unit\) \* 1\.05\)/,
+  );
+});
+
 test("Figma image fit modes use exact renders first and safe native fallbacks", async () => {
   const file: MockFigmaFile = {
     document: {
@@ -1606,6 +1658,18 @@ test("root-level corporate inquiry fields become complete responsive forms", asy
       absoluteBoundingBox: { x: x + width * 0.46, y: 1048, width: width * 0.08, height: 24 },
       style: { fontSize: 18, fontWeight: 700 },
     });
+    children.push({
+      id: `${id}:large-background`,
+      name: "Rectangle 227",
+      type: "RECTANGLE",
+      absoluteBoundingBox: {
+        x: x + width * 0.05,
+        y: 250,
+        width: width * 0.9,
+        height: 780,
+      },
+      fills: [{ type: "SOLID", color: { r: 1, g: 1, b: 1 }, opacity: 0.95 }],
+    });
     return {
       id,
       name,
@@ -1692,6 +1756,20 @@ test("root-level corporate inquiry fields become complete responsive forms", asy
   );
   assert.equal(result.qualityReport?.metrics.expectedFunctionalWidgets.contactForm, 2);
   assert.equal(result.qualityReport?.metrics.functionalWidgets.contactForm, 2);
+  const desktopBackground = result.previewHtml.indexOf(
+    'data-figmapress-node-id="40:1:large-background"',
+  );
+  const desktopFirstLabel = result.previewHtml.indexOf(
+    'data-figmapress-node-id="40:1:label:0"',
+  );
+  const mobileBackground = result.previewHtml.indexOf(
+    'data-figmapress-node-id="40:2:large-background"',
+  );
+  const mobileFirstLabel = result.previewHtml.indexOf(
+    'data-figmapress-node-id="40:2:label:0"',
+  );
+  assert.ok(desktopBackground >= 0 && desktopBackground < desktopFirstLabel);
+  assert.ok(mobileBackground >= 0 && mobileBackground < mobileFirstLabel);
   assert.equal(
     result.qualityReport?.checks.find((check) => check.id === "component-geometry")?.status,
     "pass",

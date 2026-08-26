@@ -697,6 +697,36 @@ function looseRootContactFormNode(root: FigmaNode): FigmaNode | null {
         && nestedCenters.every((nestedCenter) => nestedCenter >= startY && nestedCenter <= endY));
   });
   if (!formChildren.length) return null;
+  const formHeight = endY - startY;
+  const isLargeBackgroundLayer = (child: FigmaNode): boolean => {
+    if (child.type === "TEXT") return false;
+    if (contactFormTexts(child).length > 0) return false;
+    return [child, ...descendants(child)].some((surface) => {
+      const surfaceBounds = surface.absoluteBoundingBox;
+      if (!surfaceBounds || surface.type === "TEXT") return false;
+      const hasPaint = Boolean(
+        solidColor(surface.fills)
+        || figmaGradient(surface)
+        || ownImagePaint(surface),
+      );
+      return hasPaint
+        && surfaceBounds.width >= rootBounds.width * 0.72
+        && surfaceBounds.height >= formHeight * 0.45;
+    });
+  };
+  // A loose root-level form often stores its translucent panel after labels
+  // in the Figma child list. Once those nodes are grouped into a synthetic
+  // form container, normal DOM paint order would place that panel on top and
+  // make otherwise valid labels and controls look blank. Keep large paint-only
+  // surfaces at the back while preserving the original order within each tier.
+  const orderedFormChildren = formChildren
+    .map((child, index) => ({ child, index }))
+    .sort((left, right) =>
+      Number(!isLargeBackgroundLayer(left.child))
+      - Number(!isLargeBackgroundLayer(right.child))
+      || left.index - right.index
+    )
+    .map(({ child }) => child);
   return {
     id: `${root.id}:figmapress-contact-form`,
     name: "{wp:form} inferred loose contact form",
@@ -707,7 +737,7 @@ function looseRootContactFormNode(root: FigmaNode): FigmaNode | null {
       width: rootBounds.width,
       height: endY - startY,
     },
-    children: formChildren,
+    children: orderedFormChildren,
   };
 }
 
@@ -1895,8 +1925,8 @@ function textElement(
   parentNode: FigmaNode,
   context: RenderContext,
 ): ElementorElement {
-  const style = node.style ?? {};
   const richRuns = textRuns(node);
+  const style = richRuns.length === 1 ? richRuns[0]?.style ?? {} : node.style ?? {};
   const fontSize = textFontSize(style, richRuns, bounds);
   const lineHeight = textLineHeight(style, richRuns, fontSize);
   const settings: ElementorSettings = {
@@ -2164,8 +2194,8 @@ function previewNode(
   const overflow = node.clipsContent ? "overflow:hidden;" : "overflow:visible;";
 
   if (node.type === "TEXT") {
-    const style = node.style ?? {};
     const runs = textRuns(node);
+    const style = runs.length === 1 ? runs[0]?.style ?? {} : node.style ?? {};
     const fontSize = textFontSize(style, runs, bounds);
     // The wrapper intentionally has a zero font size so adjacent rich-text
     // runs do not inherit stray whitespace. Every run therefore has to restore
@@ -2278,9 +2308,22 @@ function flexAlignment(value: string | undefined): string {
 
 function textRuns(node: FigmaNode): RichRun[] {
   const value = node.characters ?? "";
+  const calibrateLongLatin = /[A-Za-z0-9]{80,}/.test(value);
+  const calibratedStyle = (style: FigmaTypeStyle): FigmaTypeStyle => {
+    const fontSize = positive(style.fontSize) ? style.fontSize : 0;
+    const serif = /serif|mincho/i.test(style.fontFamily ?? "");
+    if (!calibrateLongLatin || !serif || !fontSize) return style;
+    // Figma and Chromium use slightly different advances for long, unbroken
+    // Noto Serif Latin runs. The small tracking calibration keeps Figma's
+    // editable text and line wrapping aligned without rasterising the copy.
+    return {
+      ...style,
+      letterSpacing: round((style.letterSpacing ?? 0) + fontSize * 0.025),
+    };
+  };
   const overrides = node.characterStyleOverrides;
   if (!overrides?.length || !node.styleOverrideTable) {
-    return [{ text: value, style: node.style ?? {} }];
+    return [{ text: value, style: calibratedStyle(node.style ?? {}) }];
   }
   const runs: RichRun[] = [];
   let start = 0;
@@ -2309,12 +2352,14 @@ function textRuns(node: FigmaNode): RichRun[] {
     }
     runs.push({
       text: value.slice(start, index),
-      style,
+      style: calibratedStyle(style),
     });
     start = index;
     current = next;
   }
-  return runs.length ? runs : [{ text: value, style: node.style ?? {} }];
+  return runs.length
+    ? runs
+    : [{ text: value, style: calibratedStyle(node.style ?? {}) }];
 }
 
 function runHtml(run: RichRun, context: RenderContext): string {
