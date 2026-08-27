@@ -1,0 +1,9 @@
+@media (max-width: 767px) {
+    .figmapress-native-form .elementor-field-type-radio .elementor-field-option > label,
+    .figmapress-native-form .elementor-field-type-checkbox .elementor-field-option > label,
+    .figmapress-native-form .elementor-field-type-acceptance .elementor-field-option > label {
+        align-items: center !important;
+        display: inline-flex !important;
+        min-height: 44px !important;
+    }
+}

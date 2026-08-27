@@ -39,6 +39,14 @@ const accessibilityStylePath = new URL(
   "../wordpress-plugin/figmapress-connector/assets/elementor-accessibility-0194.css",
   import.meta.url,
 );
+const accessibilityPatchScriptPath = new URL(
+  "../wordpress-plugin/figmapress-connector/assets/elementor-accessibility-0195.js",
+  import.meta.url,
+);
+const accessibilityPatchStylePath = new URL(
+  "../wordpress-plugin/figmapress-connector/assets/elementor-accessibility-0195.css",
+  import.meta.url,
+);
 const elementorWidgetsPath = new URL(
   "../wordpress-plugin/figmapress-connector/includes/elementor-widgets.php",
   import.meta.url,
@@ -204,6 +212,25 @@ test("Connector bypasses stripped asset versions and retries native Elementor UX
   assert.match(script, /field\.setAttribute\("aria-required", "true"\)/);
   assert.match(style, /min-height:\s*44px\s*!important/);
   assert.match(style, /min-width:\s*44px\s*!important/);
+});
+
+test("Connector preserves 44px choice labels and excludes phonetic autocomplete", async () => {
+  const [plugin, script, style] = await Promise.all([
+    readFile(pluginPath, "utf8"),
+    readFile(accessibilityPatchScriptPath, "utf8"),
+    readFile(accessibilityPatchStylePath, "utf8"),
+  ]);
+
+  assert.match(plugin, /elementor-accessibility-0195\.css/);
+  assert.match(plugin, /elementor-accessibility-0195\.js/);
+  assert.match(plugin, /wp_enqueue_style\( 'figmapress-elementor-accessibility-0195' \)/);
+  assert.match(plugin, /wp_enqueue_script\( 'figmapress-elementor-accessibility-0195' \)/);
+  assert.match(style, /\.elementor-field-type-radio \.elementor-field-option > label/);
+  assert.match(style, /display:\s*inline-flex\s*!important/);
+  assert.match(style, /min-height:\s*44px\s*!important/);
+  assert.match(script, /\(\?:\^\|\[_-\]\)kana/);
+  assert.match(script, /field\.removeAttribute\("autocomplete"\)/);
+  assert.match(script, /\[250, 750, 1500, 3000\]/);
 });
 
 test("Connector routes only owned Elementor pages away from the memory-heavy block editor", async () => {
