@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  figmaFrameId,
   figmaSiteSourceKey,
   figmaSourceKey,
 } from "../apps/web/src/lib/figma-source-key";
@@ -28,6 +29,17 @@ test("multi-page site identity stays stable across preview selection and shared 
   assert.equal(
     figmaSiteSourceKey("PaNNOGcUo5Uyg5UrEsYeyd"),
     "figma:PaNNOGcUo5Uyg5UrEsYeyd:root",
+  );
+});
+
+test("focused Figma URLs expose the frame used by preflight and site saving", () => {
+  assert.equal(
+    figmaFrameId("https://www.figma.com/design/PaNNOGcUo5Uyg5UrEsYeyd/site?node-id=192-176"),
+    "192:176",
+  );
+  assert.equal(
+    figmaFrameId("https://www.figma.com/design/PaNNOGcUo5Uyg5UrEsYeyd/site"),
+    undefined,
   );
 });
 

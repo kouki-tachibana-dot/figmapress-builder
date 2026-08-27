@@ -74,7 +74,11 @@ import { cssColorIsPainted } from "@/lib/text-integrity";
 import { resolveFigmaRequestAuthentication } from "@/lib/figma-client-auth";
 import type { FigmaPageCandidate } from "@/lib/figma-frame-selection";
 import { currentCandidateFigmaSitePageKey } from "@/lib/figma-site-plan";
-import { figmaSiteSourceKey, figmaSourceKey } from "@/lib/figma-source-key";
+import {
+  figmaFrameId,
+  figmaSiteSourceKey,
+  figmaSourceKey,
+} from "@/lib/figma-source-key";
 import {
   runWordPressWriteWithNetworkFallback,
   shouldProxyWordPressDraft,
@@ -102,7 +106,7 @@ type PageTemplateEntry = {
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
-const APP_RELEASE = "0.28.16";
+const APP_RELEASE = "0.28.17";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -1050,6 +1054,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const conversionRequiresDynamicForms = wpBuildMode === "site"
     || (output?.qualityReport?.metrics.functionalWidgets.contactForm ?? 0) > 0;
   const multiPagePlan = output?.multiPagePlan;
+  const currentFigmaFrameId = selectedFrameId || figmaFrameId(fileKeyOrUrl) || "";
   const requiredMultiPageConnectorVersion = multiPagePlan?.pages.some((page) => page.frameId)
     ? FIGMA_PAGE_SET_CONNECTOR_VERSION
     : MULTI_PAGE_CONNECTOR_VERSION;
@@ -1883,10 +1888,10 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       const templates = new Map(sitePreflightTemplates.current);
       const candidateMode = plan.pages.every((page) => Boolean(page.frameId));
       const currentPageKey = candidateMode
-        ? currentCandidateFigmaSitePageKey(
+          ? currentCandidateFigmaSitePageKey(
             plan,
             figmaPageCandidates,
-            selectedFrameId,
+            currentFigmaFrameId,
           )
         : "home";
       if (!currentPageKey) {
@@ -1973,10 +1978,10 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       pageTemplates = new Map(sitePreflightTemplates.current);
       const candidateMode = plan.pages.every((page) => Boolean(page.frameId));
       const currentPageKey = candidateMode
-        ? currentCandidateFigmaSitePageKey(
+          ? currentCandidateFigmaSitePageKey(
             plan,
             figmaPageCandidates,
-            selectedFrameId,
+            currentFigmaFrameId,
           )
         : "home";
       if (!currentPageKey) {

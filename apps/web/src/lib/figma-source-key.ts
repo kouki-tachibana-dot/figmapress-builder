@@ -41,6 +41,12 @@ export function figmaSourceKey(
   return `figma:${identity.fileKey}:${selectedFrameId || identity.nodeId}`;
 }
 
+/** Node id carried by a focused Figma URL, when it names a real frame. */
+export function figmaFrameId(input: string): string | undefined {
+  const identity = parseFigmaSourceIdentity(input);
+  return identity && identity.nodeId !== "root" ? identity.nodeId : undefined;
+}
+
 /** Stable identity for a complete multi-page site, independent of preview selection. */
 export function figmaSiteSourceKey(input: string): string | undefined {
   const identity = parseFigmaSourceIdentity(input);
