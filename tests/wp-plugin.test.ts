@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { runInNewContext } from "node:vm";
 
 const restApiPath = new URL(
   "../wordpress-plugin/figmapress-connector/includes/rest-api.php",
@@ -45,6 +46,10 @@ const accessibilityPatchScriptPath = new URL(
 );
 const accessibilityPatchStylePath = new URL(
   "../wordpress-plugin/figmapress-connector/assets/elementor-accessibility-0195.css",
+  import.meta.url,
+);
+const phoneticPatchScriptPath = new URL(
+  "../wordpress-plugin/figmapress-connector/assets/elementor-accessibility-0196.js",
   import.meta.url,
 );
 const elementorWidgetsPath = new URL(
@@ -231,6 +236,48 @@ test("Connector preserves 44px choice labels and excludes phonetic autocomplete"
   assert.match(script, /\(\?:\^\|\[_-\]\)kana/);
   assert.match(script, /field\.removeAttribute\("autocomplete"\)/);
   assert.match(script, /\[250, 750, 1500, 3000\]/);
+});
+
+test("Connector removes ordinary-name autocomplete from joined kana field hints", async () => {
+  const [plugin, script] = await Promise.all([
+    readFile(pluginPath, "utf8"),
+    readFile(phoneticPatchScriptPath, "utf8"),
+  ]);
+  let autocomplete: string | null = "organization";
+  const field = {
+    id: "form-field-company_kana",
+    name: "form_fields[company_kana]",
+    placeholder: "",
+    getAttribute(name: string) {
+      return name === "autocomplete" ? autocomplete : null;
+    },
+    removeAttribute(name: string) {
+      if (name === "autocomplete") autocomplete = null;
+    },
+  };
+  const immediateTimeout = (callback: () => void) => {
+    callback();
+    return 1;
+  };
+
+  runInNewContext(script, {
+    document: {
+      readyState: "complete",
+      addEventListener() {},
+      querySelectorAll() {
+        return [field];
+      },
+    },
+    window: {
+      addEventListener() {},
+      setTimeout: immediateTimeout,
+    },
+  });
+
+  assert.equal(autocomplete, null);
+  assert.match(plugin, /elementor-accessibility-0196\.js/);
+  assert.match(plugin, /wp_enqueue_script\( 'figmapress-elementor-accessibility-0196' \)/);
+  assert.match(script, /\(\?:\^\|\[\^a-z0-9\]\)kana/);
 });
 
 test("Connector routes only owned Elementor pages away from the memory-heavy block editor", async () => {
