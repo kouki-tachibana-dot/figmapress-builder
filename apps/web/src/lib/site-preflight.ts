@@ -15,6 +15,9 @@ export interface FigmaSitePreflightReport {
   widgets: number;
   textWidgets: number;
   imageWidgets: number;
+  nativeButtons: number;
+  clickableContainers: number;
+  structuredLinks: number;
   links: number;
   destinations: number;
   navigationPages: number;
@@ -87,6 +90,12 @@ function inspectTemplateFunctionalInventory(
       if (element.widgetType === "figmapress-link") {
         recordSemanticUrl(element.settings.link_label, element.settings.link_url);
       }
+      if (element.widgetType === "button") {
+        recordSemanticUrl(element.settings.text, element.settings.link);
+      }
+      if (element.elType === "container" && element.settings.html_tag === "a") {
+        recordSemanticUrl(element.settings.figmapress_node_name, element.settings.link);
+      }
       if (element.widgetType === "figmapress-contact-form" || element.widgetType === "form") result.contactForms += 1;
       if (element.widgetType === "figmapress-carousel" || element.widgetType === "image-carousel") result.carousels += 1;
       if (element.widgetType === "figmapress-accordion" || element.widgetType === "accordion" || element.widgetType === "nested-accordion") result.accordions += 1;
@@ -114,6 +123,9 @@ export function inspectFigmaSiteTemplates(
   let widgets = 0;
   let textWidgets = 0;
   let imageWidgets = 0;
+  let nativeButtons = 0;
+  let clickableContainers = 0;
+  let structuredLinks = 0;
   let links = 0;
   let navigationPages = 0;
   let navigationWidgets = 0;
@@ -153,6 +165,9 @@ export function inspectFigmaSiteTemplates(
     widgets += nativeAudit.widgets;
     textWidgets += nativeAudit.textWidgets;
     imageWidgets += nativeAudit.imageWidgets;
+    nativeButtons += nativeAudit.nativeButtons;
+    clickableContainers += nativeAudit.clickableContainers;
+    structuredLinks += nativeAudit.structuredLinks;
 
     const audit = auditElementorTemplateLinks(template);
     const unknownPlaceholders = audit.unresolvedPlaceholders.filter(
@@ -221,6 +236,9 @@ export function inspectFigmaSiteTemplates(
     widgets,
     textWidgets,
     imageWidgets,
+    nativeButtons,
+    clickableContainers,
+    structuredLinks,
     links,
     destinations: referencedDestinations.size,
     navigationPages,

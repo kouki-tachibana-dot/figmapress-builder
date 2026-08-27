@@ -304,6 +304,9 @@ export function auditElementorTemplateLinks(
       if (element.widgetType === "figmapress-link") {
         recordUrlObject(element.settings.link_url);
       }
+      if (element.elType === "container" && element.settings.html_tag === "a") {
+        recordUrlObject(element.settings.link);
+      }
       if (element.widgetType === "image" || element.widgetType === "button") {
         recordUrlObject(element.settings.link);
       }

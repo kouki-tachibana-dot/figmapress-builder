@@ -453,6 +453,7 @@ function renderElement(
   parentBounds: FigmaBounds,
   parentNode: FigmaNode,
   context: RenderContext,
+  suppressLinks = false,
 ): ElementorElement | null {
   const bounds = node.absoluteBoundingBox;
   if (node.visible === false || !bounds || bounds.width <= 0 || bounds.height <= 0) return null;
@@ -464,33 +465,45 @@ function renderElement(
   const carousel = carouselElement(node, bounds, parentBounds, parentNode, context);
   if (carousel) return withSectionAnchor(carousel, node, context);
 
+  const action = suppressLinks ? null : functionalLink(node, context);
   const asset = visualAsset(node, context.assets);
   if (asset) {
     return withSectionAnchor(
-      imageElement(node, bounds, parentBounds, parentNode, asset, context),
+      imageElement(node, bounds, parentBounds, parentNode, asset, context, action),
       node,
       context,
     );
   }
   if (node.type === "TEXT" && typeof node.characters === "string") {
     return withSectionAnchor(
-      textElement(node, bounds, parentBounds, parentNode, context),
+      textElement(node, bounds, parentBounds, parentNode, context, action),
+      node,
+      context,
+    );
+  }
+
+  if (action && nativeButtonIntent(node)) {
+    return withSectionAnchor(
+      buttonElement(node, bounds, parentBounds, parentNode, action, context),
       node,
       context,
     );
   }
 
   const accordion = accordionPlan(node);
+  const clickableContainer = Boolean(action && clickableContainerIntent(node));
   const children = (node.children ?? [])
     .filter((child) => !accordion || !isInsideInteractionBounds(child, accordion.bounds))
-    .map((child) => renderElement(child, bounds, node, context))
+    .map((child) => renderElement(
+      child,
+      bounds,
+      node,
+      context,
+      suppressLinks || clickableContainer,
+    ))
     .filter((element): element is ElementorElement => element !== null);
   if (accordion) {
     children.push(accordionElement(node, accordion, bounds, node, context));
-  }
-  const action = functionalLink(node, context);
-  if (action) {
-    children.push(linkOverlayElement(node, action, context));
   }
   const hasVisibleStyle = Boolean(
     solidColor(node.fills)
@@ -508,7 +521,14 @@ function renderElement(
       ...containerPosition(node, bounds, parentBounds, parentNode, context),
       figmapress_node_id: node.id,
       figmapress_node_name: node.name,
-      html_tag: htmlTag(node),
+      html_tag: clickableContainer ? "a" : htmlTag(node),
+      ...(clickableContainer && action
+        ? {
+            link: elementorUrl(action),
+            css_classes: "figmapress-native-clickable-container",
+            figmapress_link_role: "clickable-container",
+          }
+        : {}),
     },
     elements: children,
   }, node, context);
@@ -1903,34 +1923,112 @@ function findNode(root: FigmaNode, id: string): FigmaNode | null {
 }
 
 function elementorUrl(link: FunctionalLink): Record<string, unknown> {
+  const ariaLabel = link.label.replace(/[|,]+/g, " ").replace(/\s+/g, " ").trim();
   return {
     url: link.url,
     is_external: link.external ? "on" : "",
     nofollow: "",
+    custom_attributes: ariaLabel ? `aria-label|${ariaLabel}` : "",
   };
 }
 
-function linkOverlayElement(
+function hasDirectNavigableInteraction(node: FigmaNode): boolean {
+  return (node.interactions ?? []).some((interaction) =>
+    (interaction.actions ?? []).some((action) => {
+      if (typeof action.url === "string" && action.url.trim()) return true;
+      const navigation = `${action.type ?? ""} ${action.navigation ?? ""}`.toUpperCase();
+      return typeof action.destinationId === "string"
+        && Boolean(action.destinationId)
+        && !/(?:OVERLAY|SWAP|BACK|CLOSE)/.test(navigation);
+    }),
+  );
+}
+
+function nativeButtonIntent(node: FigmaNode): boolean {
+  if (!/(?:^|[\s/_-])(?:button|btn|cta)(?:$|[\s/_-])|ボタン|送信(?:する)?|申し込|予約(?:する)?/i.test(node.name)) {
+    return false;
+  }
+  return descendants(node).some((child) => child.type === "TEXT" && child.characters?.trim());
+}
+
+function clickableContainerIntent(node: FigmaNode): boolean {
+  return hasDirectNavigableInteraction(node)
+    || /(?:^|[\s/_-])(?:card|tile|banner|clickable)(?:$|[\s/_-])|カード|バナー/i.test(node.name);
+}
+
+function buttonElement(
   node: FigmaNode,
+  bounds: FigmaBounds,
+  parentBounds: FigmaBounds,
+  parentNode: FigmaNode,
   action: FunctionalLink,
   context: RenderContext,
 ): ElementorElement {
-  return widget(context.ids, `${node.id}:link`, "figmapress-link", {
-    figmapress_node_id: `${node.id}:link`,
-    figmapress_node_name: `${node.name} / link`,
-    link_label: action.label,
-    link_url: elementorUrl(action),
-    _position: "absolute",
-    _offset_orientation_h: "start",
-    _offset_x: size(0, "%"),
-    _offset_orientation_v: "start",
-    _offset_y: size(0, "%"),
-    _element_width: "initial",
-    _element_custom_width: size(100, "%"),
-    _element_custom_width_tablet: size(100, "%"),
-    _element_custom_width_mobile: size(100, "%"),
-    z_index: 20,
-  });
+  const labelNode = descendants(node)
+    .filter((child) => child.type === "TEXT" && child.characters?.trim())
+    .sort((left, right) => area(right) - area(left))[0];
+  const labelBounds = labelNode?.absoluteBoundingBox;
+  const visualNode = solidColor(node.fills)
+    ? node
+    : labelBounds ? smallestContainingVisual(node, labelBounds) ?? node : node;
+  const style = labelNode?.style ?? {};
+  const fontSize = style.fontSize ?? Math.max(12, Math.min(24, bounds.height * 0.32));
+  const paddingTop = labelBounds ? Math.max(0, labelBounds.y - bounds.y) : bounds.height * 0.2;
+  const paddingRight = labelBounds
+    ? Math.max(0, bounds.x + bounds.width - labelBounds.x - labelBounds.width)
+    : bounds.width * 0.08;
+  const paddingBottom = labelBounds
+    ? Math.max(0, bounds.y + bounds.height - labelBounds.y - labelBounds.height)
+    : bounds.height * 0.2;
+  const paddingLeft = labelBounds ? Math.max(0, labelBounds.x - bounds.x) : bounds.width * 0.08;
+  const settings: ElementorSettings = {
+    ...widgetPosition(node, bounds, parentBounds, parentNode),
+    figmapress_node_id: node.id,
+    figmapress_node_name: node.name,
+    figmapress_link_role: "button",
+    css_classes: "figmapress-native-button",
+    _css_classes: "figmapress-native-button",
+    text: labelNode?.characters?.trim() || action.label || node.name || "詳しく見る",
+    link: elementorUrl(action),
+    align: "justify",
+    typography_typography: "custom",
+    typography_font_family: style.fontFamily ?? "Arial",
+    typography_font_size: canvasSize(fontSize, context),
+    typography_font_weight: String(style.fontWeight ?? 600),
+    typography_line_height: size(
+      textLineHeight(style, labelNode ? textRuns(labelNode) : [], fontSize) / fontSize,
+      "em",
+    ),
+    typography_letter_spacing: canvasSize(style.letterSpacing ?? 0, context),
+    button_text_color: solidColor(style.fills ?? labelNode?.fills) ?? "#FFFFFF",
+    background_color: solidColor(visualNode.fills) ?? "transparent",
+    button_padding: dimensions(
+      paddingTop,
+      paddingRight,
+      paddingBottom,
+      paddingLeft,
+      "vw",
+      context.rootBounds.width,
+    ),
+    border_radius: radiusDimensions(visualNode, context),
+  };
+  const border = solidColor(visualNode.strokes);
+  if (border) {
+    settings.border_border = "solid";
+    settings.border_color = border;
+    settings.border_width = dimensions(
+      visualNode.strokeWeight ?? 1,
+      visualNode.strokeWeight ?? 1,
+      visualNode.strokeWeight ?? 1,
+      visualNode.strokeWeight ?? 1,
+      "vw",
+      context.rootBounds.width,
+    );
+  }
+  applyTypographyFlags(settings, style);
+  applyEffects(settings, node);
+  applyRotation(settings, node, parentBounds);
+  return widget(context.ids, node.id, "button", settings);
 }
 
 function textElement(
@@ -1939,6 +2037,7 @@ function textElement(
   parentBounds: FigmaBounds,
   parentNode: FigmaNode,
   context: RenderContext,
+  action: FunctionalLink | null,
 ): ElementorElement {
   const richRuns = textRuns(node);
   const style = richRuns.length === 1 ? richRuns[0]?.style ?? {} : node.style ?? {};
@@ -1963,7 +2062,6 @@ function textElement(
   applyRotation(settings, node, parentBounds);
 
   const content = richRuns.map((run) => runHtml(run, context)).join("").replace(/\n/g, "<br>");
-  const action = functionalLink(node, context);
   const linkedContent = action
     ? `<a data-figmapress-functional-link href="${escapeAttribute(action.url)}"${action.external ? ' target="_blank" rel="noopener noreferrer"' : ""} style="color:inherit;text-decoration:inherit">${content}</a>`
     : content;
@@ -1983,6 +2081,7 @@ function imageElement(
   parentNode: FigmaNode,
   asset: FigmaVisualAsset,
   context: RenderContext,
+  action: FunctionalLink | null,
 ): ElementorElement {
   const settings: ElementorSettings = {
     ...widgetPosition(node, bounds, parentBounds, parentNode),
@@ -2007,7 +2106,6 @@ function imageElement(
   }
   const imageManifest = asset.rendered ? null : figmaImageManifest(asset.paint);
   if (imageManifest) settings.figmapress_image = imageManifest;
-  const action = functionalLink(node, context);
   if (action) {
     settings.link_to = "custom";
     settings.link = elementorUrl(action);

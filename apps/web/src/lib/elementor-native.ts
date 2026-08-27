@@ -30,6 +30,10 @@ export interface NativeElementorAudit {
   widgets: number;
   textWidgets: number;
   imageWidgets: number;
+  nativeButtons: number;
+  clickableContainers: number;
+  structuredLinks: number;
+  nestedLinkViolations: number;
   desktopRoots: number;
   mobileRoots: number;
 }
@@ -56,6 +60,41 @@ function textWidgetIsPainted(element: ElementorElement): boolean {
   if (!elementOpacityIsPainted(element.settings.opacity)) return false;
   const textColor = element.settings.text_color ?? element.settings.title_color;
   return typeof textColor !== "string" || cssColorIsPainted(textColor);
+}
+
+const URL_CONTROL_KEYS = ["url", "is_external", "nofollow", "custom_attributes"] as const;
+
+function urlControlForElement(element: ElementorElement): Record<string, unknown> | null {
+  const candidate = element.elType === "container" && element.settings.html_tag === "a"
+    ? element.settings.link
+    : element.widgetType === "button" || element.widgetType === "image"
+      ? element.settings.link
+      : element.widgetType === "figmapress-link"
+        ? element.settings.link_url
+        : null;
+  return candidate && typeof candidate === "object"
+    ? candidate as Record<string, unknown>
+    : null;
+}
+
+function structuredUrlControlForElement(element: ElementorElement): Record<string, unknown> | null {
+  if (
+    !(element.elType === "container" && element.settings.html_tag === "a")
+    && element.widgetType !== "button"
+    && element.widgetType !== "image"
+  ) {
+    return null;
+  }
+  return urlControlForElement(element);
+}
+
+function elementHasLink(element: ElementorElement): boolean {
+  const control = urlControlForElement(element);
+  if (typeof control?.url === "string" && control.url.trim()) return true;
+  if (element.widgetType === "text-editor" && typeof element.settings.editor === "string") {
+    return /<a\b[^>]*\bhref=["'][^"']+["']/i.test(element.settings.editor);
+  }
+  return false;
 }
 
 /**
@@ -112,6 +151,10 @@ export function auditNativeElementorTemplate(
   let widgets = 0;
   let textWidgets = 0;
   let imageWidgets = 0;
+  let nativeButtons = 0;
+  let clickableContainers = 0;
+  let structuredLinks = 0;
+  let nestedLinkViolations = 0;
   let desktopRoots = 0;
   let mobileRoots = 0;
 
@@ -125,7 +168,11 @@ export function auditNativeElementorTemplate(
     errors.push("旧式のFigma全画面画像モードが残っています。");
   }
 
-  const visit = (elements: ElementorElement[], topLevel = false): void => {
+  const visit = (
+    elements: ElementorElement[],
+    topLevel = false,
+    linkedAncestorId = "",
+  ): void => {
     for (const element of elements) {
       if (!element.id || ids.has(element.id)) {
         errors.push(
@@ -155,6 +202,13 @@ export function auditNativeElementorTemplate(
           desktopRoots += 1;
         }
         if (classes.includes("figmapress-layout--mobile")) mobileRoots += 1;
+        if (element.settings.html_tag === "a") {
+          clickableContainers += 1;
+          const control = structuredUrlControlForElement(element);
+          if (!control || typeof control.url !== "string" || !control.url.trim()) {
+            errors.push(`クリック可能Container「${element.id}」のリンク先が空です。`);
+          }
+        }
       } else {
         widgets += 1;
         if (!element.widgetType || !SUPPORTED_WIDGETS.has(element.widgetType)) {
@@ -186,9 +240,32 @@ export function auditNativeElementorTemplate(
             imageWidgets += 1;
           }
         }
+        if (element.widgetType === "button") nativeButtons += 1;
       }
 
-      visit(element.elements);
+      const control = structuredUrlControlForElement(element);
+      if (control && typeof control.url === "string" && control.url.trim()) {
+        structuredLinks += 1;
+        const missingKeys = URL_CONTROL_KEYS.filter((key) => !(key in control));
+        if (missingKeys.length) {
+          errors.push(
+            `リンク「${element.id}」のElementor URL Controlに${missingKeys.join("・")}がありません。`,
+          );
+        }
+      }
+      const hasLink = elementHasLink(element);
+      if (linkedAncestorId && hasLink) {
+        nestedLinkViolations += 1;
+        errors.push(
+          `リンク「${element.id}」がクリック可能Container「${linkedAncestorId}」の内側に入っています。`,
+        );
+      }
+      const nextLinkedAncestor = element.elType === "container"
+        && element.settings.html_tag === "a"
+        && hasLink
+        ? element.id
+        : linkedAncestorId;
+      visit(element.elements, false, nextLinkedAncestor);
     }
   };
   visit(template.content, true);
@@ -205,6 +282,10 @@ export function auditNativeElementorTemplate(
     widgets,
     textWidgets,
     imageWidgets,
+    nativeButtons,
+    clickableContainers,
+    structuredLinks,
+    nestedLinkViolations,
     desktopRoots,
     mobileRoots,
   };

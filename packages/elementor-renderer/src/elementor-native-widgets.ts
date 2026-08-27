@@ -126,6 +126,7 @@ function elementorUrl(value: unknown): Record<string, unknown> {
     url: string(candidate?.url),
     is_external: candidate?.is_external === "on" ? "on" : "",
     nofollow: candidate?.nofollow === "on" ? "on" : "",
+    custom_attributes: string(candidate?.custom_attributes),
   };
 }
 

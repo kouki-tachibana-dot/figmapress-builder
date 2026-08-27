@@ -286,3 +286,29 @@ test("native audit accepts Elementor nested accordion child containers", () => {
   });
   assert.deepEqual(auditNativeElementorTemplate(result).errors, []);
 });
+
+test("native audit rejects official Elementor nested links", () => {
+  const link = {
+    url: "https://example.com/contact/",
+    is_external: "",
+    nofollow: "",
+    custom_attributes: "",
+  };
+  const source = template({
+    id: "card0001",
+    elType: "container",
+    isInner: false,
+    settings: {
+      css_classes: "figmapress-layout--desktop",
+      html_tag: "a",
+      link,
+    },
+    elements: [widget("button01", "button", { text: "詳しく見る", link })],
+  });
+  const audit = auditNativeElementorTemplate(source);
+  assert.equal(audit.valid, false);
+  assert.equal(audit.clickableContainers, 1);
+  assert.equal(audit.nativeButtons, 1);
+  assert.equal(audit.nestedLinkViolations, 1);
+  assert.ok(audit.errors.some((error) => error.includes("内側")));
+});

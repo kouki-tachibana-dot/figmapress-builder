@@ -557,7 +557,9 @@ function countFunctionalWidgets(elements: ElementorElement[]): {
       if (item.widgetType === "figmapress-nav" || item.widgetType === "nav-menu") result.navigation += 1;
       if (item.widgetType === "figmapress-link") result.links += 1;
       if (
-        item.widgetType === "image"
+        (item.widgetType === "image"
+          || item.widgetType === "button"
+          || (item.elType === "container" && item.settings.html_tag === "a"))
         && item.settings.link
         && typeof item.settings.link === "object"
         && typeof (item.settings.link as Record<string, unknown>).url === "string"
@@ -658,7 +660,11 @@ function inspectNavigationIntegrity(elements: ElementorElement[]): {
       if (item.widgetType === "figmapress-link") {
         recordUrl(item.settings.link_url);
       }
-      if (item.widgetType === "image") {
+      if (
+        item.widgetType === "image"
+        || item.widgetType === "button"
+        || (item.elType === "container" && item.settings.html_tag === "a")
+      ) {
         recordUrl(item.settings.link);
       }
       if (item.widgetType === "text-editor" && typeof item.settings.editor === "string") {

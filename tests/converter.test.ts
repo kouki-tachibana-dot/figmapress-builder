@@ -1972,7 +1972,11 @@ test("Figma carousel and prototype actions become editable functional widgets", 
   visit(result.elementorTemplate.content);
 
   const carousel = elements.find((element) => element.widgetType === "figmapress-carousel");
-  const link = elements.find((element) => element.widgetType === "figmapress-link");
+  const link = elements.find((element) =>
+    element.elType === "container"
+    && element.settings.html_tag === "a"
+    && element.settings.figmapress_node_id === "30:0"
+  );
   const email = elements.find((element) =>
     element.widgetType === "text-editor"
     && String(element.settings.editor).includes("hello@example.com"),
@@ -1990,7 +1994,7 @@ test("Figma carousel and prototype actions become editable functional widgets", 
   assert.equal(items[0]?.url.url, "https://example.com/report-1");
   assert.equal(items[0]?.url.is_external, "on");
   assert.equal(carousel?.settings.items_per_view, 3);
-  assert.equal((link?.settings.link_url as { url: string }).url, "#contact");
+  assert.equal((link?.settings.link as { url: string }).url, "#contact");
   assert.match(String(email?.settings.editor), /href="mailto:hello@example\.com"/);
   assert.doesNotMatch(String(plainHeading?.settings.editor), /data-figmapress-functional-link/);
   assert.equal(result.qualityReport?.metrics.functionalWidgets.carousel, 1);
@@ -2001,6 +2005,114 @@ test("Figma carousel and prototype actions become editable functional widgets", 
     "pass",
   );
   assert.equal(result.qualityReport?.metrics.navigationIntegrity.duplicateAnchors, 0);
+});
+
+test("Figma CTA and card intents use official Elementor links without nesting", async () => {
+  const destination = {
+    id: "90:0",
+    name: "Sec/Contact",
+    type: "FRAME",
+    absoluteBoundingBox: { x: 0, y: 700, width: 1440, height: 200 },
+    fills: [{ type: "SOLID", color: { r: 0.95, g: 0.95, b: 0.95 } }],
+  } satisfies FigmaNode;
+  const navigate = {
+    actions: [{ type: "NODE", navigation: "NAVIGATE", destinationId: destination.id }],
+  };
+  const file: MockFigmaFile = {
+    document: {
+      id: "0:0",
+      name: "Native link intents",
+      type: "DOCUMENT",
+      children: [{
+        id: "1:0",
+        name: "Page",
+        type: "CANVAS",
+        children: [{
+          id: "10:0",
+          name: "PC Home",
+          type: "FRAME",
+          absoluteBoundingBox: { x: 0, y: 0, width: 1440, height: 900 },
+          children: [{
+            id: "20:0",
+            name: "CTA Button",
+            type: "FRAME",
+            absoluteBoundingBox: { x: 100, y: 100, width: 280, height: 64 },
+            fills: [{ type: "SOLID", color: { r: 0.8, g: 0.04, b: 0.15 } }],
+            cornerRadius: 10,
+            interactions: [navigate],
+            children: [{
+              id: "20:1",
+              name: "CTA Label",
+              type: "TEXT",
+              characters: "お問い合わせ",
+              absoluteBoundingBox: { x: 168, y: 118, width: 144, height: 28 },
+              fills: [{ type: "SOLID", color: { r: 1, g: 1, b: 1 } }],
+              style: { fontSize: 18, fontWeight: 700, textAlignHorizontal: "CENTER" },
+            }],
+          }, {
+            id: "30:0",
+            name: "Service Card",
+            type: "FRAME",
+            absoluteBoundingBox: { x: 450, y: 100, width: 360, height: 220 },
+            fills: [{ type: "SOLID", color: { r: 1, g: 1, b: 1 } }],
+            cornerRadius: 16,
+            interactions: [navigate],
+            children: [{
+              id: "30:1",
+              name: "Card CTA Link",
+              type: "TEXT",
+              characters: "詳しく見る",
+              absoluteBoundingBox: { x: 500, y: 220, width: 160, height: 28 },
+              style: { fontSize: 16, fontWeight: 600 },
+              interactions: [navigate],
+            }],
+          }, destination],
+        }],
+      }],
+    },
+  };
+
+  const result = await convertFile(file);
+  const elements: typeof result.elementorTemplate.content = [];
+  const visit = (items: typeof result.elementorTemplate.content): void => {
+    for (const item of items) {
+      elements.push(item);
+      visit(item.elements);
+    }
+  };
+  visit(result.elementorTemplate.content);
+
+  const button = elements.find((element) => element.settings.figmapress_node_id === "20:0");
+  const card = elements.find((element) => element.settings.figmapress_node_id === "30:0");
+  const cardText = elements.find((element) => element.settings.figmapress_node_id === "30:1");
+  assert.equal(button?.widgetType, "button");
+  assert.equal(button?.settings.text, "お問い合わせ");
+  assert.deepEqual(Object.keys(button?.settings.link as object).sort(), [
+    "custom_attributes", "is_external", "nofollow", "url",
+  ]);
+  assert.equal(
+    (button?.settings.link as { custom_attributes?: string }).custom_attributes,
+    "aria-label|お問い合わせ",
+  );
+  assert.equal(card?.elType, "container");
+  assert.equal(card?.settings.html_tag, "a");
+  assert.deepEqual(Object.keys(card?.settings.link as object).sort(), [
+    "custom_attributes", "is_external", "nofollow", "url",
+  ]);
+  assert.equal(
+    (card?.settings.link as { custom_attributes?: string }).custom_attributes,
+    "aria-label|詳しく見る",
+  );
+  assert.doesNotMatch(String(cardText?.settings.editor), /<a\b/i);
+  assert.equal(elements.some((element) => element.widgetType === "figmapress-link"), false);
+  const nativeAudit = auditNativeElementorTemplate(
+    markNativeElementorTemplate(result.elementorTemplate),
+  );
+  assert.equal(nativeAudit.valid, true, nativeAudit.errors.join(" / "));
+  assert.equal(nativeAudit.nativeButtons, 1);
+  assert.equal(nativeAudit.clickableContainers, 1);
+  assert.equal(nativeAudit.structuredLinks, 2);
+  assert.equal(nativeAudit.nestedLinkViolations, 0);
 });
 
 test("quality gate warns when a Figma carousel loses its functional widget", async () => {
@@ -2533,8 +2645,9 @@ test("cross-page Figma prototype links survive page pruning in Elementor and pre
   };
   visit(result.elementorTemplate.content);
   const pageLinks = elements.filter((element) =>
-    element.widgetType === "figmapress-link"
-    && (element.settings.link_url as { url?: string })?.url === "#figmapress-page-company"
+    element.elType === "container"
+    && element.settings.html_tag === "a"
+    && (element.settings.link as { url?: string })?.url === "#figmapress-page-company"
   );
   assert.equal(pageLinks.length, 2);
   assert.match(result.previewHtml, /data-figmapress-preview-link/);

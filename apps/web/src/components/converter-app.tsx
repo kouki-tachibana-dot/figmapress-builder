@@ -102,7 +102,7 @@ type PageTemplateEntry = {
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
-const APP_RELEASE = "0.28.14";
+const APP_RELEASE = "0.28.15";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -3683,7 +3683,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                       </button>
                       {sitePreflightResult && (
                         <p role="status">
-                          ✓ {sitePreflightResult.pages}/{multiPagePlan.pages.length}ページ合格・ネイティブElementor {sitePreflightResult.nativePages}ページ／文字 {sitePreflightResult.textWidgets}個／画像 {sitePreflightResult.imageWidgets}個・実動メニュー {sitePreflightResult.navigationPages}ページ/{sitePreflightResult.navigationWidgets}個・リンク {sitePreflightResult.links}件・移動先 {sitePreflightResult.destinations}ページ・フォーム {sitePreflightResult.contactForms}個
+                          ✓ {sitePreflightResult.pages}/{multiPagePlan.pages.length}ページ合格・ネイティブElementor {sitePreflightResult.nativePages}ページ／文字 {sitePreflightResult.textWidgets}個／画像 {sitePreflightResult.imageWidgets}個／Button {sitePreflightResult.nativeButtons}個／クリック可能Container {sitePreflightResult.clickableContainers}個・正式URL {sitePreflightResult.structuredLinks}件・実動メニュー {sitePreflightResult.navigationPages}ページ/{sitePreflightResult.navigationWidgets}個・リンク {sitePreflightResult.links}件・移動先 {sitePreflightResult.destinations}ページ・フォーム {sitePreflightResult.contactForms}個
                         </p>
                       )}
                       {sitePreflightError && (
