@@ -1721,6 +1721,7 @@ function functionalLink(
     : copy;
   const phone = phoneSource.match(/(?:\+?\d[\d\s().-]{8,}\d)/)?.[0];
   const explicitlyActionable = /(?:button|cta|link|card|電話|メール|privacy|トップ|menu.?item|nav.?item)/i.test(node.name)
+    || Boolean(semanticCtaText(node))
     || (
       node.type === "TEXT"
       && Boolean(
@@ -1756,6 +1757,8 @@ function functionalLink(
 
 function actionLabel(node: FigmaNode): string {
   if (node.type === "TEXT" && node.characters?.trim()) return node.characters.trim();
+  const semanticLabel = semanticCtaText(node)?.characters?.trim();
+  if (semanticLabel) return semanticLabel;
   return descendants(node)
     .find((child) => child.type === "TEXT" && child.characters?.trim())
     ?.characters?.trim()
@@ -1776,16 +1779,16 @@ export function sectionAnchorFromText(value: string): string | null {
   if (/トップ|page.?top|\btop\b/i.test(value)) return "top";
   if (/会社案内|company|about/i.test(value)) return "company";
   if (/選ばれる理由|reasons?|strength/i.test(value)) return "reasons";
-  if (/事業(?:内容|案内)|services?|business/i.test(value)) return "services";
+  if (/事業(?:内容|案内)|サービス|services?|business/i.test(value)) return "services";
   if (/施工事例|works?|projects?|construction/i.test(value)) return "works";
   if (/解体工事|demolition/i.test(value)) return "demolition";
-  if (/お知らせ|news|topics?/i.test(value)) return "news";
+  if (/お知らせ|おしらせ|news|topics?/i.test(value)) return "news";
   if (/役員一覧|officers?|executives?|board/i.test(value)) return "officers";
   if (/thought|message|想い|voice|現場の声/i.test(value)) return "thoughts";
   if (/policy|policies|政策/i.test(value)) return "policies";
   if (/activit|report|活動報告|news|results?|実績/i.test(value)) return "activities";
   if (/profile|プロフィール/i.test(value)) return "profile";
-  if (/contact|問(?:い)?合わせ|問合|声を聞かせて|ご相談(?:はこちら|・ご意見|ください|$)/i.test(value)) return "contact";
+  if (/contact|問(?:い)?(?:合わせ|合せ)|問合|資料請求|声を聞かせて|ご相談(?:はこちら|・ご意見|ください|$)/i.test(value)) return "contact";
   return null;
 }
 
@@ -1804,17 +1807,17 @@ function sectionTextMatchesAnchor(value: string, anchor: SectionAnchor): boolean
     case "reasons":
       return /選ばれる理由|reasons?|strength/i.test(value);
     case "services":
-      return /事業(?:内容|案内)|services?|business/i.test(value);
+      return /事業(?:内容|案内)|サービス|services?|business/i.test(value);
     case "works":
       return /施工事例|works?|projects?|construction/i.test(value);
     case "demolition":
       return /解体工事|demolition/i.test(value);
     case "news":
-      return /お知らせ|news|topics?/i.test(value);
+      return /お知らせ|おしらせ|news|topics?/i.test(value);
     case "officers":
       return /役員一覧|officers?|executives?|board/i.test(value);
     case "contact":
-      return /contact|問(?:い)?合わせ|問合|声を聞かせて|ご相談(?:はこちら|・ご意見|ください|$)/i.test(value);
+      return /contact|問(?:い)?(?:合わせ|合せ)|問合|資料請求|声を聞かせて|ご相談(?:はこちら|・ご意見|ください|$)/i.test(value);
   }
 }
 
@@ -1945,10 +1948,51 @@ function hasDirectNavigableInteraction(node: FigmaNode): boolean {
 }
 
 function nativeButtonIntent(node: FigmaNode): boolean {
-  if (!/(?:^|[\s/_-])(?:button|btn|cta)(?:$|[\s/_-])|ボタン|送信(?:する)?|申し込|予約(?:する)?/i.test(node.name)) {
+  if (
+    !/(?:^|[\s/_-])(?:button|btn|cta)(?:$|[\s/_-])|ボタン|送信(?:する)?|申し込|予約(?:する)?/i.test(node.name)
+    && !semanticCtaText(node)
+  ) {
     return false;
   }
   return descendants(node).some((child) => child.type === "TEXT" && child.characters?.trim());
+}
+
+const SEMANTIC_CTA_LABEL = /(?:一覧\s*(?:へ|→|＞|>)?|メニュー\s*(?:へ|→|＞|>)?|資料請求(?:する|はこちら|へ)?|お?問(?:い)?(?:合わせ|合せ)(?:はこちら|へ|する)?|会社案内\s*(?:へ|→|＞|>)|施工事例\s*(?:へ|→|＞|>)|詳しく(?:見る)?|もっと見る|こちら(?:へ)?|申し込|予約(?:する)?|送信(?:する)?)(?:\s*[→＞>])?$/i;
+
+/**
+ * Figma production files often leave visible CTA groups named only `Group 43`
+ * or `Frame 12`. Treat one compact painted surface plus one semantic CTA label
+ * as a button, while refusing broad sections and multi-action groups. This is
+ * intentionally geometry-gated so a section containing a CTA cannot itself
+ * become one giant link.
+ */
+function semanticCtaText(node: FigmaNode): FigmaNode | null {
+  if (node.type === "TEXT") return null;
+  const labels = descendants(node).filter((child) =>
+    child.visible !== false
+    && child.type === "TEXT"
+    && Boolean(child.characters?.trim())
+    && SEMANTIC_CTA_LABEL.test(child.characters?.trim() ?? "")
+  );
+  if (labels.length !== 1) return null;
+  const label = labels[0];
+  const labelBounds = label?.absoluteBoundingBox;
+  const nodeBounds = node.absoluteBoundingBox;
+  if (!label || !labelBounds || !nodeBounds) return null;
+  const surface = solidColor(node.fills)
+    ? node
+    : smallestContainingVisual(node, labelBounds);
+  const surfaceBounds = surface?.absoluteBoundingBox;
+  if (!surfaceBounds) return null;
+  if (
+    surfaceBounds.width > Math.max(720, labelBounds.width * 6)
+    || surfaceBounds.height > Math.max(160, labelBounds.height * 6)
+    || nodeBounds.width > surfaceBounds.width * 1.8 + 48
+    || nodeBounds.height > surfaceBounds.height * 2 + 48
+  ) {
+    return null;
+  }
+  return label;
 }
 
 function clickableContainerIntent(node: FigmaNode): boolean {

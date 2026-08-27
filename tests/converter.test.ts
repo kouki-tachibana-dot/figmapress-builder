@@ -8,6 +8,7 @@ import {
   markNativeElementorTemplate,
 } from "../apps/web/src/lib/elementor-native.ts";
 import {
+  FigmaElementorExporter,
   figmaRotationShouldApply,
   figmaTextShouldWrap,
 } from "../packages/elementor-renderer/src/figma-exporter.ts";
@@ -2112,6 +2113,122 @@ test("Figma CTA and card intents use official Elementor links without nesting", 
   assert.equal(nativeAudit.nativeButtons, 1);
   assert.equal(nativeAudit.clickableContainers, 1);
   assert.equal(nativeAudit.structuredLinks, 2);
+  assert.equal(nativeAudit.nestedLinkViolations, 0);
+});
+
+test("generic Figma groups with compact semantic CTA surfaces become native Elementor Buttons", () => {
+  const cta = (id: string, label: string, y: number): FigmaNode => ({
+    id,
+    name: `Group ${id}`,
+    type: "GROUP",
+    absoluteBoundingBox: { x: 100, y, width: 300, height: 64 },
+    children: [{
+      id: `${id}:bg`,
+      name: "Rectangle 23",
+      type: "RECTANGLE",
+      absoluteBoundingBox: { x: 100, y, width: 300, height: 64 },
+      fills: [{ type: "SOLID", color: { r: 0.08, g: 0.08, b: 0.08 } }],
+      cornerRadius: 6,
+    }, {
+      id: `${id}:text`,
+      name: "Text",
+      type: "TEXT",
+      characters: label,
+      absoluteBoundingBox: { x: 160, y: y + 18, width: 180, height: 28 },
+      fills: [{ type: "SOLID", color: { r: 1, g: 1, b: 1 } }],
+      style: { fontSize: 18, fontWeight: 700, textAlignHorizontal: "CENTER" },
+    }],
+  });
+  const file: MockFigmaFile = {
+    document: {
+      id: "0:0",
+      name: "Generic semantic CTAs",
+      type: "DOCUMENT",
+      children: [{
+        id: "1:0",
+        name: "Page",
+        type: "CANVAS",
+        children: [{
+          id: "10:0",
+          name: "PC Home",
+          type: "FRAME",
+          absoluteBoundingBox: { x: 0, y: 0, width: 1440, height: 1200 },
+          children: [
+            cta("43", "おしらせ一覧へ", 160),
+            cta("25", "サービスメニューへ", 250),
+            cta("23", "お問い合せへ", 340),
+            cta("24", "会社案内へ", 430),
+            cta("26", "施工事例へ", 520),
+            cta("27", "資料請求する", 610),
+            {
+              id: "90",
+              name: "Contact Section",
+              type: "FRAME",
+              absoluteBoundingBox: { x: 0, y: 760, width: 1440, height: 360 },
+              children: [{
+                id: "90:bg",
+                name: "Section Background",
+                type: "RECTANGLE",
+                absoluteBoundingBox: { x: 0, y: 760, width: 1440, height: 360 },
+                fills: [{ type: "SOLID", color: { r: 0.95, g: 0.95, b: 0.95 } }],
+              }, {
+                id: "90:text",
+                name: "Section Label",
+                type: "TEXT",
+                characters: "お問い合わせへ",
+                absoluteBoundingBox: { x: 620, y: 900, width: 200, height: 32 },
+                style: { fontSize: 24, fontWeight: 700 },
+              }],
+            },
+          ],
+        }],
+      }],
+    },
+  };
+
+  const template = new FigmaElementorExporter().toTemplate(file, "ホーム", {
+    pageTargets: {
+      company: "#figmapress-page-company",
+      services: "#figmapress-page-services",
+      works: "#figmapress-page-works",
+      news: "#figmapress-page-news",
+      contact: "#figmapress-page-contact",
+    },
+  });
+  const elements: typeof template.content = [];
+  const visit = (items: typeof template.content): void => {
+    for (const item of items) {
+      elements.push(item);
+      visit(item.elements);
+    }
+  };
+  visit(template.content);
+
+  const buttons = elements.filter((element) => element.widgetType === "button");
+  assert.deepEqual(buttons.map((button) => button.settings.text), [
+    "おしらせ一覧へ",
+    "サービスメニューへ",
+    "お問い合せへ",
+    "会社案内へ",
+    "施工事例へ",
+    "資料請求する",
+  ]);
+  assert.deepEqual(buttons.map((button) =>
+    (button.settings.link as { url: string }).url
+  ), [
+    "#figmapress-page-news",
+    "#figmapress-page-services",
+    "#figmapress-page-contact",
+    "#figmapress-page-company",
+    "#figmapress-page-works",
+    "#figmapress-page-contact",
+  ]);
+  assert.equal(
+    elements.find((element) => element.settings.figmapress_node_id === "90")?.elType,
+    "container",
+  );
+  const nativeAudit = auditNativeElementorTemplate(markNativeElementorTemplate(template));
+  assert.equal(nativeAudit.nativeButtons, 6);
   assert.equal(nativeAudit.nestedLinkViolations, 0);
 });
 
