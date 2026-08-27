@@ -101,6 +101,20 @@ export function extractFigmaFileKey(input: string): string {
   return extractFigmaReference(input).fileKey;
 }
 
+/**
+ * Keep a node-specific Figma URL as the logical page selection even when the
+ * client did not first open the page-candidate picker. The API may still use
+ * the URL's `ids` query for a small initial fetch, while the converter needs
+ * this id to retain the complete multi-page topology discovered by the
+ * companion request.
+ */
+export function effectiveFigmaFrameId(
+  input: string,
+  selectedFrameId?: string,
+): string | undefined {
+  return selectedFrameId || extractFigmaReference(input).nodeId;
+}
+
 async function readLimitedJson(response: Response): Promise<unknown> {
   const contentLength = Number(response.headers.get("content-length") ?? "0");
   if (contentLength > MAX_FIGMA_RESPONSE_BYTES) {

@@ -9,6 +9,7 @@ import {
   resolveFigmaOAuthAccess,
 } from "@/lib/figma-oauth";
 import {
+  effectiveFigmaFrameId,
   fetchFigmaFile,
   FigmaFrameSelectionRequired,
   type FigmaVisualReferences,
@@ -85,6 +86,10 @@ export async function POST(request: Request): Promise<Response> {
         );
       }
       refreshedOAuthCookie = oauth?.refreshedCookie;
+      const effectiveSelectedFrameId = effectiveFigmaFrameId(
+        parsed.data.fileKeyOrUrl,
+        parsed.data.selectedFrameId,
+      );
       let fetched;
       try {
         fetched = await fetchFigmaFile(
@@ -118,10 +123,10 @@ export async function POST(request: Request): Promise<Response> {
         fetched.imageUrls,
         fetched.warnings,
         fetched.renderedNodeUrls,
-        parsed.data.selectedFrameId
+        effectiveSelectedFrameId
           ? {
               candidates: fetched.pageCandidates,
-              selectedFrameId: parsed.data.selectedFrameId,
+              selectedFrameId: effectiveSelectedFrameId,
               siteTitle: fetched.fileName,
             }
           : null,

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { normalizeSlug } from "@figmapress/wp-connector";
 import {
+  effectiveFigmaFrameId,
   extractFigmaFileKey,
   extractFigmaReference,
 } from "../apps/web/src/lib/figma-api.ts";
@@ -18,6 +19,12 @@ test("Figma file keys are parsed from supported URLs", () => {
     extractFigmaReference("https://www.figma.com/design/AbCdEf123456/Sample?node-id=123-456"),
     { fileKey: "AbCdEf123456", nodeId: "123:456" },
   );
+});
+
+test("node-specific Figma URLs retain their frame selection for site planning", () => {
+  const url = "https://www.figma.com/design/AbCdEf123456/Sample?node-id=192-176";
+  assert.equal(effectiveFigmaFrameId(url), "192:176");
+  assert.equal(effectiveFigmaFrameId(url, "402:14"), "402:14");
 });
 
 test("private and reserved network destinations are rejected", () => {
