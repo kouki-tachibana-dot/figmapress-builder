@@ -251,6 +251,7 @@ test("mobile native menu owns the full header so its Pro dropdown cannot collaps
     },
   )), { capabilities: allCapabilities, menuId: 137 });
   const menu = result.content[0]?.elements.find((item) => item.widgetType === "nav-menu");
+  assert.equal(result.content[0]?.settings.z_index, 1000);
   assert.deepEqual(menu?.settings._element_custom_width, { unit: "%", size: 100, sizes: [] });
   assert.deepEqual(menu?.settings._offset_x, { unit: "%", size: 0, sizes: [] });
   assert.deepEqual(menu?.settings.min_height, { unit: "%", size: 100, sizes: [] });

@@ -372,6 +372,7 @@ function nativeNavigation(
       flex_justify_content: "space-between",
       flex_align_items: "center",
       flex_wrap: "nowrap",
+      z_index: 1000,
       min_height: { unit: "px", size: rootHeight, sizes: [] },
       background_background: "classic",
       background_color: string(settings.background_color, "transparent"),
