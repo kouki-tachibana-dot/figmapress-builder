@@ -2308,6 +2308,98 @@ test("semantic page headings stay plain and a generic copyright group becomes on
   );
 });
 
+test("flat mobile footer layers become one positioned footer container without changing their geometry", () => {
+  const text = (
+    id: string,
+    characters: string,
+    x: number,
+    y: number,
+    width = 160,
+    fontSize = 16,
+  ): FigmaNode => ({
+    id,
+    name: characters,
+    type: "TEXT",
+    characters,
+    absoluteBoundingBox: { x, y, width, height: 24 },
+    style: { fontSize, fontWeight: 500 },
+  });
+  const mobileX = 2000;
+  const file: MockFigmaFile = {
+    document: {
+      id: "0:0",
+      name: "Flat mobile footer",
+      type: "DOCUMENT",
+      children: [{
+        id: "1:0",
+        name: "Page",
+        type: "CANVAS",
+        children: [{
+          id: "10:0",
+          name: "PC Home",
+          type: "FRAME",
+          absoluteBoundingBox: { x: 0, y: 0, width: 1440, height: 1000 },
+          children: [text("10:1", "ホーム", 80, 100, 260, 42)],
+        }, {
+          id: "20:0",
+          name: "SP Home",
+          type: "FRAME",
+          absoluteBoundingBox: { x: mobileX, y: 0, width: 440, height: 1000 },
+          children: [{
+            id: "20:header",
+            name: "Header",
+            type: "GROUP",
+            absoluteBoundingBox: { x: mobileX, y: 0, width: 440, height: 60 },
+            children: [
+              text("20:h1", "HOME", mobileX + 20, 18, 80),
+              text("20:h2", "会社案内", mobileX + 120, 18, 100),
+            ],
+          },
+          text("20:title", "ホーム", mobileX + 24, 100, 260, 34),
+          {
+            id: "20:footer-bg",
+            name: "Footer background",
+            type: "RECTANGLE",
+            absoluteBoundingBox: { x: mobileX, y: 880, width: 440, height: 120 },
+            fills: [{ type: "SOLID", color: { r: 0.08, g: 0.08, b: 0.08 } }],
+          },
+          text("20:footer-home", "HOME ▷", mobileX + 20, 900, 100),
+          text("20:footer-company", "会社案内 ▷", mobileX + 140, 900, 120),
+          text("20:footer-works", "施工事例 ▷", mobileX + 280, 900, 120),
+          text("20:copyright", "copyright © KENKO101 Co.,ltd inc all rights reserved.", mobileX + 80, 976, 300, 10),
+          ],
+        }],
+      }],
+    },
+  };
+
+  const template = new FigmaElementorExporter().toTemplate(file, "ホーム");
+  const mobile = template.content.find((element) =>
+    String(element.settings.css_classes).includes("figmapress-layout--mobile")
+  );
+  assert.ok(mobile);
+  const footers = mobile.elements.filter((element) => element.settings.html_tag === "footer");
+  assert.equal(footers.length, 1);
+  const footer = footers[0];
+  assert.equal(footer?.settings.figmapress_node_id, "20:0:semantic-footer");
+  assert.equal(
+    Math.round(Number((footer?.settings._offset_y as { size?: number } | undefined)?.size)),
+    88,
+  );
+  assert.equal(
+    Math.round(Number((footer?.settings.min_height as { size?: number } | undefined)?.size)),
+    27,
+  );
+  const copyright = footer?.elements.find((element) =>
+    element.settings.figmapress_node_id === "20:copyright"
+  );
+  assert.ok(copyright);
+  assert.equal(
+    Math.round(Number((copyright.settings._offset_y as { size?: number } | undefined)?.size)),
+    80,
+  );
+});
+
 test("quality gate warns when a Figma carousel loses its functional widget", async () => {
   const item = (id: string, x: number) => ({
     id,

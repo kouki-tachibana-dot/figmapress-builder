@@ -445,7 +445,66 @@ function rootRenderNodes(root: FigmaNode, context: RenderContext): FigmaNode[] {
     }
   }
 
-  return result;
+  return groupFlatSemanticFooter(result, root);
+}
+
+function groupFlatSemanticFooter(nodes: FigmaNode[], root: FigmaNode): FigmaNode[] {
+  const rootBounds = root.absoluteBoundingBox;
+  if (!rootBounds || nodes.length < 4) return nodes;
+  const copyrightIndex = nodes.findIndex((node) =>
+    node.type === "TEXT"
+    && /copyright|©|all rights reserved/i.test(node.characters ?? "")
+    && validBounds(node.absoluteBoundingBox),
+  );
+  if (copyrightIndex < 0) return nodes;
+  const copyrightBounds = nodes[copyrightIndex]?.absoluteBoundingBox;
+  if (!copyrightBounds) return nodes;
+
+  const latePageY = rootBounds.y + rootBounds.height * 0.75;
+  const wideTailStarts = nodes
+    .map((node, index) => ({ index, bounds: node.absoluteBoundingBox }))
+    .filter((entry): entry is { index: number; bounds: FigmaBounds } => Boolean(
+      entry.bounds
+      && entry.bounds.y >= latePageY
+      && entry.bounds.y <= copyrightBounds.y
+      && entry.bounds.width >= rootBounds.width * 0.75,
+    ))
+    .map((entry) => entry.bounds.y);
+  if (!wideTailStarts.length) return nodes;
+  const footerBottom = rootBounds.y + rootBounds.height;
+  for (const footerTop of [...new Set(wideTailStarts)].sort((left, right) => right - left)) {
+    const selected = nodes
+      .map((node, index) => ({ node, index, bounds: node.absoluteBoundingBox }))
+      .filter((entry): entry is { node: FigmaNode; index: number; bounds: FigmaBounds } => Boolean(
+        entry.bounds
+        && entry.bounds.y >= footerTop - 0.5
+        && entry.bounds.y + entry.bounds.height <= footerBottom + 0.5,
+      ));
+    if (!selected.some((entry) => entry.index === copyrightIndex)) continue;
+    const firstIndex = selected[0]?.index ?? -1;
+    const lastIndex = selected[selected.length - 1]?.index ?? -1;
+    if (firstIndex < 0 || lastIndex - firstIndex + 1 !== selected.length) continue;
+
+    const candidate: FigmaNode = {
+      id: `${root.id}:semantic-footer`,
+      name: "FigmaPress semantic footer",
+      type: "GROUP",
+      absoluteBoundingBox: {
+        x: rootBounds.x,
+        y: footerTop,
+        width: rootBounds.width,
+        height: Math.max(1, footerBottom - footerTop),
+      },
+      children: selected.map((entry) => entry.node),
+    };
+    if (!semanticFooterIntent(candidate)) continue;
+    return [
+      ...nodes.slice(0, firstIndex),
+      candidate,
+      ...nodes.slice(lastIndex + 1),
+    ];
+  }
+  return nodes;
 }
 
 function renderElement(
