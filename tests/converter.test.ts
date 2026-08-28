@@ -2232,6 +2232,82 @@ test("generic Figma groups with compact semantic CTA surfaces become native Elem
   assert.equal(nativeAudit.nestedLinkViolations, 0);
 });
 
+test("semantic page headings stay plain and a generic copyright group becomes one footer landmark", () => {
+  const label = (
+    id: string,
+    characters: string,
+    x: number,
+    y: number,
+    width = 180,
+    fontSize = 16,
+  ): FigmaNode => ({
+    id,
+    name: "Text",
+    type: "TEXT",
+    characters,
+    absoluteBoundingBox: { x, y, width, height: 32 },
+    style: { fontSize, fontWeight: 600 },
+  });
+  const file: MockFigmaFile = {
+    document: {
+      id: "0:0",
+      name: "Landmark semantics",
+      type: "DOCUMENT",
+      children: [{
+        id: "1:0",
+        name: "Page",
+        type: "CANVAS",
+        children: [{
+          id: "10:0",
+          name: "PC Officers",
+          type: "FRAME",
+          absoluteBoundingBox: { x: 0, y: 0, width: 1440, height: 1100 },
+          children: [
+            label("20:0", "役員一覧", 100, 100, 300, 42),
+            {
+              id: "90:0",
+              name: "Group 99",
+              type: "GROUP",
+              absoluteBoundingBox: { x: 0, y: 760, width: 1440, height: 300 },
+              children: [{
+                id: "90:bg",
+                name: "Rectangle 99",
+                type: "RECTANGLE",
+                absoluteBoundingBox: { x: 0, y: 760, width: 1440, height: 300 },
+                fills: [{ type: "SOLID", color: { r: 0.08, g: 0.08, b: 0.08 } }],
+              },
+              label("90:1", "HOME ▷", 80, 800),
+              label("90:2", "会社案内 ▷", 280, 800),
+              label("90:3", "施工事例 ▷", 480, 800),
+              label("90:4", "お問い合わせ ▷", 680, 800),
+              label("90:5", "copyright © KENKO101 Co.,ltd inc all rights reserved.", 80, 980, 640, 14),
+              ],
+            },
+          ],
+        }],
+      }],
+    },
+  };
+
+  const template = new FigmaElementorExporter().toTemplate(file, "役員一覧");
+  const elements: typeof template.content = [];
+  const visit = (items: typeof template.content): void => {
+    for (const item of items) {
+      elements.push(item);
+      visit(item.elements);
+    }
+  };
+  visit(template.content);
+  const heading = elements.find((element) => element.settings.figmapress_node_id === "20:0");
+  assert.match(String(heading?.settings.editor), /<h1\b/);
+  assert.doesNotMatch(String(heading?.settings.editor), /<a\b/);
+  assert.equal(elements.filter((element) => element.settings.html_tag === "footer").length, 1);
+  assert.equal(
+    elements.find((element) => element.settings.figmapress_node_id === "90:0")?.settings.html_tag,
+    "footer",
+  );
+});
+
 test("quality gate warns when a Figma carousel loses its functional widget", async () => {
   const item = (id: string, x: number) => ({
     id,

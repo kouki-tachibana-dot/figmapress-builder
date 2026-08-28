@@ -238,7 +238,7 @@ test("fallback navigation becomes a native Pro menu with logo and CTA", () => {
   assert.match(String(menu?.settings._css_classes), /figmapress-native-nav-menu/);
 });
 
-test("mobile native menu expands the Figma icon to a centered 44px touch target", () => {
+test("mobile native menu owns the full header so its Pro dropdown cannot collapse vertically", () => {
   const result = adaptElementorTemplateToNativeWidgets(template(widget(
     "n7654321",
     "figmapress-nav",
@@ -251,9 +251,10 @@ test("mobile native menu expands the Figma icon to a centered 44px touch target"
     },
   )), { capabilities: allCapabilities, menuId: 137 });
   const menu = result.content[0]?.elements.find((item) => item.widgetType === "nav-menu");
-  assert.deepEqual(menu?.settings._element_custom_width, { unit: "%", size: 10, sizes: [] });
-  assert.deepEqual(menu?.settings._offset_x, { unit: "%", size: 88, sizes: [] });
-  assert.deepEqual(menu?.settings.min_height, { unit: "%", size: 44, sizes: [] });
+  assert.deepEqual(menu?.settings._element_custom_width, { unit: "%", size: 100, sizes: [] });
+  assert.deepEqual(menu?.settings._offset_x, { unit: "%", size: 0, sizes: [] });
+  assert.deepEqual(menu?.settings.min_height, { unit: "%", size: 100, sizes: [] });
+  assert.equal(menu?.settings.align_items, "right");
 });
 
 test("unsupported destination keeps safe fallback widgets", () => {

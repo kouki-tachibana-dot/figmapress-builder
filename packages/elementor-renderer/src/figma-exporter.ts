@@ -465,7 +465,9 @@ function renderElement(
   const carousel = carouselElement(node, bounds, parentBounds, parentNode, context);
   if (carousel) return withSectionAnchor(carousel, node, context);
 
-  const action = suppressLinks ? null : functionalLink(node, context);
+  const action = suppressLinks
+    ? null
+    : functionalLink(node, context, !semanticHeading(node, context));
   const asset = visualAsset(node, context.assets);
   if (asset) {
     return withSectionAnchor(
@@ -521,7 +523,7 @@ function renderElement(
       ...containerPosition(node, bounds, parentBounds, parentNode, context),
       figmapress_node_id: node.id,
       figmapress_node_name: node.name,
-      html_tag: clickableContainer ? "a" : htmlTag(node),
+      html_tag: clickableContainer ? "a" : htmlTag(node, parentNode, context.root),
       ...(clickableContainer && action
         ? {
             link: elementorUrl(action),
@@ -3015,6 +3017,14 @@ function headingTag(node: FigmaNode, fontSize: number, context: RenderContext): 
   return "div";
 }
 
+function semanticHeading(node: FigmaNode, context: RenderContext): boolean {
+  const bounds = node.absoluteBoundingBox;
+  if (node.type !== "TEXT" || !bounds) return false;
+  const richRuns = textRuns(node);
+  const style = richRuns.length === 1 ? richRuns[0]?.style ?? {} : node.style ?? {};
+  return headingTag(node, textFontSize(style, richRuns, bounds), context) !== "div";
+}
+
 function normalizedHeadingText(value: string): string {
   return value.normalize("NFKC").replace(/[\s\u3000・｜|／/「」『』【】（）()、。,.!！?？:：;；_-]+/g, "");
 }
@@ -3037,6 +3047,23 @@ function findPrimaryHeadingNode(
       && Boolean(node.characters?.trim())
       && Boolean(node.absoluteBoundingBox)
       && (node.characters?.trim().length ?? 0) <= 80
+      && (() => {
+        const text = node.characters?.trim() ?? "";
+        const normalizedText = normalizedHeadingText(text);
+        const name = node.name.toLowerCase();
+        const bounds = node.absoluteBoundingBox as FigmaBounds;
+        const fontSize = textFontSize(node.style ?? {}, textRuns(node), bounds);
+        const explicit = /(?:^|[\/_\s-])(?:h1|page.?title|main.?title|hero.?title)(?:$|[\/_\s-])|ページタイトル|メインタイトル/.test(name);
+        const matchesPageTitle = normalizedPageTitle.length >= 2 && (
+          normalizedText === normalizedPageTitle
+          || (normalizedPageTitle.length >= 12 && normalizedText.includes(normalizedPageTitle))
+          || (normalizedText.length >= 12 && normalizedPageTitle.includes(normalizedText))
+        );
+        // A lone 16px Japanese label near the top-right is usually a menu
+        // item, not a page heading. Keep it linked instead of promoting it to
+        // the document H1 merely because no larger text was present.
+        return fontSize >= 18 || explicit || matchesPageTitle;
+      })()
       && (
         !navigationIds.has(node.id)
         || normalizedHeadingText(node.characters?.trim() ?? "") === normalizedPageTitle
@@ -3070,10 +3097,25 @@ function findPrimaryHeadingNode(
     .sort((left, right) => right.score - left.score)[0]?.node ?? null;
 }
 
-function htmlTag(node: FigmaNode): string {
+function semanticFooterIntent(node: FigmaNode): boolean {
+  const copy = descendants(node)
+    .filter((child) => child.visible !== false && child.type === "TEXT" && child.characters?.trim())
+    .map((child) => child.characters?.trim() ?? "");
+  if (!copy.some((value) => /copyright|©|all rights reserved/i.test(value))) return false;
+  const navigationSignals = copy.filter((value) =>
+    /^(?:home|会社案内|施工事例|お問い合わせ|お問合せ|お知らせ|おしらせ|解体工事)(?:\s*[▷▶→＞>])?$/i.test(value)
+  );
+  return new Set(navigationSignals.map((value) => value.replace(/\s*[▷▶→＞>]$/, ""))).size >= 2;
+}
+
+function htmlTag(node: FigmaNode, parentNode: FigmaNode, root: FigmaNode): string {
   const name = node.name.toLowerCase();
   if (/(header|ヘッダー)/.test(name)) return "header";
   if (/(footer|フッター)/.test(name)) return "footer";
+  if (
+    semanticFooterIntent(node)
+    && (parentNode === root || !semanticFooterIntent(parentNode))
+  ) return "footer";
   if (/(nav|menu|ナビ)/.test(name)) return "nav";
   if (/(section|sec|セクション)/.test(name)) return "section";
   return "div";

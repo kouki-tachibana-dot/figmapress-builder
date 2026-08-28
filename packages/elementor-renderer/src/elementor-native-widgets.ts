@@ -79,21 +79,6 @@ function cssClasses(value: unknown, required: string): string {
   return [...new Set(`${string(value)} ${required}`.trim().split(/\s+/).filter(Boolean))].join(" ");
 }
 
-function minimumCenteredBox(
-  box: DesignBox,
-  minimumWidth: number,
-  minimumHeight: number,
-): DesignBox {
-  const width = Math.max(box.width, minimumWidth);
-  const height = Math.max(box.height, minimumHeight);
-  return {
-    x: Math.max(0, Math.min(100 - width, box.x - (width - box.width) / 2)),
-    y: Math.max(0, Math.min(100 - height, box.y - (height - box.height) / 2)),
-    width,
-    height,
-  };
-}
-
 function positioned(box: DesignBox | null): ElementorSettings {
   if (!box) return { _element_width: "initial", _element_custom_width: percentSize(100) };
   return {
@@ -269,13 +254,13 @@ function nativeNavigation(
   const rootHeight = Number(rootGeometry?.height) || 1;
   const itemGeometry = array(geometry.items);
   const itemBox = unionDesignBoxes(itemGeometry.map(designBox));
-  const toggleBox = designBox(geometry.toggle);
   const menuBox = variant === "mobile"
-    ? minimumCenteredBox(
-        toggleBox ?? { x: 80, y: 18, width: 16, height: 64 },
-        rootWidth > 0 ? 4400 / rootWidth : 10,
-        rootHeight > 0 ? 4400 / rootHeight : 44,
-      )
+    // Elementor Pro stretches its dropdown relative to the Nav Menu widget.
+    // Keeping the widget as narrow as Figma's hamburger icon makes the opened
+    // menu only ~44px wide and forces Japanese labels into vertical columns.
+    // The official widget owns the full header; its toggle remains right
+    // aligned and the dropdown can therefore use the full mobile width.
+    ? { x: 0, y: 0, width: 100, height: 100 }
     : itemBox ?? { x: 24, y: 15, width: 56, height: 70 };
   const firstItemFontPercent = Number(itemGeometry[0]?.fontSize) || 0;
   const menuFontSize = rootWidth > 0 && firstItemFontPercent > 0
@@ -312,7 +297,7 @@ function nativeNavigation(
       _css_classes: "figmapress-native-nav-menu",
       menu: String(menuId),
       layout: variant === "mobile" ? "dropdown" : "horizontal",
-      align_items: variant === "mobile" ? "stretch" : "center",
+      align_items: variant === "mobile" ? "right" : "center",
       pointer: "underline",
       submenu_icon: { value: "<i class=\"fas fa-caret-down\"></i>", library: "fa-solid" },
       toggle: "burger",
