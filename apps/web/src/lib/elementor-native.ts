@@ -36,6 +36,22 @@ export interface NativeElementorAudit {
   nestedLinkViolations: number;
   desktopRoots: number;
   mobileRoots: number;
+  semanticMains: number;
+  semanticHeaders: number;
+  semanticFooters: number;
+  h1Headings: number;
+  placeholderTextWidgets: number;
+  placeholderTextExamples: string[];
+  responsiveRoots: NativeElementorResponsiveRootAudit[];
+}
+
+export interface NativeElementorResponsiveRootAudit {
+  id: string;
+  variant: "desktop" | "mobile";
+  main: boolean;
+  headers: number;
+  footers: number;
+  h1Headings: number;
 }
 
 function cssClasses(element: ElementorElement): string[] {
@@ -47,6 +63,24 @@ function cssClasses(element: ElementorElement): string[] {
 function textContent(value: unknown): string {
   if (typeof value !== "string") return "";
   return value.replace(/<[^>]*>/g, " ").replace(/&nbsp;/gi, " ").trim();
+}
+
+function placeholderText(value: string): boolean {
+  const normalized = value.normalize("NFKC").replace(/\s+/g, " ").trim();
+  return /(?:sample[\s._-]*){2,}/i.test(normalized)
+    || /\blorem\s+ipsum\b/i.test(normalized)
+    || /(?:ダミー(?:テキスト)?|仮テキスト|テキストが入ります|ここに.{0,20}(?:文章|文字|テキスト).{0,12}入ります)/.test(normalized)
+    || /(?:テキスト[\s・|｜／/]*){2,}/.test(normalized);
+}
+
+function h1Count(element: ElementorElement): number {
+  if (element.widgetType === "heading") {
+    return element.settings.header_size === "h1" ? 1 : 0;
+  }
+  if (element.widgetType !== "text-editor" || typeof element.settings.editor !== "string") {
+    return 0;
+  }
+  return element.settings.editor.match(/<h1\b/gi)?.length ?? 0;
 }
 
 function elementOpacityIsPainted(value: unknown): boolean {
@@ -157,6 +191,13 @@ export function auditNativeElementorTemplate(
   let nestedLinkViolations = 0;
   let desktopRoots = 0;
   let mobileRoots = 0;
+  let semanticMains = 0;
+  let semanticHeaders = 0;
+  let semanticFooters = 0;
+  let h1Headings = 0;
+  let placeholderTextWidgets = 0;
+  const placeholderTextExamples: string[] = [];
+  const responsiveRoots: NativeElementorResponsiveRootAudit[] = [];
 
   if (template.version !== "0.4") {
     errors.push("Elementorテンプレートのバージョンが0.4ではありません。");
@@ -172,6 +213,7 @@ export function auditNativeElementorTemplate(
     elements: ElementorElement[],
     topLevel = false,
     linkedAncestorId = "",
+    responsiveRoot?: NativeElementorResponsiveRootAudit,
   ): void => {
     for (const element of elements) {
       if (!element.id || ids.has(element.id)) {
@@ -197,11 +239,43 @@ export function auditNativeElementorTemplate(
         if (element.widgetType) {
           errors.push(`コンテナ「${element.id}」にwidgetTypeが設定されています。`);
         }
-        if (classes.includes("figmapress-layout--desktop")
-          || classes.includes("figmapress-layout--single")) {
+        const desktopRoot = classes.includes("figmapress-layout--desktop")
+          || classes.includes("figmapress-layout--single");
+        const mobileRoot = classes.includes("figmapress-layout--mobile");
+        let currentResponsiveRoot = responsiveRoot;
+        if (desktopRoot) {
           desktopRoots += 1;
+          currentResponsiveRoot = {
+            id: element.id,
+            variant: "desktop",
+            main: element.settings.html_tag === "main",
+            headers: 0,
+            footers: 0,
+            h1Headings: 0,
+          };
+          responsiveRoots.push(currentResponsiveRoot);
         }
-        if (classes.includes("figmapress-layout--mobile")) mobileRoots += 1;
+        if (mobileRoot) {
+          mobileRoots += 1;
+          currentResponsiveRoot = {
+            id: element.id,
+            variant: "mobile",
+            main: element.settings.html_tag === "main",
+            headers: 0,
+            footers: 0,
+            h1Headings: 0,
+          };
+          responsiveRoots.push(currentResponsiveRoot);
+        }
+        if (element.settings.html_tag === "main") semanticMains += 1;
+        if (element.settings.html_tag === "header") {
+          semanticHeaders += 1;
+          if (currentResponsiveRoot) currentResponsiveRoot.headers += 1;
+        }
+        if (element.settings.html_tag === "footer") {
+          semanticFooters += 1;
+          if (currentResponsiveRoot) currentResponsiveRoot.footers += 1;
+        }
         if (element.settings.html_tag === "a") {
           clickableContainers += 1;
           const control = structuredUrlControlForElement(element);
@@ -227,6 +301,12 @@ export function auditNativeElementorTemplate(
             errors.push(`文字ウィジェット「${element.id}」が透明です。`);
           } else {
             textWidgets += 1;
+            if (placeholderText(content)) {
+              placeholderTextWidgets += 1;
+              if (placeholderTextExamples.length < 4) {
+                placeholderTextExamples.push(content.slice(0, 80));
+              }
+            }
           }
         }
         if (element.widgetType === "image") {
@@ -241,7 +321,15 @@ export function auditNativeElementorTemplate(
           }
         }
         if (element.widgetType === "button") nativeButtons += 1;
+        if (element.widgetType === "figmapress-nav" || element.widgetType === "nav-menu") {
+          semanticHeaders += 1;
+          if (responsiveRoot) responsiveRoot.headers += 1;
+        }
       }
+
+      const elementH1Count = h1Count(element);
+      h1Headings += elementH1Count;
+      if (responsiveRoot) responsiveRoot.h1Headings += elementH1Count;
 
       const control = structuredUrlControlForElement(element);
       if (control && typeof control.url === "string" && control.url.trim()) {
@@ -265,7 +353,13 @@ export function auditNativeElementorTemplate(
         && hasLink
         ? element.id
         : linkedAncestorId;
-      visit(element.elements, false, nextLinkedAncestor);
+      const nextResponsiveRoot = element.elType === "container"
+        && (classes.includes("figmapress-layout--desktop")
+          || classes.includes("figmapress-layout--single")
+          || classes.includes("figmapress-layout--mobile"))
+        ? responsiveRoots[responsiveRoots.length - 1]
+        : responsiveRoot;
+      visit(element.elements, false, nextLinkedAncestor, nextResponsiveRoot);
     }
   };
   visit(template.content, true);
@@ -288,5 +382,12 @@ export function auditNativeElementorTemplate(
     nestedLinkViolations,
     desktopRoots,
     mobileRoots,
+    semanticMains,
+    semanticHeaders,
+    semanticFooters,
+    h1Headings,
+    placeholderTextWidgets,
+    placeholderTextExamples,
+    responsiveRoots,
   };
 }

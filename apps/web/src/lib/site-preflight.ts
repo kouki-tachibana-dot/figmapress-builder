@@ -18,6 +18,11 @@ export interface FigmaSitePreflightReport {
   nativeButtons: number;
   clickableContainers: number;
   structuredLinks: number;
+  semanticMains: number;
+  semanticHeaders: number;
+  semanticFooters: number;
+  h1Headings: number;
+  placeholderTextWidgets: number;
   links: number;
   destinations: number;
   navigationPages: number;
@@ -126,6 +131,11 @@ export function inspectFigmaSiteTemplates(
   let nativeButtons = 0;
   let clickableContainers = 0;
   let structuredLinks = 0;
+  let semanticMains = 0;
+  let semanticHeaders = 0;
+  let semanticFooters = 0;
+  let h1Headings = 0;
+  let placeholderTextWidgets = 0;
   let links = 0;
   let navigationPages = 0;
   let navigationWidgets = 0;
@@ -150,6 +160,31 @@ export function inspectFigmaSiteTemplates(
     if (page.hasMobile && nativeAudit.mobileRoots < 1) {
       throw new Error(`「${page.title}」のスマホ用Elementorレイアウトがありません。WordPressには送信していません。`);
     }
+    const requiredVariants = [
+      ...(page.hasDesktop ? ["desktop" as const] : []),
+      ...(page.hasMobile ? ["mobile" as const] : []),
+    ];
+    for (const variant of requiredVariants) {
+      const root = nativeAudit.responsiveRoots.find((candidate) => candidate.variant === variant);
+      const label = variant === "desktop" ? "PC" : "スマホ";
+      if (!root?.main) {
+        throw new Error(`「${page.title}」の${label}版がmainランドマークではありません。WordPressには送信していません。`);
+      }
+      if (root.headers < 1) {
+        throw new Error(`「${page.title}」の${label}版に実動メニュー相当のheaderがありません。WordPressには送信していません。`);
+      }
+      if (root.footers < 1) {
+        throw new Error(`「${page.title}」の${label}版にfooterがありません。WordPressには送信していません。`);
+      }
+      if (root.h1Headings !== 1) {
+        throw new Error(`「${page.title}」の${label}版のH1は1つ必要です（現在${root.h1Headings}）。WordPressには送信していません。`);
+      }
+    }
+    if (nativeAudit.placeholderTextWidgets > 0) {
+      throw new Error(
+        `「${page.title}」に仮テキストが${nativeAudit.placeholderTextWidgets}件あります（${nativeAudit.placeholderTextExamples.join("／")}）。Figmaの原稿を確定するまでWordPressには送信しません。`,
+      );
+    }
     if (page.frameId) {
       const desktopReference = template.page_settings.figmapress_reference_desktop_node_id;
       const mobileReference = template.page_settings.figmapress_reference_mobile_node_id;
@@ -168,6 +203,11 @@ export function inspectFigmaSiteTemplates(
     nativeButtons += nativeAudit.nativeButtons;
     clickableContainers += nativeAudit.clickableContainers;
     structuredLinks += nativeAudit.structuredLinks;
+    semanticMains += nativeAudit.semanticMains;
+    semanticHeaders += nativeAudit.semanticHeaders;
+    semanticFooters += nativeAudit.semanticFooters;
+    h1Headings += nativeAudit.h1Headings;
+    placeholderTextWidgets += nativeAudit.placeholderTextWidgets;
 
     const audit = auditElementorTemplateLinks(template);
     const unknownPlaceholders = audit.unresolvedPlaceholders.filter(
@@ -239,6 +279,11 @@ export function inspectFigmaSiteTemplates(
     nativeButtons,
     clickableContainers,
     structuredLinks,
+    semanticMains,
+    semanticHeaders,
+    semanticFooters,
+    h1Headings,
+    placeholderTextWidgets,
     links,
     destinations: referencedDestinations.size,
     navigationPages,

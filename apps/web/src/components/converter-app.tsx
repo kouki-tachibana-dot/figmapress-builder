@@ -95,18 +95,28 @@ import {
   inspectFigmaSiteTemplates,
   type FigmaSitePreflightReport,
 } from "@/lib/site-preflight";
+import { resolveSiteVisualQaGate } from "@/lib/site-visual-qa";
 
 type SourceMode = "figma" | "json";
 type OutputTarget = "gutenberg" | "elementor";
 type PageTemplateEntry = {
   page: { key: FigmaSitePageKey };
   elementorTemplate: ElementorTemplate;
+  previewHtml?: string | null;
+  visualReferences?: {
+    desktop?: VisualQaReference;
+    mobile?: VisualQaReference;
+  };
+};
+type SiteVisualQaBrowserResult = VisualQaBrowserResult & {
+  pageKey: FigmaSitePageKey;
+  pageTitle: string;
 };
 
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
-const APP_RELEASE = "0.28.21";
+const APP_RELEASE = "0.29.0";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -857,6 +867,12 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const sitePreflightTemplates = useRef(
     new Map<FigmaSitePageKey, ElementorTemplate>(),
   );
+  const sitePreflightEntries = useRef(
+    new Map<FigmaSitePageKey, PageTemplateEntry>(),
+  );
+  const [siteVisualQaResults, setSiteVisualQaResults] = useState<
+    SiteVisualQaBrowserResult[]
+  >([]);
   const [wpVisualQaBusy, setWpVisualQaBusy] = useState(false);
   const [wpMediaBusy, setWpMediaBusy] = useState(false);
   const [wpVisualQaError, setWpVisualQaError] = useState("");
@@ -1054,6 +1070,12 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const conversionRequiresDynamicForms = wpBuildMode === "site"
     || (output?.qualityReport?.metrics.functionalWidgets.contactForm ?? 0) > 0;
   const multiPagePlan = output?.multiPagePlan;
+  const siteVisualQaRequired = Boolean(
+    multiPagePlan?.pages.every((page) => Boolean(page.frameId)),
+  );
+  const siteVisualQaGate = multiPagePlan
+    ? resolveSiteVisualQaGate(multiPagePlan, siteVisualQaResults)
+    : null;
   const currentFigmaFrameId = selectedFrameId || figmaFrameId(fileKeyOrUrl) || "";
   const requiredMultiPageConnectorVersion = multiPagePlan?.pages.some((page) => page.frameId)
     ? FIGMA_PAGE_SET_CONNECTOR_VERSION
@@ -1070,7 +1092,8 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const multiPageBlocked = wpBuildMode === "site"
     && (!multiPageAvailable
       || !connectorSupportsMultiPage
-      || sitePreflightResult?.pages !== multiPagePlan?.pages.length);
+      || sitePreflightResult?.pages !== multiPagePlan?.pages.length
+      || (siteVisualQaRequired && siteVisualQaGate?.blocked));
   const wordpressSiteBridgeUrl = connectorToken
     ? safeWordPressSiteBridgeUrl(baseUrl)
     : "";
@@ -1164,6 +1187,8 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     setOutput(null);
     setError("");
     sitePreflightTemplates.current.clear();
+    sitePreflightEntries.current.clear();
+    setSiteVisualQaResults([]);
     setSitePreflightProgress("");
     setSitePreflightResult(null);
   }
@@ -1213,6 +1238,8 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     setSitePreflightProgress("");
     setSitePreflightResult(null);
     sitePreflightTemplates.current.clear();
+    sitePreflightEntries.current.clear();
+    setSiteVisualQaResults([]);
     setWpBuildMode("single");
     setWpVisualQaBusy(false);
     setWpMediaBusy(false);
@@ -1771,7 +1798,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   async function fetchMultiPageTemplates(
     pages: FigmaSitePagePlan[],
     onPage?: (entry: PageTemplateEntry) => void,
-  ): Promise<Map<FigmaSitePageKey, ElementorTemplate>> {
+  ): Promise<PageTemplateEntry[]> {
     let baseBody: Record<string, unknown>;
     if (mode === "figma") {
       const authentication = resolveFigmaRequestAuthentication(
@@ -1872,7 +1899,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       entries.push(...batch);
       batch.forEach((entry) => onPage?.(entry));
     }
-    return new Map(entries.map((entry) => [entry.page.key, entry.elementorTemplate]));
+    return entries;
   }
 
   async function verifyMultiPageTemplates(): Promise<void> {
@@ -1884,6 +1911,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     setSitePreflightBusy(true);
     setSitePreflightError("");
     setSitePreflightResult(null);
+    setSiteVisualQaResults([]);
     try {
       const templates = new Map(sitePreflightTemplates.current);
       const candidateMode = plan.pages.every((page) => Boolean(page.frameId));
@@ -1901,6 +1929,12 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       }
       templates.set(currentPageKey, output.elementorTemplate);
       sitePreflightTemplates.current.set(currentPageKey, output.elementorTemplate);
+      sitePreflightEntries.current.set(currentPageKey, {
+        page: { key: currentPageKey },
+        elementorTemplate: output.elementorTemplate,
+        previewHtml: output.previewHtml,
+        visualReferences: output.visualReferences,
+      });
       const missingPages = plan.pages.filter((page) => !templates.has(page.key));
       setSitePreflightProgress(
         `${templates.size}/${plan.pages.length}ページを確認済み`,
@@ -1908,14 +1942,64 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       if (missingPages.length) {
         const fetched = await fetchMultiPageTemplates(missingPages, (entry) => {
           sitePreflightTemplates.current.set(entry.page.key, entry.elementorTemplate);
+          sitePreflightEntries.current.set(entry.page.key, entry);
           templates.set(entry.page.key, entry.elementorTemplate);
           setSitePreflightProgress(
             `${sitePreflightTemplates.current.size}/${plan.pages.length}ページを確認済み`,
           );
         });
-        for (const [key, template] of fetched) templates.set(key, template);
+        for (const entry of fetched) {
+          templates.set(entry.page.key, entry.elementorTemplate);
+          sitePreflightEntries.current.set(entry.page.key, entry);
+        }
       }
-      setSitePreflightResult(inspectFigmaSiteTemplates(plan, templates));
+      const structuralReport = inspectFigmaSiteTemplates(plan, templates);
+      if (candidateMode) {
+        const visualResults: SiteVisualQaBrowserResult[] = [];
+        const expectedScreens = plan.pages.reduce(
+          (total, page) => total + Number(page.hasDesktop) + Number(page.hasMobile),
+          0,
+        );
+        for (const page of plan.pages) {
+          const entry = sitePreflightEntries.current.get(page.key);
+          if (!entry?.previewHtml || !entry.visualReferences) {
+            throw new Error(`「${page.title}」のFigma画素比較データがありません。WordPressには送信していません。`);
+          }
+          const sourceDocument = previewDocument(
+            entry.previewHtml,
+            entry.elementorTemplate.page_settings.figmapress_webfonts,
+          );
+          const references = [
+            ...(page.hasDesktop && entry.visualReferences.desktop
+              ? [["desktop", entry.visualReferences.desktop] as const]
+              : []),
+            ...(page.hasMobile && entry.visualReferences.mobile
+              ? [["mobile", entry.visualReferences.mobile] as const]
+              : []),
+          ];
+          if (references.length !== Number(page.hasDesktop) + Number(page.hasMobile)) {
+            throw new Error(`「${page.title}」のPC/SP基準画像が不足しています。WordPressには送信していません。`);
+          }
+          for (const [variant, reference] of references) {
+            setSitePreflightProgress(
+              `${visualResults.length + 1}/${expectedScreens}画面を画素比較中（${page.title}・${variant === "desktop" ? "PC" : "スマホ"}）`,
+            );
+            const result = await runVisualQa(reference, sourceDocument, variant);
+            visualResults.push({ ...result, pageKey: page.key, pageTitle: page.title });
+            setSiteVisualQaResults([...visualResults]);
+          }
+        }
+        const gate = resolveSiteVisualQaGate(plan, visualResults);
+        if (gate.blocked) {
+          const firstFailure = gate.failures[0];
+          throw new Error(
+            firstFailure
+              ? `全${gate.expected}画面の99.9%品質検査に未合格があります（${firstFailure.pageKey}・${firstFailure.variant === "desktop" ? "PC" : "スマホ"}: ${firstFailure.score.toFixed(2)}）。WordPressには送信していません。`
+              : `全${gate.expected}画面の比較を完了できませんでした。WordPressには送信していません。`,
+          );
+        }
+      }
+      setSitePreflightResult(structuralReport);
       setSitePreflightProgress("");
     } catch (caught) {
       setSitePreflightError(
@@ -1944,6 +2028,14 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     }
     if (!connectorSupportsRequiredProWidgets) {
       throw new Error("Elementor ProのAccordion・Form・Nav Menuを確認できません。Connector最新版へ更新後、Elementor Proを有効にして再診断してください。");
+    }
+    if (sitePreflightResult?.pages !== plan.pages.length) {
+      throw new Error("全ページの構造検査が完了していません。先に事前検証を実行してください。");
+    }
+    if (siteVisualQaRequired && siteVisualQaGate?.blocked) {
+      throw new Error(
+        `全${siteVisualQaGate.expected}画面の99.9%品質検査が完了していません。WordPressには送信していません。`,
+      );
     }
     const siteInput = {
       siteKey: conversionSiteSourceKey,
@@ -1993,7 +2085,10 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       const missingPages = pagesToSave.filter((page) => !pageTemplates.has(page.key));
       if (missingPages.length > 0) {
         const fetched = await fetchMultiPageTemplates(missingPages);
-        for (const [key, template] of fetched) pageTemplates.set(key, template);
+        for (const entry of fetched) {
+          pageTemplates.set(entry.page.key, entry.elementorTemplate);
+          sitePreflightEntries.current.set(entry.page.key, entry);
+        }
       }
       setWpSiteProgress("下書きページと未割り当てメニューを準備しています…");
       const prepareThroughProxy = async (): Promise<BrowserPreparedSiteResult> => {
@@ -3688,7 +3783,15 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                       </button>
                       {sitePreflightResult && (
                         <p role="status">
-                          ✓ {sitePreflightResult.pages}/{multiPagePlan.pages.length}ページ合格・ネイティブElementor {sitePreflightResult.nativePages}ページ／文字 {sitePreflightResult.textWidgets}個／画像 {sitePreflightResult.imageWidgets}個／Button {sitePreflightResult.nativeButtons}個／クリック可能Container {sitePreflightResult.clickableContainers}個・正式URL {sitePreflightResult.structuredLinks}件・実動メニュー {sitePreflightResult.navigationPages}ページ/{sitePreflightResult.navigationWidgets}個・リンク {sitePreflightResult.links}件・移動先 {sitePreflightResult.destinations}ページ・フォーム {sitePreflightResult.contactForms}個
+                          ✓ {sitePreflightResult.pages}/{multiPagePlan.pages.length}ページ合格・ネイティブElementor {sitePreflightResult.nativePages}ページ／main {sitePreflightResult.semanticMains}個・header {sitePreflightResult.semanticHeaders}個・footer {sitePreflightResult.semanticFooters}個・H1 {sitePreflightResult.h1Headings}個／文字 {sitePreflightResult.textWidgets}個／画像 {sitePreflightResult.imageWidgets}個／Button {sitePreflightResult.nativeButtons}個／クリック可能Container {sitePreflightResult.clickableContainers}個・正式URL {sitePreflightResult.structuredLinks}件・実動メニュー {sitePreflightResult.navigationPages}ページ/{sitePreflightResult.navigationWidgets}個・リンク {sitePreflightResult.links}件・移動先 {sitePreflightResult.destinations}ページ・フォーム {sitePreflightResult.contactForms}個・仮テキスト {sitePreflightResult.placeholderTextWidgets}件
+                        </p>
+                      )}
+                      {siteVisualQaGate && siteVisualQaGate.completed > 0 && (
+                        <p role="status">
+                          {siteVisualQaGate.blocked ? "⚠" : "✓"} PC/SP画素比較 {siteVisualQaGate.passed}/{siteVisualQaGate.expected}画面合格
+                          {siteVisualQaGate.worstScore === null
+                            ? ""
+                            : `・最低一致度 ${siteVisualQaGate.worstScore.toFixed(2)}%`}
                         </p>
                       )}
                       {sitePreflightError && (

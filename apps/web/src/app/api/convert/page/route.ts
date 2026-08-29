@@ -6,6 +6,7 @@ import {
   createFigmaQualityReport,
   createFigmaMultiPagePlan,
   createFigmaSitePageTemplate,
+  renderFigmaPreview,
   type FigmaMultiPagePlan,
 } from "@figmapress/elementor-renderer";
 import {
@@ -166,6 +167,8 @@ export async function POST(request: Request): Promise<Response> {
           pages.push({
             page,
             elementorTemplate,
+            previewHtml: renderFigmaPreview(fetched.file, assets),
+            visualReferences: fetched.visualReferences,
             linkIntegrity: createFigmaQualityReport(
               fetched.file,
               elementorTemplate,

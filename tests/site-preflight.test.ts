@@ -38,6 +38,21 @@ function nativeTemplate(
     },
     elements: [],
   });
+  const heading = (variant: "desktop" | "mobile") => ({
+    id: `${key}-heading-${variant}`,
+    elType: "widget" as const,
+    widgetType: "text-editor" as const,
+    isInner: false,
+    settings: { editor: `<h1>${key}</h1>` },
+    elements: [],
+  });
+  const footer = (variant: "desktop" | "mobile") => ({
+    id: `${key}-footer-${variant}`,
+    elType: "container" as const,
+    isInner: true,
+    settings: { html_tag: "footer" },
+    elements: [],
+  });
   return {
     title: key,
     type: "page",
@@ -53,17 +68,10 @@ function nativeTemplate(
         id: `${key}-desktop-root`,
         elType: "container",
         isInner: false,
-        settings: { css_classes: "figmapress-layout figmapress-layout--desktop" },
+        settings: { css_classes: "figmapress-layout figmapress-layout--desktop", html_tag: "main" },
         elements: [
           navigation("desktop"),
-          {
-            id: `${key}-text`,
-            elType: "widget",
-            widgetType: "text-editor",
-            isInner: false,
-            settings: { editor: `<p>${key}</p>` },
-            elements: [],
-          },
+          heading("desktop"),
           ...destinations.map((destination, index) => ({
             id: `${key}-link-${index}`,
             elType: "widget" as const,
@@ -83,14 +91,15 @@ function nativeTemplate(
             settings: {},
             elements: [],
           }] : []),
+          footer("desktop"),
         ],
       },
       {
         id: `${key}-mobile-root`,
         elType: "container",
         isInner: false,
-        settings: { css_classes: "figmapress-layout figmapress-layout--mobile" },
-        elements: [navigation("mobile")],
+        settings: { css_classes: "figmapress-layout figmapress-layout--mobile", html_tag: "main" },
+        elements: [navigation("mobile"), heading("mobile"), footer("mobile")],
       },
     ],
   };
@@ -105,13 +114,18 @@ test("all native pages and every logical destination pass the preflight", () => 
   assert.deepEqual(inspectFigmaSiteTemplates(plan, templates), {
     pages: 3,
     nativePages: 3,
-    containers: 6,
-    widgets: 16,
-    textWidgets: 3,
+    containers: 12,
+    widgets: 19,
+    textWidgets: 6,
     imageWidgets: 0,
     nativeButtons: 0,
     clickableContainers: 0,
     structuredLinks: 0,
+    semanticMains: 6,
+    semanticHeaders: 6,
+    semanticFooters: 6,
+    h1Headings: 6,
+    placeholderTextWidgets: 0,
     links: 24,
     destinations: 3,
     navigationPages: 3,
@@ -120,6 +134,40 @@ test("all native pages and every logical destination pass the preflight", () => 
     carousels: 0,
     accordions: 0,
   });
+});
+
+test("placeholder copy blocks the entire site before WordPress receives it", () => {
+  const home = nativeTemplate("home", ["company", "contact"]);
+  const heading = home.content[0]?.elements.find(
+    (element) => element.id === "home-heading-desktop",
+  );
+  if (heading) heading.settings.editor = "<h1>SampleSampleSample</h1>";
+
+  assert.throws(
+    () => inspectFigmaSiteTemplates(plan, new Map([
+      ["home", home],
+      ["company", nativeTemplate("company", ["home", "contact"])],
+      ["contact", nativeTemplate("contact", ["home", "company"])],
+    ])),
+    /ホーム.*仮テキスト.*WordPressには送信しません/,
+  );
+});
+
+test("each responsive layout requires exactly one H1", () => {
+  const company = nativeTemplate("company", ["home", "contact"]);
+  const mobileHeading = company.content[1]?.elements.find(
+    (element) => element.id === "company-heading-mobile",
+  );
+  if (mobileHeading) mobileHeading.settings.editor = "<div>会社案内</div>";
+
+  assert.throws(
+    () => inspectFigmaSiteTemplates(plan, new Map([
+      ["home", nativeTemplate("home", ["company", "contact"])],
+      ["company", company],
+      ["contact", nativeTemplate("contact", ["home", "company"])],
+    ])),
+    /会社案内.*スマホ版のH1は1つ必要.*現在0/,
+  );
 });
 
 test("a candidate page without its native Elementor marker is rejected", () => {
@@ -195,7 +243,7 @@ test("missing responsive navigation or the contact form is rejected", () => {
       ["company", nativeTemplate("company", ["home", "contact"])],
       ["contact", nativeTemplate("contact", ["home", "company"])],
     ])),
-    /ホーム.*PC\/SP実動メニューが不足.*1\/2/,
+    /ホーム.*スマホ版に実動メニュー相当のheaderがありません/,
   );
 
   const contactWithoutForm = nativeTemplate("contact", ["home", "company"]);
