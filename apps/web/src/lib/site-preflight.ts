@@ -32,6 +32,13 @@ export interface FigmaSitePreflightReport {
   accordions: number;
 }
 
+export class FigmaSitePlaceholderError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FigmaSitePlaceholderError";
+  }
+}
+
 interface TemplateFunctionalInventory {
   navigationWidgets: number;
   navigationDestinations: Set<string>;
@@ -181,7 +188,7 @@ export function inspectFigmaSiteTemplates(
       }
     }
     if (nativeAudit.placeholderTextWidgets > 0) {
-      throw new Error(
+      throw new FigmaSitePlaceholderError(
         `「${page.title}」に仮テキストが${nativeAudit.placeholderTextWidgets}件あります（${nativeAudit.placeholderTextExamples.join("／")}）。Figmaの原稿を確定するまでWordPressには送信しません。`,
       );
     }

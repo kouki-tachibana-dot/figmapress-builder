@@ -6,7 +6,10 @@ import {
   type FigmaMultiPagePlan,
   type FigmaSitePageKey,
 } from "@figmapress/elementor-renderer";
-import { inspectFigmaSiteTemplates } from "../apps/web/src/lib/site-preflight.ts";
+import {
+  FigmaSitePlaceholderError,
+  inspectFigmaSiteTemplates,
+} from "../apps/web/src/lib/site-preflight.ts";
 
 const plan: FigmaMultiPagePlan = {
   title: "建工101",
@@ -149,7 +152,8 @@ test("placeholder copy blocks the entire site before WordPress receives it", () 
       ["company", nativeTemplate("company", ["home", "contact"])],
       ["contact", nativeTemplate("contact", ["home", "company"])],
     ])),
-    /ホーム.*仮テキスト.*WordPressには送信しません/,
+    (error) => error instanceof FigmaSitePlaceholderError
+      && /ホーム.*仮テキスト.*WordPressには送信しません/.test(error.message),
   );
 });
 

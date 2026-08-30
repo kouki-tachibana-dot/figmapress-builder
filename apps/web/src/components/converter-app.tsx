@@ -92,6 +92,7 @@ import {
 import { auditNativeElementorTemplate } from "@/lib/elementor-native";
 import { inspectRenderedLinkIntegrity } from "@/lib/rendered-link-integrity";
 import {
+  FigmaSitePlaceholderError,
   inspectFigmaSiteTemplates,
   type FigmaSitePreflightReport,
 } from "@/lib/site-preflight";
@@ -116,7 +117,7 @@ type SiteVisualQaBrowserResult = VisualQaBrowserResult & {
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
-const APP_RELEASE = "0.29.1";
+const APP_RELEASE = "0.29.2";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -1953,7 +1954,17 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
           sitePreflightEntries.current.set(entry.page.key, entry);
         }
       }
-      const structuralReport = inspectFigmaSiteTemplates(plan, templates);
+      let structuralReport: FigmaSitePreflightReport | null = null;
+      let placeholderError: FigmaSitePlaceholderError | null = null;
+      try {
+        structuralReport = inspectFigmaSiteTemplates(plan, templates);
+      } catch (caught) {
+        if (caught instanceof FigmaSitePlaceholderError) {
+          placeholderError = caught;
+        } else {
+          throw caught;
+        }
+      }
       if (candidateMode) {
         const visualResults: SiteVisualQaBrowserResult[] = [];
         const expectedScreens = plan.pages.reduce(
@@ -1998,6 +2009,10 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
               : `全${gate.expected}画面の比較を完了できませんでした。WordPressには送信していません。`,
           );
         }
+      }
+      if (placeholderError) throw placeholderError;
+      if (!structuralReport) {
+        throw new Error("全ページの構造検査を完了できませんでした。WordPressには送信していません。");
       }
       setSitePreflightResult(structuralReport);
       setSitePreflightProgress("");
