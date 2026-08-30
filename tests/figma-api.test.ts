@@ -452,6 +452,70 @@ test("visual references fall back to JPEG when Figma rejects PNG", async (contex
   assert.ok(requested.some((url) => url.includes("format=jpg")));
 });
 
+test("one timed-out responsive reference does not erase its successful companion", async (context) => {
+  context.mock.method(globalThis, "fetch", async (input) => {
+    const url = new URL(String(input));
+    if (url.pathname.includes("/v1/images/")) {
+      const nodeId = url.searchParams.get("ids");
+      if (nodeId === "2:3") throw new TypeError("timed out");
+      return Response.json({
+        images: { "2:2": "https://s3-alpha-sig.figma.com/company-desktop.jpg" },
+      });
+    }
+    if (url.pathname.endsWith("/images")) return Response.json({ images: {} });
+    return Response.json({
+      name: "Responsive company",
+      document: {
+        id: "0:0",
+        name: "Document",
+        type: "DOCUMENT",
+        children: [{
+          id: "1:1",
+          name: "Page",
+          type: "CANVAS",
+          children: [
+            {
+              id: "2:2",
+              name: "会社案内 PC",
+              type: "FRAME",
+              absoluteBoundingBox: { x: 0, y: 0, width: 1440, height: 7865 },
+              children: [{
+                id: "3:2",
+                name: "Page title",
+                type: "TEXT",
+                characters: "会社案内",
+                absoluteBoundingBox: { x: 40, y: 100, width: 300, height: 60 },
+              }],
+            },
+            {
+              id: "2:3",
+              name: "会社案内 SP",
+              type: "FRAME",
+              absoluteBoundingBox: { x: 1600, y: 0, width: 440, height: 7559 },
+              children: [{
+                id: "3:3",
+                name: "Page title",
+                type: "TEXT",
+                characters: "会社案内",
+                absoluteBoundingBox: { x: 1640, y: 100, width: 220, height: 48 },
+              }],
+            },
+          ],
+        }],
+      },
+    });
+  });
+
+  const result = await fetchFigmaFile(
+    "https://www.figma.com/design/AbCdEf123456/Responsive?node-id=2-2",
+    "figd_test_token_value",
+  );
+
+  assert.equal(result.visualReferences.desktop?.nodeId, "2:2");
+  assert.equal(result.visualReferences.mobile, undefined);
+  assert.ok(result.warnings.some((warning) => warning.includes("一部だけ取得")));
+});
+
 test("Figma authentication errors distinguish OAuth draft state from PAT permissions", async (context) => {
   context.mock.method(globalThis, "fetch", async (_input, init) => {
     const headers = new Headers(init?.headers);

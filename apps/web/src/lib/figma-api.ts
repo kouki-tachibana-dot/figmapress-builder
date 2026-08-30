@@ -549,7 +549,7 @@ async function fetchRenderedNodeUrls(
 async function fetchVisualReferences(
   key: string,
   document: FigmaNode,
-  init: RequestInit,
+  getInit: (timeoutMs?: number) => RequestInit,
   warnings: string[],
 ): Promise<FigmaVisualReferences> {
   const responsive = responsivePageRoots(document);
@@ -570,8 +570,9 @@ async function fetchVisualReferences(
   );
   if (!roots.length) return {};
 
-  try {
-    const rendered = await Promise.all(roots.map(async (node) => {
+  const rendered = await Promise.all(roots.map(async (node) => {
+    try {
+      const requestDeadline = Date.now() + 45_000;
       const bounds = node.absoluteBoundingBox;
       if (!bounds) return null;
       const mobileFrame = bounds.width <= 768;
@@ -606,6 +607,23 @@ async function fetchVisualReferences(
         attempts.push({ format: "png", scale: losslessScale });
       }
       attempts.push({ format: "jpg", scale: jpegScale });
+      const longestEdgeFallbackScale = Math.max(
+        0.01,
+        Math.min(1, 4_096 / Math.max(bounds.width, bounds.height)),
+      );
+      if (longestEdgeFallbackScale < jpegScale - 0.001) {
+        attempts.push({ format: "jpg", scale: longestEdgeFallbackScale });
+      }
+      const compactFallbackScale = Math.max(
+        0.01,
+        Math.min(1, (mobileFrame ? 320 : 640) / bounds.width),
+      );
+      if (!attempts.some((attempt) =>
+        attempt.format === "jpg"
+        && Math.abs(attempt.scale - compactFallbackScale) < 0.001
+      )) {
+        attempts.push({ format: "jpg", scale: compactFallbackScale });
+      }
 
       let image: string | null = null;
       let renderedScale = 1;
@@ -618,20 +636,36 @@ async function fetchVisualReferences(
           scale: String(requestScale),
           use_absolute_bounds: "true",
         });
-        const response = await fetch(
-          `https://api.figma.com/v1/images/${encodeURIComponent(key)}?${query.toString()}`,
-          init,
-        );
-        if (!response.ok) continue;
-        const data = await readLimitedJson(response);
-        if (!isRecord(data) || !isRecord(data.images)) continue;
-        const candidate = data.images[node.id];
-        if (typeof candidate === "string") {
-          image = candidate;
-          renderedScale = requestScale;
-          renderedFormat = attempt.format;
-          break;
+        for (let retry = 1; retry <= 2; retry += 1) {
+          const remainingMs = requestDeadline - Date.now();
+          if (remainingMs <= 1_000) break;
+          try {
+            const response = await fetch(
+              `https://api.figma.com/v1/images/${encodeURIComponent(key)}?${query.toString()}`,
+              getInit(Math.min(15_000, remainingMs)),
+            );
+            if (response.ok) {
+              const data = await readLimitedJson(response);
+              if (isRecord(data) && isRecord(data.images)) {
+                const candidate = data.images[node.id];
+                if (typeof candidate === "string") {
+                  image = candidate;
+                  renderedScale = requestScale;
+                  renderedFormat = attempt.format;
+                }
+              }
+              break;
+            }
+            if (response.status < 500 && response.status !== 429) break;
+          } catch {
+            // Use a fresh timeout signal for the retry and smaller fallbacks.
+          }
+          if (retry < 2) {
+            await new Promise((resolve) => setTimeout(resolve, 500));
+          }
         }
+        if (image) break;
+        if (Date.now() >= requestDeadline) break;
       }
       if (!image) return null;
       const renderedWidth = Math.max(
@@ -651,7 +685,12 @@ async function fetchVisualReferences(
         sourceHeight: Math.max(1, Math.round(bounds.height)),
         format: renderedFormat,
       };
-    }));
+    } catch {
+      // A single slow PC/SP render must not discard a successful companion.
+      return null;
+    }
+  }));
+  try {
     const references = new Map(
       rendered
         .filter((item): item is FigmaVisualReference => Boolean(item))
@@ -659,6 +698,8 @@ async function fetchVisualReferences(
     );
     if (!references.size) {
       warnings.push("Visual QA用のFigma基準画像を取得できませんでした。");
+    } else if (references.size < roots.length) {
+      warnings.push("Visual QA用のFigma基準画像をPC/SPの一部だけ取得しました。未取得画面は再試行してください。");
     }
     return {
       desktop: desktop ? references.get(desktop.id) : undefined,
@@ -854,7 +895,7 @@ export async function fetchFigmaFile(
       : fetchVisualReferences(
           key,
           normalizedData.document,
-          requestInit(),
+          requestInit,
           warnings,
         ),
   ]);
