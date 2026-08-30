@@ -157,6 +157,23 @@ test("placeholder copy blocks the entire site before WordPress receives it", () 
   );
 });
 
+test("explicit placeholder approval keeps the copy visible in the draft report", () => {
+  const home = nativeTemplate("home", ["company", "contact"]);
+  const heading = home.content[0]?.elements.find(
+    (element) => element.id === "home-heading-desktop",
+  );
+  if (heading) heading.settings.editor = "<h1>SampleSampleSample</h1>";
+
+  const report = inspectFigmaSiteTemplates(plan, new Map([
+    ["home", home],
+    ["company", nativeTemplate("company", ["home", "contact"])],
+    ["contact", nativeTemplate("contact", ["home", "company"])],
+  ]), { allowPlaceholderText: true });
+
+  assert.equal(report.pages, 3);
+  assert.equal(report.placeholderTextWidgets, 1);
+});
+
 test("each responsive layout requires exactly one H1", () => {
   const company = nativeTemplate("company", ["home", "contact"]);
   const mobileHeading = company.content[1]?.elements.find(

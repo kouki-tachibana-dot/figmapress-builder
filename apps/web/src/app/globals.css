@@ -418,6 +418,10 @@ a { color: inherit; }
 .site-build-plan li span { font-size: 11px; font-weight: 750; }
 .site-build-plan code { color: #315f77; font-size: 9px; overflow: hidden; text-overflow: ellipsis; }
 .site-build-plan p { color: #62747d; font-size: 9px; line-height: 1.7; margin: 11px 0 0; }
+.site-placeholder-approval { align-items: flex-start; background: #fff9e8; border: 1px solid #e9d597; border-radius: 10px; cursor: pointer; display: flex; gap: 9px; margin: 12px 0; padding: 11px 12px; }
+.site-placeholder-approval input { flex: 0 0 auto; margin-top: 2px; }
+.site-placeholder-approval span { color: #55430d; display: grid; font-size: 10px; font-weight: 750; gap: 3px; line-height: 1.5; }
+.site-placeholder-approval small { color: #75652f; font-size: 9px; font-weight: 500; }
 .site-build-progress { align-items: center; background: #edf7ff; border: 1px solid #c5e0ef; border-radius: 12px; color: #315f77; display: flex; font-size: 11px; gap: 8px; margin-top: 16px; padding: 13px 15px; }
 .site-build-result { background: #f3faed; border: 1px solid #bad99d; border-radius: 16px; display: grid; gap: 14px; margin-top: 16px; padding: 17px; }
 .site-build-result > div:first-child { display: flex; flex-direction: column; gap: 3px; }

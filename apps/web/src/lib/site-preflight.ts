@@ -32,6 +32,10 @@ export interface FigmaSitePreflightReport {
   accordions: number;
 }
 
+export interface FigmaSitePreflightOptions {
+  allowPlaceholderText?: boolean;
+}
+
 export class FigmaSitePlaceholderError extends Error {
   constructor(message: string) {
     super(message);
@@ -121,6 +125,7 @@ function inspectTemplateFunctionalInventory(
 export function inspectFigmaSiteTemplates(
   plan: FigmaMultiPagePlan,
   templates: ReadonlyMap<FigmaSitePageKey, ElementorTemplate>,
+  options: FigmaSitePreflightOptions = {},
 ): FigmaSitePreflightReport {
   if (plan.pages.length < 2) {
     throw new Error("複数ページの構成がありません。Figmaからもう一度変換してください。");
@@ -187,7 +192,7 @@ export function inspectFigmaSiteTemplates(
         throw new Error(`「${page.title}」の${label}版のH1は1つ必要です（現在${root.h1Headings}）。WordPressには送信していません。`);
       }
     }
-    if (nativeAudit.placeholderTextWidgets > 0) {
+    if (nativeAudit.placeholderTextWidgets > 0 && !options.allowPlaceholderText) {
       throw new FigmaSitePlaceholderError(
         `「${page.title}」に仮テキストが${nativeAudit.placeholderTextWidgets}件あります（${nativeAudit.placeholderTextExamples.join("／")}）。Figmaの原稿を確定するまでWordPressには送信しません。`,
       );

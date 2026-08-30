@@ -117,7 +117,7 @@ type SiteVisualQaBrowserResult = VisualQaBrowserResult & {
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
-const APP_RELEASE = "0.29.2";
+const APP_RELEASE = "0.29.3";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -865,6 +865,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const [sitePreflightProgress, setSitePreflightProgress] = useState("");
   const [sitePreflightResult, setSitePreflightResult] =
     useState<FigmaSitePreflightReport | null>(null);
+  const [sitePlaceholderApproved, setSitePlaceholderApproved] = useState(false);
   const sitePreflightTemplates = useRef(
     new Map<FigmaSitePageKey, ElementorTemplate>(),
   );
@@ -1192,6 +1193,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     setSiteVisualQaResults([]);
     setSitePreflightProgress("");
     setSitePreflightResult(null);
+    setSitePlaceholderApproved(false);
   }
 
   function updateFigmaTokenPersistence(persistent: boolean) {
@@ -1238,6 +1240,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     setSitePreflightError("");
     setSitePreflightProgress("");
     setSitePreflightResult(null);
+    setSitePlaceholderApproved(false);
     sitePreflightTemplates.current.clear();
     sitePreflightEntries.current.clear();
     setSiteVisualQaResults([]);
@@ -1957,7 +1960,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       let structuralReport: FigmaSitePreflightReport | null = null;
       let placeholderError: FigmaSitePlaceholderError | null = null;
       try {
-        structuralReport = inspectFigmaSiteTemplates(plan, templates);
+        structuralReport = inspectFigmaSiteTemplates(plan, templates, {
+          allowPlaceholderText: sitePlaceholderApproved,
+        });
       } catch (caught) {
         if (caught instanceof FigmaSitePlaceholderError) {
           placeholderError = caught;
@@ -2046,6 +2051,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     }
     if (sitePreflightResult?.pages !== plan.pages.length) {
       throw new Error("全ページの構造検査が完了していません。先に事前検証を実行してください。");
+    }
+    if (sitePreflightResult.placeholderTextWidgets > 0 && !sitePlaceholderApproved) {
+      throw new Error("Figma内の仮テキストを確認し、そのまま下書きへ含める場合は明示承認してください。");
     }
     if (siteVisualQaRequired && siteVisualQaGate?.blocked) {
       throw new Error(
@@ -3786,6 +3794,21 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                         ))}
                       </ol>
                       <p>すべて下書きで作成します。メニューは未割り当てのため、公開中サイトには表示されません。再実行時は同じ下書きを更新します。</p>
+                      <label className="site-placeholder-approval">
+                        <input
+                          checked={sitePlaceholderApproved}
+                          onChange={(event) => {
+                            setSitePlaceholderApproved(event.target.checked);
+                            setSitePreflightResult(null);
+                            setSitePreflightError("");
+                          }}
+                          type="checkbox"
+                        />
+                        <span>
+                          Figma内の仮テキストをそのまま下書きへ含める
+                          <small>今回の変換だけに適用します。公開・メニュー割り当ては行いません。</small>
+                        </span>
+                      </label>
                       <button
                         className="button button--dark"
                         disabled={sitePreflightBusy}
