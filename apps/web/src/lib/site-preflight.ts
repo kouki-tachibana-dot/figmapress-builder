@@ -169,16 +169,20 @@ export function inspectFigmaSiteTemplates(
     if (page.hasDesktop && nativeAudit.desktopRoots < 1) {
       throw new Error(`「${page.title}」のPC用Elementorレイアウトがありません。WordPressには送信していません。`);
     }
+    if (page.hasTablet && nativeAudit.tabletRoots < 1) {
+      throw new Error(`「${page.title}」のタブレット用Elementorレイアウトがありません。WordPressには送信していません。`);
+    }
     if (page.hasMobile && nativeAudit.mobileRoots < 1) {
       throw new Error(`「${page.title}」のスマホ用Elementorレイアウトがありません。WordPressには送信していません。`);
     }
     const requiredVariants = [
       ...(page.hasDesktop ? ["desktop" as const] : []),
+      ...(page.hasTablet ? ["tablet" as const] : []),
       ...(page.hasMobile ? ["mobile" as const] : []),
     ];
     for (const variant of requiredVariants) {
       const root = nativeAudit.responsiveRoots.find((candidate) => candidate.variant === variant);
-      const label = variant === "desktop" ? "PC" : "スマホ";
+      const label = variant === "desktop" ? "PC" : variant === "tablet" ? "タブレット" : "スマホ";
       if (!root?.main) {
         throw new Error(`「${page.title}」の${label}版がmainランドマークではありません。WordPressには送信していません。`);
       }
@@ -199,8 +203,10 @@ export function inspectFigmaSiteTemplates(
     }
     if (page.frameId) {
       const desktopReference = template.page_settings.figmapress_reference_desktop_node_id;
+      const tabletReference = template.page_settings.figmapress_reference_tablet_node_id;
       const mobileReference = template.page_settings.figmapress_reference_mobile_node_id;
       if ((page.hasDesktop && typeof desktopReference !== "string")
+        || (page.hasTablet && typeof tabletReference !== "string")
         || (page.hasMobile && typeof mobileReference !== "string")) {
         throw new Error(
           `「${page.title}」のFigma比較基準が不足しています。WordPressには送信していません。`,
@@ -243,11 +249,11 @@ export function inspectFigmaSiteTemplates(
     }
     const expectedNavigationWidgets = Math.max(
       1,
-      Number(page.hasDesktop) + Number(page.hasMobile),
+      Number(page.hasDesktop) + Number(page.hasTablet) + Number(page.hasMobile),
     );
     if (inventory.navigationWidgets < expectedNavigationWidgets) {
       throw new Error(
-        `「${page.title}」のPC/SP実動メニューが不足しています（${inventory.navigationWidgets}/${expectedNavigationWidgets}）。WordPressには送信していません。`,
+        `「${page.title}」の端末別実動メニューが不足しています（${inventory.navigationWidgets}/${expectedNavigationWidgets}）。WordPressには送信していません。`,
       );
     }
     const missingNavigationDestinations = plan.pages.filter(

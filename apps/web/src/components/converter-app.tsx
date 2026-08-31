@@ -106,6 +106,7 @@ type PageTemplateEntry = {
   previewHtml?: string | null;
   visualReferences?: {
     desktop?: VisualQaReference;
+    tablet?: VisualQaReference;
     mobile?: VisualQaReference;
   };
 };
@@ -117,7 +118,7 @@ type SiteVisualQaBrowserResult = VisualQaBrowserResult & {
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
-const APP_RELEASE = "0.29.3";
+const APP_RELEASE = "0.30.0";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -324,6 +325,7 @@ interface ConversionResult {
   };
   visualReferences: {
     desktop?: VisualQaReference;
+    tablet?: VisualQaReference;
     mobile?: VisualQaReference;
   };
 }
@@ -341,7 +343,7 @@ interface PreviewTextCount {
 
 interface PreviewTextIntegrity extends PreviewTextCount {
   source: string;
-  variants?: Partial<Record<"desktop" | "mobile", PreviewTextCount>>;
+  variants?: Partial<Record<"desktop" | "tablet" | "mobile", PreviewTextCount>>;
 }
 
 type VisualQaCorrectionKind =
@@ -403,7 +405,7 @@ function inspectPreviewTextIntegrity(
   ).filter((element) => element.textContent?.trim());
   const responsiveRoots = Array.from(
     document.querySelectorAll<HTMLElement>(
-      ".figmapress-figma-preview--desktop, .figmapress-figma-preview--mobile",
+      ".figmapress-figma-preview--desktop, .figmapress-figma-preview--tablet, .figmapress-figma-preview--mobile",
     ),
   );
   if (!responsiveRoots.length) return countPaintedText(document, boxes);
@@ -422,9 +424,11 @@ function inspectPreviewTextIntegrity(
           "important",
         );
       }
-      const variant = activeRoot.classList.contains(
-        "figmapress-figma-preview--mobile",
-      ) ? "mobile" : "desktop";
+      const variant = activeRoot.classList.contains("figmapress-figma-preview--mobile")
+        ? "mobile"
+        : activeRoot.classList.contains("figmapress-figma-preview--tablet")
+          ? "tablet"
+          : "desktop";
       variants[variant] = countPaintedText(
         document,
         boxes.filter((box) => activeRoot.contains(box)),
@@ -709,10 +713,14 @@ function safeDecorationGeometryCorrections(
 
 function visualScoreMap(
   results: VisualQaBrowserResult[],
-): Partial<Record<"desktop" | "mobile", number>> {
+): Partial<Record<"desktop" | "tablet" | "mobile", number>> {
   return Object.fromEntries(
     results.map((result) => [result.variant, result.score]),
   );
+}
+
+function deviceLabel(variant: "desktop" | "tablet" | "mobile"): string {
+  return variant === "desktop" ? "PC" : variant === "tablet" ? "タブレット" : "スマホ";
 }
 
 function serializableVisualQaResults(results: VisualQaBrowserResult[]) {
@@ -775,8 +783,9 @@ ${webfontUrl ? `<link rel="stylesheet" href="${webfontUrl}">` : ""}
 *{box-sizing:border-box}body{margin:0;background:#f5f3ed;color:#13212a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.65}
 section{padding:64px clamp(24px,7vw,88px);max-width:1100px;margin:0 auto}h1,h2,h3{line-height:1.13;letter-spacing:-.035em}h1{font-size:clamp(36px,7vw,72px);margin:0 0 20px}h2{font-size:clamp(28px,5vw,48px);margin:0 0 28px}h3{font-size:20px}p{color:#53636c}a{display:inline-block;background:#c8ff61;color:#102029;text-decoration:none;font-weight:750;padding:13px 20px;border-radius:999px}
 .wp-block-figmapress-hero{display:grid;grid-template-columns:1fr;align-items:center;gap:48px;min-height:520px}.wp-block-figmapress-hero[data-layout="text-left-image-right"]{grid-template-columns:1.15fr .85fr}.wp-block-figmapress-hero__image img{width:100%;border-radius:24px}.wp-block-figmapress-service-list,.wp-block-figmapress-faq{background:#fff}.wp-block-figmapress-card-grid__items,.wp-block-figmapress-service-list__items{list-style:none;padding:0;display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.wp-block-figmapress-card-grid__item,.wp-block-figmapress-service-list__item{padding:24px;background:#fff;border:1px solid #dbe1df;border-radius:18px}.wp-block-figmapress-faq__items dt{font-weight:750;margin-top:20px}.wp-block-figmapress-faq__items dd{margin:6px 0 0;color:#53636c}.wp-block-figmapress-cta{text-align:center;background:#112832;color:#fff;border-radius:28px}.wp-block-figmapress-cta h2{color:#fff}.wp-block-figmapress-contact{text-align:center}
-.figmapress-figma-preview{container-type:inline-size;overflow:hidden;position:relative;width:100%}.figmapress-figma-preview *{box-sizing:border-box;margin:0;max-width:none}.figmapress-figma-preview img{display:block}.figmapress-figma-preview--mobile{display:none}
-@media(max-width:767px){section{padding:44px 22px}.wp-block-figmapress-hero{grid-template-columns:1fr;min-height:auto}.wp-block-figmapress-card-grid__items,.wp-block-figmapress-service-list__items{grid-template-columns:1fr}.figmapress-figma-preview--desktop{display:none}.figmapress-figma-preview--mobile{display:block}}
+.figmapress-figma-preview{container-type:inline-size;overflow:hidden;position:relative;width:100%}.figmapress-figma-preview *{box-sizing:border-box;margin:0;max-width:none}.figmapress-figma-preview img{display:block}.figmapress-figma-preview--tablet,.figmapress-figma-preview--mobile{display:none}
+@media(min-width:768px) and (max-width:1024px){.figmapress-figma-preview--tablet{display:block}.figmapress-responsive-preview:has(>.figmapress-figma-preview--tablet)>.figmapress-figma-preview--desktop{display:none}}
+@media(max-width:767px){section{padding:44px 22px}.wp-block-figmapress-hero{grid-template-columns:1fr;min-height:auto}.wp-block-figmapress-card-grid__items,.wp-block-figmapress-service-list__items{grid-template-columns:1fr}.figmapress-figma-preview--desktop,.figmapress-figma-preview--tablet{display:none}.figmapress-figma-preview--mobile{display:block}}
 </style></head><body>${content}</body></html>`;
 }
 
@@ -800,14 +809,15 @@ html,body{margin:0!important;min-height:100%;padding:0!important;background:#fff
 
 function visualReferencesFor(
   targetOutput: ConversionResult,
-): Array<readonly ["desktop" | "mobile", VisualQaReference]> {
+): Array<readonly ["desktop" | "tablet" | "mobile", VisualQaReference]> {
   return (
     [
       ["desktop", targetOutput.visualReferences.desktop],
+      ["tablet", targetOutput.visualReferences.tablet],
       ["mobile", targetOutput.visualReferences.mobile],
     ] as const
   ).filter(
-    (entry): entry is readonly ["desktop" | "mobile", VisualQaReference] =>
+    (entry): entry is readonly ["desktop" | "tablet" | "mobile", VisualQaReference] =>
       Boolean(entry[1]),
   );
 }
@@ -914,7 +924,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     setVisualQaDecorationGeometryCorrections,
   ] = useState<ElementorDecorationGeometryCorrection[]>([]);
   const [visualQaBaselineScores, setVisualQaBaselineScores] = useState<
-    Partial<Record<"desktop" | "mobile", number>>
+    Partial<Record<"desktop" | "tablet" | "mobile", number>>
   >({});
   const [visualQaCorrectionAttempts, setVisualQaCorrectionAttempts] = useState(
     initialVisualQaCorrectionAttempts,
@@ -1848,7 +1858,8 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                     slug: page.slug,
                     frameId: page.frameId,
                     hasDesktop: page.hasDesktop,
-                    hasMobile: page.hasMobile,
+                  hasTablet: Boolean(page.hasTablet),
+                  hasMobile: page.hasMobile,
                   })),
                   sitePages: output?.multiPagePlan?.pages
                     .filter((page) => page.frameId)
@@ -1858,6 +1869,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                       slug: page.slug,
                       frameId: page.frameId,
                       hasDesktop: page.hasDesktop,
+                      hasTablet: Boolean(page.hasTablet),
                       hasMobile: page.hasMobile,
                     })),
                 }
@@ -1973,7 +1985,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       if (candidateMode) {
         const visualResults: SiteVisualQaBrowserResult[] = [];
         const expectedScreens = plan.pages.reduce(
-          (total, page) => total + Number(page.hasDesktop) + Number(page.hasMobile),
+          (total, page) => total + Number(page.hasDesktop) + Number(page.hasTablet) + Number(page.hasMobile),
           0,
         );
         for (const page of plan.pages) {
@@ -1989,16 +2001,19 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
             ...(page.hasDesktop && entry.visualReferences.desktop
               ? [["desktop", entry.visualReferences.desktop] as const]
               : []),
+            ...(page.hasTablet && entry.visualReferences.tablet
+              ? [["tablet", entry.visualReferences.tablet] as const]
+              : []),
             ...(page.hasMobile && entry.visualReferences.mobile
               ? [["mobile", entry.visualReferences.mobile] as const]
               : []),
           ];
-          if (references.length !== Number(page.hasDesktop) + Number(page.hasMobile)) {
-            throw new Error(`「${page.title}」のPC/SP基準画像が不足しています。WordPressには送信していません。`);
+          if (references.length !== Number(page.hasDesktop) + Number(page.hasTablet) + Number(page.hasMobile)) {
+            throw new Error(`「${page.title}」の端末別Figma基準画像が不足しています。WordPressには送信していません。`);
           }
           for (const [variant, reference] of references) {
             setSitePreflightProgress(
-              `${visualResults.length + 1}/${expectedScreens}画面を画素比較中（${page.title}・${variant === "desktop" ? "PC" : "スマホ"}）`,
+              `${visualResults.length + 1}/${expectedScreens}画面を画素比較中（${page.title}・${deviceLabel(variant)}）`,
             );
             const result = await runVisualQa(reference, sourceDocument, variant);
             visualResults.push({ ...result, pageKey: page.key, pageTitle: page.title });
@@ -2010,7 +2025,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
           const firstFailure = gate.failures[0];
           throw new Error(
             firstFailure
-              ? `全${gate.expected}画面の99.9%品質検査に未合格があります（${firstFailure.pageKey}・${firstFailure.variant === "desktop" ? "PC" : "スマホ"}: ${firstFailure.score.toFixed(2)}）。WordPressには送信していません。`
+              ? `全${gate.expected}画面の99.9%品質検査に未合格があります（${firstFailure.pageKey}・${deviceLabel(firstFailure.variant)}: ${firstFailure.score.toFixed(2)}）。WordPressには送信していません。`
               : `全${gate.expected}画面の比較を完了できませんでした。WordPressには送信していません。`,
           );
         }
@@ -3139,7 +3154,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
               <fieldset className="figma-page-picker" id="figma-page-picker">
                 <legend>変換するページを選ぶ</legend>
                 <p>
-                  このFigmaには複数のWebページがあります。別ページ同士を混ぜず、選んだPC画面と対応するスマホ画面だけを変換します。
+                  このFigmaには複数のWebページがあります。別ページ同士を混ぜず、選んだPC画面と対応するタブレット・スマホ画面だけを変換します。
                 </p>
                 <div className="figma-page-picker__grid">
                   {figmaPageCandidates.map((candidate, index) => {
@@ -3160,6 +3175,10 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                             {candidate.desktop
                               ? `PC ${candidate.desktop.width}×${candidate.desktop.height}`
                               : "PCなし"}
+                            {" / "}
+                            {candidate.tablet
+                              ? `タブレット ${candidate.tablet.width}×${candidate.tablet.height}`
+                              : "タブレットなし"}
                             {" / "}
                             {candidate.mobile
                               ? `スマホ ${candidate.mobile.width}×${candidate.mobile.height}`
@@ -3280,10 +3299,10 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                   </div>
                 </div>
               )}
-              {(output.visualReferences.desktop || output.visualReferences.mobile) && (
+              {(output.visualReferences.desktop || output.visualReferences.tablet || output.visualReferences.mobile) && (
                 <div className="visual-qa-launch">
                   <strong>Visual QA</strong>
-                  <p>FigmaのPC/SP基準画像と生成ページを画素単位で比較します。</p>
+                  <p>FigmaのPC／タブレット／スマホ基準画像と生成ページを画素単位で比較します。</p>
                   <button
                     disabled={visualQaBusy}
                     onClick={checkVisualQuality}
@@ -3325,14 +3344,14 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
             </aside>
           </div>
 
-          {(output.visualReferences.desktop || output.visualReferences.mobile) && (
+          {(output.visualReferences.desktop || output.visualReferences.tablet || output.visualReferences.mobile) && (
             <div className="visual-qa-card">
               <div className="visual-qa-card__head">
                 <div>
                   <span className="eyebrow">Pixel comparison</span>
                   <h3>Figma視覚差分レポート</h3>
                   <p>
-                    赤い箇所ほどFigmaとの差が大きい領域です。位置・色・画像・文字折り返しをPC/SP別、セクション別、文字・画像・背景要素別に実測します。
+                    赤い箇所ほどFigmaとの差が大きい領域です。位置・色・画像・文字折り返しを端末別、セクション別、文字・画像・背景要素別に実測します。
                   </p>
                 </div>
                 {visualQaResults.length > 0 && (
@@ -3424,7 +3443,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                       )?.score;
                       return (
                         <span key={correction.variant}>
-                          <b>{correction.variant === "desktop" ? "PC" : "スマホ"}</b>
+                          <b>{deviceLabel(correction.variant)}</b>
                           X {correction.offsetX >= 0 ? "+" : ""}{correction.offsetX}px /
                           Y {correction.offsetY >= 0 ? "+" : ""}{correction.offsetY}px
                           <em>
@@ -3443,7 +3462,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                   <div>
                     {visualQaSectionCorrections.map((correction) => (
                       <span key={`${correction.variant}:${correction.nodeId}`}>
-                        <b>{correction.variant === "desktop" ? "PC" : "スマホ"} / {correction.nodeName}</b>
+                        <b>{deviceLabel(correction.variant)} / {correction.nodeName}</b>
                         X {correction.offsetX >= 0 ? "+" : ""}{correction.offsetX}px /
                         Y {correction.offsetY >= 0 ? "+" : ""}{correction.offsetY}px
                         <em>領域誤差削減 {correction.errorReductionRatio}%</em>
@@ -3459,7 +3478,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                   <div>
                     {visualQaTextGeometryCorrections.map((correction) => (
                       <span key={`${correction.variant}:${correction.nodeId}`}>
-                        <b>{correction.variant === "desktop" ? "PC" : "スマホ"} / {correction.nodeName}</b>
+                        <b>{deviceLabel(correction.variant)} / {correction.nodeName}</b>
                         X {correction.offsetX >= 0 ? "+" : ""}{correction.offsetX}px /
                         Y {correction.offsetY >= 0 ? "+" : ""}{correction.offsetY}px
                         <em>
@@ -3478,7 +3497,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                   <div>
                     {visualQaMediaGeometryCorrections.map((correction) => (
                       <span key={`${correction.variant}:${correction.nodeId}`}>
-                        <b>{correction.variant === "desktop" ? "PC" : "スマホ"} / {correction.nodeName}</b>
+                        <b>{deviceLabel(correction.variant)} / {correction.nodeName}</b>
                         X {correction.offsetX >= 0 ? "+" : ""}{correction.offsetX}px /
                         Y {correction.offsetY >= 0 ? "+" : ""}{correction.offsetY}px
                         <em>
@@ -3497,7 +3516,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                   <div>
                     {visualQaDecorationGeometryCorrections.map((correction) => (
                       <span key={`${correction.variant}:${correction.nodeId}`}>
-                        <b>{correction.variant === "desktop" ? "PC" : "スマホ"} / {correction.nodeName}</b>
+                        <b>{deviceLabel(correction.variant)} / {correction.nodeName}</b>
                         X {correction.offsetX >= 0 ? "+" : ""}{correction.offsetX}px /
                         Y {correction.offsetY >= 0 ? "+" : ""}{correction.offsetY}px
                         <em>
@@ -3525,7 +3544,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                       <div className="visual-qa-result__score">
                         <strong>{result.score}</strong>
                         <span>
-                          <b>{result.variant === "desktop" ? "PC" : "スマホ"}</b>
+                          <b>{deviceLabel(result.variant)}</b>
                           <small>
                             {result.status === "pass"
                               ? "視覚品質 良好"
@@ -3571,7 +3590,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                           )}
                           <p>{result.alignment.reason}</p>
                           {result.alignment.safeToApply && (
-                            <small>PC/SPを別々に判定した非破壊の補正候補です。値はレポートJSONにも保存されます。</small>
+                            <small>端末別に判定した非破壊の補正候補です。値はレポートJSONにも保存されます。</small>
                           )}
                         </div>
                       )}
@@ -3700,7 +3719,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                             <figcaption>Figma原本</figcaption>
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
-                              alt={`${result.variant === "desktop" ? "PC" : "スマホ"}版のFigma原本`}
+                              alt={`${deviceLabel(result.variant)}版のFigma原本`}
                               loading="lazy"
                               src={result.referenceImageUrl}
                             />
@@ -3709,7 +3728,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                             <figcaption>生成プレビュー</figcaption>
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
-                              alt={`${result.variant === "desktop" ? "PC" : "スマホ"}版の生成プレビュー`}
+                              alt={`${deviceLabel(result.variant)}版の生成プレビュー`}
                               loading="lazy"
                               src={result.previewImageUrl}
                             />
@@ -3721,7 +3740,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                         {/* Generated in-browser as a data URL; Next Image cannot optimize it. */}
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
-                          alt={`${result.variant === "desktop" ? "PC" : "スマホ"}版の視覚差分ヒートマップ`}
+                          alt={`${deviceLabel(result.variant)}版の視覚差分ヒートマップ`}
                           loading="lazy"
                           src={result.diffImageUrl}
                         />
@@ -3789,7 +3808,11 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                           <li key={page.key}>
                             <span>{page.title}</span>
                             <code>/{page.slug.replace(/^\/+|\/+$/g, "")}/</code>
-                            <small>{page.hasDesktop ? "PC" : ""}{page.hasDesktop && page.hasMobile ? "＋" : ""}{page.hasMobile ? "スマホ" : ""}</small>
+                            <small>{[
+                              page.hasDesktop ? "PC" : "",
+                              page.hasTablet ? "タブレット" : "",
+                              page.hasMobile ? "スマホ" : "",
+                            ].filter(Boolean).join("＋")}</small>
                           </li>
                         ))}
                       </ol>
@@ -3826,7 +3849,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                       )}
                       {siteVisualQaGate && siteVisualQaGate.completed > 0 && (
                         <p role="status">
-                          {siteVisualQaGate.blocked ? "⚠" : "✓"} PC/SP画素比較 {siteVisualQaGate.passed}/{siteVisualQaGate.expected}画面合格
+                          {siteVisualQaGate.blocked ? "⚠" : "✓"} 端末別画素比較 {siteVisualQaGate.passed}/{siteVisualQaGate.expected}画面合格
                           {siteVisualQaGate.worstScore === null
                             ? ""
                             : `・最低一致度 ${siteVisualQaGate.worstScore.toFixed(2)}%`}
@@ -4012,7 +4035,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                 <div className="visual-qa-gate is-pending" role="status">
                   <div>
                     <strong>Elementor下書き前の視覚確認が必要です</strong>
-                    <span>FigmaのPC/SP基準画像と生成結果を比較してから送信します。</span>
+                    <span>FigmaのPC／タブレット／スマホ基準画像と生成結果を比較してから送信します。</span>
                   </div>
                   <button disabled={visualQaBusy} onClick={checkVisualQuality} type="button">
                     {visualQaBusy ? "比較中…" : "視覚差分を測定"}
@@ -4023,7 +4046,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                 <div className="visual-qa-gate is-clear" role="status">
                   <div>
                     <strong>✓ 視覚品質チェック完了</strong>
-                    <span>PC/SPの重大差分は検出されていません。</span>
+                    <span>端末別の重大差分は検出されていません。</span>
                   </div>
                 </div>
               )}
@@ -4123,7 +4146,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                   <div>
                     {wpVisualQaResults.map((result) => (
                       <span key={result.variant}>
-                        <b>{result.variant === "desktop" ? "PC" : "スマホ"}</b>
+                        <b>{deviceLabel(result.variant)}</b>
                         score {result.score}
                         <em>差分面積 {result.changedPixelRatio}%</em>
                       </span>
@@ -4133,7 +4156,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                     {wpVisualQaResults.map((result) => (
                       <details className="visual-qa-diff" key={result.variant}>
                         <summary>
-                          {result.variant === "desktop" ? "PC" : "スマホ"}実ページの差分内訳
+                          {deviceLabel(result.variant)}実ページの差分内訳
                         </summary>
                         <dl className="visual-qa-metrics">
                           <div><dt>差分面積</dt><dd>{result.changedPixelRatio}%</dd></div>
@@ -4149,7 +4172,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                         {/* Generated in-browser as a data URL; Next Image cannot optimize it. */}
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
-                          alt={`${result.variant === "desktop" ? "PC" : "スマホ"}実Elementorページの視覚差分ヒートマップ`}
+                          alt={`${deviceLabel(result.variant)}実Elementorページの視覚差分ヒートマップ`}
                           src={result.diffImageUrl}
                         />
                       </details>

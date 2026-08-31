@@ -1,6 +1,6 @@
 import type { FigmaBounds, FigmaNode } from "@figmapress/figma-parser";
 
-export type FigmaFrameVariant = "desktop" | "mobile" | "unknown";
+export type FigmaFrameVariant = "desktop" | "tablet" | "mobile" | "unknown";
 
 export interface FigmaFrameSummary {
   id: string;
@@ -15,6 +15,7 @@ export interface FigmaPageCandidate {
   id: string;
   title: string;
   desktop?: FigmaFrameSummary;
+  tablet?: FigmaFrameSummary;
   mobile?: FigmaFrameSummary;
   confidence: "named" | "content" | "nearby" | "single";
 }
@@ -28,8 +29,8 @@ interface FrameCandidate extends FigmaFrameSummary {
 }
 
 const PAGE_ROOT_TYPES = new Set(["FRAME", "COMPONENT", "INSTANCE", "SECTION"]);
-const GENERIC_FRAME_NAME = /^(?:frame|page|pc|sp|desktop|mobile|phone|pcpage|sppage|design|screen|artboard|ホーム|トップ)(?:copy)?\d*$/i;
-const DEVICE_WORDS = /(?:^|[\s/_-])(?:pc|sp|desktop|mobile|phone|tablet)(?=$|[\s/_-])/gi;
+const GENERIC_FRAME_NAME = /^(?:frame|page|pc|sp|desktop|tablet|tab|ipad|mobile|phone|pcpage|tabletpage|sppage|design|screen|artboard|ホーム|トップ)(?:copy)?\d*$/i;
+const DEVICE_WORDS = /(?:^|[\s/_-])(?:pc|sp|desktop|tablet|tab|ipad|mobile|phone)(?=$|[\s/_-])/gi;
 const NAVIGATION_COPY = /^(?:home|menu|top|news|service|company|contact|about|blog|ホーム|トップ|メニュー|お知らせ|事業案内|会社案内|お問い合わせ)$/i;
 
 function validBounds(bounds: FigmaNode["absoluteBoundingBox"]): bounds is FigmaBounds {
@@ -61,11 +62,15 @@ function frameVariant(node: FigmaNode): FigmaFrameVariant {
   if (/(?:^|[\s/_-])(?:sp|mobile|phone)(?=$|[\s/_-])|スマホ/.test(name)) {
     return "mobile";
   }
+  if (/(?:^|[\s/_-])(?:tablet|tab|ipad)(?=$|[\s/_-])|タブレット/.test(name)) {
+    return "tablet";
+  }
   if (/(?:^|[\s/_-])(?:pc|desktop)(?=$|[\s/_-])|デスクトップ/.test(name)) {
     return "desktop";
   }
-  if (bounds.width <= 768) return "mobile";
-  if (bounds.width >= 900) return "desktop";
+  if (bounds.width <= 767) return "mobile";
+  if (bounds.width >= 1_100) return "desktop";
+  if (bounds.width >= 768) return "tablet";
   return "unknown";
 }
 
@@ -222,17 +227,24 @@ function summary(candidate: FrameCandidate): FigmaFrameSummary {
   };
 }
 
-function pageTitle(desktop: FrameCandidate | undefined, mobile: FrameCandidate | undefined): string {
-  const preferred = desktop?.label || mobile?.label || desktop?.name || mobile?.name || "Figma page";
+function pageTitle(
+  desktop: FrameCandidate | undefined,
+  tablet: FrameCandidate | undefined,
+  mobile: FrameCandidate | undefined,
+): string {
+  const preferred = desktop?.label || tablet?.label || mobile?.label
+    || desktop?.name || tablet?.name || mobile?.name || "Figma page";
   return preferred.replace(/\s+/g, " ").trim();
 }
 
 export function discoverFigmaPageCandidates(document: FigmaNode): FigmaPageCandidate[] {
   const candidates = frameCandidates(document);
   const desktops = candidates.filter((candidate) => candidate.variant === "desktop");
+  const tablets = candidates.filter((candidate) => candidate.variant === "tablet");
   const mobiles = candidates.filter((candidate) => candidate.variant === "mobile");
   const unknown = candidates.filter((candidate) => candidate.variant === "unknown");
   const usedMobiles = new Set<string>();
+  const usedTablets = new Set<string>();
   const pages: FigmaPageCandidate[] = [];
 
   for (const desktop of desktops) {
@@ -243,11 +255,20 @@ export function discoverFigmaPageCandidates(document: FigmaNode): FigmaPageCandi
         return match ? [{ mobile, ...match }] : [];
       })
       .sort((left, right) => right.score - left.score)[0];
+    const bestTablet = tablets
+      .filter((tablet) => !usedTablets.has(tablet.id))
+      .flatMap((tablet) => {
+        const match = companionScore(desktop, tablet);
+        return match ? [{ tablet, ...match }] : [];
+      })
+      .sort((left, right) => right.score - left.score)[0];
     if (best) usedMobiles.add(best.mobile.id);
+    if (bestTablet) usedTablets.add(bestTablet.tablet.id);
     pages.push({
       id: desktop.id,
-      title: pageTitle(desktop, best?.mobile),
+      title: pageTitle(desktop, bestTablet?.tablet, best?.mobile),
       desktop: summary(desktop),
+      tablet: bestTablet ? summary(bestTablet.tablet) : undefined,
       mobile: best ? summary(best.mobile) : undefined,
       confidence: best?.confidence ?? "single",
     });
@@ -257,15 +278,24 @@ export function discoverFigmaPageCandidates(document: FigmaNode): FigmaPageCandi
     if (usedMobiles.has(mobile.id)) continue;
     pages.push({
       id: mobile.id,
-      title: pageTitle(undefined, mobile),
+      title: pageTitle(undefined, undefined, mobile),
       mobile: summary(mobile),
+      confidence: "single",
+    });
+  }
+  for (const tablet of tablets) {
+    if (usedTablets.has(tablet.id)) continue;
+    pages.push({
+      id: tablet.id,
+      title: pageTitle(undefined, tablet, undefined),
+      tablet: summary(tablet),
       confidence: "single",
     });
   }
   for (const candidate of unknown) {
     pages.push({
       id: candidate.id,
-      title: pageTitle(candidate, undefined),
+      title: pageTitle(candidate, undefined, undefined),
       desktop: summary(candidate),
       confidence: "single",
     });
@@ -280,10 +310,11 @@ export function selectedFigmaFrameIds(
   const page = pages.find((candidate) =>
     candidate.id === selectedFrameId
     || candidate.desktop?.id === selectedFrameId
+    || candidate.tablet?.id === selectedFrameId
     || candidate.mobile?.id === selectedFrameId,
   );
   if (!page) return [];
-  return [...new Set([page.desktop?.id, page.mobile?.id].filter((id): id is string => Boolean(id)))];
+  return [...new Set([page.desktop?.id, page.tablet?.id, page.mobile?.id].filter((id): id is string => Boolean(id)))];
 }
 
 export function pruneFigmaDocumentToFrames(

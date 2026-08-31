@@ -52,6 +52,7 @@ const CandidatePageSchema = z.object({
   slug: z.string().trim().min(1).max(80),
   frameId: z.string().regex(/^[0-9]+:[0-9]+$/),
   hasDesktop: z.boolean(),
+  hasTablet: z.boolean().optional().default(false),
   hasMobile: z.boolean(),
 }).strict();
 const CandidatePagesSchema = z.array(CandidatePageSchema).min(1).max(2).refine(
@@ -133,10 +134,11 @@ export async function POST(request: Request): Promise<Response> {
           );
           if (
             (page.hasDesktop && !fetched.visualReferences.desktop)
+            || (page.hasTablet && !fetched.visualReferences.tablet)
             || (page.hasMobile && !fetched.visualReferences.mobile)
           ) {
             throw new RequestError(
-              `「${page.title}」のPC/SP精密表示を取得できませんでした。時間を置いて再試行してください。`,
+              `「${page.title}」の端末別精密表示を取得できませんでした。時間を置いて再試行してください。`,
               502,
             );
           }

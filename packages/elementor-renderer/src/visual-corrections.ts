@@ -1,6 +1,6 @@
 import type { ElementorElement, ElementorTemplate } from "./types";
 
-export type VisualCorrectionVariant = "desktop" | "mobile";
+export type VisualCorrectionVariant = "desktop" | "tablet" | "mobile";
 export type VisualCorrectionConfidence = "high" | "medium";
 
 export interface ElementorVisualCorrection {
@@ -223,6 +223,7 @@ function rootVariant(
 ): VisualCorrectionVariant | "single" | null {
   const classes = String(element.settings.css_classes ?? "");
   if (classes.includes("figmapress-layout--mobile")) return "mobile";
+  if (classes.includes("figmapress-layout--tablet")) return "tablet";
   if (classes.includes("figmapress-layout--desktop")) return "desktop";
   if (classes.includes("figmapress-layout--single")) return "single";
   return null;
@@ -401,6 +402,8 @@ export function applyElementorVisualCorrections(
       const correction =
         variant === "mobile"
           ? byVariant.get("mobile")
+          : variant === "tablet"
+            ? byVariant.get("tablet")
           : variant === "desktop" || variant === "single"
             ? byVariant.get("desktop")
             : undefined;
@@ -433,6 +436,8 @@ export function applyElementorSectionVisualCorrections(
       const targetVariant =
         variant === "mobile"
           ? "mobile"
+          : variant === "tablet"
+            ? "tablet"
           : variant === "desktop" || variant === "single"
             ? "desktop"
             : null;
@@ -462,6 +467,8 @@ export function applyElementorTextGeometryCorrections(
       const targetVariant =
         variant === "mobile"
           ? "mobile"
+          : variant === "tablet"
+            ? "tablet"
           : variant === "desktop" || variant === "single"
             ? "desktop"
             : null;
@@ -495,6 +502,8 @@ export function applyElementorMediaGeometryCorrections(
       const targetVariant =
         variant === "mobile"
           ? "mobile"
+          : variant === "tablet"
+            ? "tablet"
           : variant === "desktop" || variant === "single"
             ? "desktop"
             : null;
@@ -529,6 +538,8 @@ export function applyElementorDecorationGeometryCorrections(
       const targetVariant =
         variant === "mobile"
           ? "mobile"
+          : variant === "tablet"
+            ? "tablet"
           : variant === "desktop" || variant === "single"
             ? "desktop"
             : null;
@@ -545,9 +556,13 @@ export function applyElementorDecorationGeometryCorrections(
 }
 
 function previewSelector(variant: VisualCorrectionVariant): string {
-  return variant === "mobile"
-    ? '.figmapress-figma-preview[data-figmapress-layout="mobile"]'
-    : ':is(.figmapress-figma-preview[data-figmapress-layout="desktop"],.figmapress-figma-preview[data-figmapress-layout="single"])';
+  if (variant === "mobile") {
+    return '.figmapress-figma-preview[data-figmapress-layout="mobile"]';
+  }
+  if (variant === "tablet") {
+    return '.figmapress-figma-preview[data-figmapress-layout="tablet"]';
+  }
+  return ':is(.figmapress-figma-preview[data-figmapress-layout="desktop"],.figmapress-figma-preview[data-figmapress-layout="single"])';
 }
 
 export function applyPreviewVisualCorrections(

@@ -35,6 +35,7 @@ export interface NativeElementorAudit {
   structuredLinks: number;
   nestedLinkViolations: number;
   desktopRoots: number;
+  tabletRoots: number;
   mobileRoots: number;
   semanticMains: number;
   semanticHeaders: number;
@@ -47,7 +48,7 @@ export interface NativeElementorAudit {
 
 export interface NativeElementorResponsiveRootAudit {
   id: string;
-  variant: "desktop" | "mobile";
+  variant: "desktop" | "tablet" | "mobile";
   main: boolean;
   headers: number;
   footers: number;
@@ -152,6 +153,9 @@ export function markNativeElementorTemplate(
       ...(references.desktop
         ? { figmapress_reference_desktop_node_id: references.desktop.nodeId }
         : {}),
+      ...(references.tablet
+        ? { figmapress_reference_tablet_node_id: references.tablet.nodeId }
+        : {}),
       ...(references.mobile
         ? { figmapress_reference_mobile_node_id: references.mobile.nodeId }
         : {}),
@@ -190,6 +194,7 @@ export function auditNativeElementorTemplate(
   let structuredLinks = 0;
   let nestedLinkViolations = 0;
   let desktopRoots = 0;
+  let tabletRoots = 0;
   let mobileRoots = 0;
   let semanticMains = 0;
   let semanticHeaders = 0;
@@ -241,6 +246,7 @@ export function auditNativeElementorTemplate(
         }
         const desktopRoot = classes.includes("figmapress-layout--desktop")
           || classes.includes("figmapress-layout--single");
+        const tabletRoot = classes.includes("figmapress-layout--tablet");
         const mobileRoot = classes.includes("figmapress-layout--mobile");
         let currentResponsiveRoot = responsiveRoot;
         if (desktopRoot) {
@@ -248,6 +254,18 @@ export function auditNativeElementorTemplate(
           currentResponsiveRoot = {
             id: element.id,
             variant: "desktop",
+            main: element.settings.html_tag === "main",
+            headers: 0,
+            footers: 0,
+            h1Headings: 0,
+          };
+          responsiveRoots.push(currentResponsiveRoot);
+        }
+        if (tabletRoot) {
+          tabletRoots += 1;
+          currentResponsiveRoot = {
+            id: element.id,
+            variant: "tablet",
             main: element.settings.html_tag === "main",
             headers: 0,
             footers: 0,
@@ -356,6 +374,7 @@ export function auditNativeElementorTemplate(
       const nextResponsiveRoot = element.elType === "container"
         && (classes.includes("figmapress-layout--desktop")
           || classes.includes("figmapress-layout--single")
+          || classes.includes("figmapress-layout--tablet")
           || classes.includes("figmapress-layout--mobile"))
         ? responsiveRoots[responsiveRoots.length - 1]
         : responsiveRoot;
@@ -381,6 +400,7 @@ export function auditNativeElementorTemplate(
     structuredLinks,
     nestedLinkViolations,
     desktopRoots,
+    tabletRoots,
     mobileRoots,
     semanticMains,
     semanticHeaders,

@@ -84,6 +84,7 @@ export function createCandidateFigmaMultiPagePlan(
         title: index === 0 ? "ホーム" : identity.title,
         slug,
         hasDesktop: Boolean(candidate.desktop),
+        hasTablet: Boolean(candidate.tablet),
         hasMobile: Boolean(candidate.mobile),
         frameId: candidate.id,
       };
@@ -103,7 +104,7 @@ export function currentCandidateFigmaSitePageKey(
   selectedFrameId: string,
 ): string | null {
   const selectedCandidate = candidates.find((candidate) =>
-    [candidate.id, candidate.desktop?.id, candidate.mobile?.id]
+    [candidate.id, candidate.desktop?.id, candidate.tablet?.id, candidate.mobile?.id]
       .some((id) => id === selectedFrameId),
   );
   const plannedFrameId = selectedCandidate?.id ?? selectedFrameId;
@@ -122,7 +123,7 @@ export function createCandidatePageLinkTargets(
     const candidate = candidates.find((entry) => entry.id === page.frameId);
     if (!candidate) continue;
     const target = figmaPageLinkPlaceholder(page.key);
-    for (const id of [candidate.id, candidate.desktop?.id, candidate.mobile?.id]) {
+    for (const id of [candidate.id, candidate.desktop?.id, candidate.tablet?.id, candidate.mobile?.id]) {
       if (id) targets[id] = target;
     }
   }

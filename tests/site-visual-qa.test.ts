@@ -52,3 +52,20 @@ test("site visual QA clears only when all screens pass 99.9 gate", () => {
   assert.equal(failed.failures.length, 1);
   assert.equal(failed.worstScore, 99.8);
 });
+
+test("site visual QA adds a tablet screen only when the page has a tablet source", () => {
+  const responsivePlan: FigmaMultiPagePlan = {
+    ...plan,
+    pages: plan.pages.map((page, index) => ({
+      ...page,
+      hasTablet: index === 0,
+    })),
+  };
+  assert.deepEqual(expectedSiteVisualQaChecks(responsivePlan), [
+    { pageKey: "home", variant: "desktop" },
+    { pageKey: "home", variant: "tablet" },
+    { pageKey: "home", variant: "mobile" },
+    { pageKey: "company", variant: "desktop" },
+    { pageKey: "company", variant: "mobile" },
+  ]);
+});

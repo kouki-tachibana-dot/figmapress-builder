@@ -254,7 +254,8 @@ function nativeNavigation(
   const rootHeight = Number(rootGeometry?.height) || 1;
   const itemGeometry = array(geometry.items);
   const itemBox = unionDesignBoxes(itemGeometry.map(designBox));
-  const menuBox = variant === "mobile"
+  const compactNavigation = variant === "mobile" || Boolean(designBox(geometry.toggle));
+  const menuBox = compactNavigation
     // Elementor Pro stretches its dropdown relative to the Nav Menu widget.
     // Keeping the widget as narrow as Figma's hamburger icon makes the opened
     // menu only ~44px wide and forces Japanese labels into vertical columns.
@@ -296,8 +297,8 @@ function nativeNavigation(
       css_classes: "figmapress-native-nav-menu",
       _css_classes: "figmapress-native-nav-menu",
       menu: String(menuId),
-      layout: variant === "mobile" ? "dropdown" : "horizontal",
-      align_items: variant === "mobile" ? "right" : "center",
+      layout: compactNavigation ? "dropdown" : "horizontal",
+      align_items: compactNavigation ? "right" : "center",
       pointer: "underline",
       submenu_icon: { value: "<i class=\"fas fa-caret-down\"></i>", library: "fa-solid" },
       toggle: "burger",

@@ -15,7 +15,7 @@ import type {
 export interface FigmaRenderAssets {
   imageUrls?: Record<string, string>;
   renderedNodeUrls?: Record<string, string>;
-  /** Prototype destinations outside the currently converted PC/SP pair. */
+  /** Prototype destinations outside the currently converted responsive set. */
   linkTargets?: Record<string, string>;
   /** Semantic page keys used by inferred menus and CTAs in a multi-page site. */
   pageTargets?: Record<string, string>;
@@ -40,7 +40,7 @@ interface RenderContext {
   root: FigmaNode;
   rootBounds: FigmaBounds;
   assets: FigmaRenderAssets;
-  variant: "single" | "desktop" | "mobile";
+  variant: "single" | "desktop" | "tablet" | "mobile";
   anchorSuffix: string;
   fallbackMenuTexts: FigmaNode[];
   navigationNode: FigmaNode | null;
@@ -164,6 +164,7 @@ class ElementIdFactory {
 
 export interface FigmaResponsiveRoots {
   desktop: FigmaNode | null;
+  tablet: FigmaNode | null;
   mobile: FigmaNode | null;
 }
 
@@ -175,19 +176,25 @@ export function findFigmaResponsiveRoots(file: MockFigmaFile): FigmaResponsiveRo
   const desktopNamed = candidates
     .filter((node) => responsiveFrameKind(node) === "desktop")
     .sort((left, right) => area(right) - area(left));
+  const tabletNamed = candidates
+    .filter((node) => responsiveFrameKind(node) === "tablet")
+    .sort((left, right) => area(right) - area(left));
   const mobileNamed = candidates
     .filter((node) => responsiveFrameKind(node) === "mobile")
     .sort((left, right) => area(right) - area(left));
   const desktop = desktopNamed[0]
     ?? candidates
-      .filter((node) => responsiveFrameKind(node) !== "mobile")
+      .filter((node) => !["mobile", "tablet"].includes(responsiveFrameKind(node) ?? ""))
       .sort((left, right) => area(right) - area(left))[0]
     ?? candidates.sort((left, right) => area(right) - area(left))[0]
     ?? null;
   const mobile = desktop
     ? mobileNamed.find((node) => node.id !== desktop.id) ?? null
     : null;
-  return { desktop, mobile };
+  const tablet = desktop
+    ? tabletNamed.find((node) => node.id !== desktop.id && node.id !== mobile?.id) ?? null
+    : null;
+  return { desktop, tablet, mobile };
 }
 
 export function findFigmaDesignRoot(file: MockFigmaFile): FigmaNode | null {
@@ -196,7 +203,7 @@ export function findFigmaDesignRoot(file: MockFigmaFile): FigmaNode | null {
 
 export function hasFigmaResponsiveLayout(file: MockFigmaFile): boolean {
   const roots = findFigmaResponsiveRoots(file);
-  return Boolean(roots.desktop && roots.mobile);
+  return Boolean(roots.desktop && (roots.tablet || roots.mobile));
 }
 
 export function hasFigmaLayout(file: MockFigmaFile): boolean {
@@ -230,7 +237,8 @@ export class FigmaElementorExporter {
 
     const ids = new ElementIdFactory();
     const fallbackMenuTexts = findFigmaNavigationMenuTexts(root);
-    const responsive = Boolean(roots.mobile?.absoluteBoundingBox);
+    const responsive = Boolean(roots.tablet?.absoluteBoundingBox || roots.mobile?.absoluteBoundingBox);
+    const hasTablet = Boolean(roots.tablet?.absoluteBoundingBox);
     const content: ElementorElement[] = [
       renderRootElement(
         root,
@@ -243,9 +251,32 @@ export class FigmaElementorExporter {
           fallbackMenuTexts,
           title,
         ),
-        responsive ? { hide_mobile: "hidden-mobile" } : {},
+        responsive
+          ? {
+              hide_mobile: "hidden-mobile",
+              ...(hasTablet ? { hide_tablet: "hidden-tablet" } : {}),
+            }
+          : {},
       ),
     ];
+    if (roots.tablet?.absoluteBoundingBox) {
+      content.push(renderRootElement(
+        roots.tablet,
+        createRenderContext(
+          ids,
+          roots.tablet,
+          assets,
+          "tablet",
+          "-tablet",
+          fallbackMenuTexts,
+          title,
+        ),
+        {
+          hide_desktop: "hidden-desktop",
+          hide_mobile: "hidden-mobile",
+        },
+      ));
+    }
     if (roots.mobile?.absoluteBoundingBox) {
       content.push(renderRootElement(
         roots.mobile,
@@ -272,8 +303,14 @@ export class FigmaElementorExporter {
       page_settings: {
         background_background: "classic",
         background_color: solidColor(root.fills) ?? "#FFFFFF",
+        figmapress_responsive_breakpoints: {
+          mobile_max: 767,
+          tablet_min: 768,
+          tablet_max: 1024,
+          desktop_min: 1025,
+        },
         figmapress_webfonts: figmaWebfonts(
-          [root, roots.mobile].filter((node): node is FigmaNode => Boolean(node)),
+          [root, roots.tablet, roots.mobile].filter((node): node is FigmaNode => Boolean(node)),
         ),
         hide_title: "yes",
       },
@@ -292,7 +329,7 @@ export function renderFigmaPreview(
   if (!root || !rootBounds) return null;
   const ids = new ElementIdFactory();
   const fallbackMenuTexts = findFigmaNavigationMenuTexts(root);
-  const responsive = Boolean(roots.mobile?.absoluteBoundingBox);
+  const responsive = Boolean(roots.tablet?.absoluteBoundingBox || roots.mobile?.absoluteBoundingBox);
   const desktop = previewRoot(
     root,
     createRenderContext(
@@ -306,7 +343,26 @@ export function renderFigmaPreview(
     ),
     responsive ? " figmapress-figma-preview--desktop" : "",
   );
-  if (!roots.mobile?.absoluteBoundingBox) return desktop;
+  const tablet = roots.tablet?.absoluteBoundingBox
+    ? previewRoot(
+        roots.tablet,
+        createRenderContext(
+          ids,
+          roots.tablet,
+          assets,
+          "tablet",
+          "-tablet",
+          fallbackMenuTexts,
+          root.name,
+        ),
+        " figmapress-figma-preview--tablet",
+      )
+    : "";
+  if (!roots.mobile?.absoluteBoundingBox) {
+    return tablet
+      ? `<div class="figmapress-responsive-preview">${desktop}${tablet}</div>`
+      : desktop;
+  }
   const mobile = previewRoot(
     roots.mobile,
     createRenderContext(
@@ -320,7 +376,7 @@ export function renderFigmaPreview(
     ),
     " figmapress-figma-preview--mobile",
   );
-  return `<div class="figmapress-responsive-preview">${desktop}${mobile}</div>`;
+  return `<div class="figmapress-responsive-preview">${desktop}${tablet}${mobile}</div>`;
 }
 
 function createRenderContext(
@@ -387,6 +443,9 @@ function renderRootElement(
       ...visibility,
       figmapress_node_id: root.id,
       figmapress_node_name: root.name,
+      figmapress_source_width: round(rootBounds.width),
+      figmapress_source_height: round(rootBounds.height),
+      figmapress_source_aspect_ratio: `${round(rootBounds.width)}/${round(rootBounds.height)}`,
       _element_id: anchorId("top", context),
       css_classes: `figmapress-layout figmapress-layout--${context.variant}`,
       content_width: "full",
@@ -627,7 +686,7 @@ function navigationElement(
   const namedToggleNode = descendants(node).find((child) =>
     /(?:hamburger|menu.?icon|header\/menu|メニュー.?アイコン)/i.test(child.name),
   );
-  const inferredToggleNode = context.variant === "mobile"
+  const inferredToggleNode = context.variant === "mobile" || context.variant === "tablet"
     ? navigationVisuals
       .filter((child) => child !== logoNode)
       .filter((child) => {
@@ -1092,7 +1151,9 @@ function carouselElement(
   if (!plan) return null;
   const itemsPerView = context.variant === "mobile"
     ? 1
-    : Math.min(3, plan.items.length);
+    : context.variant === "tablet"
+      ? Math.min(2, plan.items.length)
+      : Math.min(3, plan.items.length);
   const settings: ElementorSettings = {
     ...widgetPosition(node, bounds, parentBounds, parentNode),
     figmapress_node_id: node.id,
@@ -3393,13 +3454,15 @@ function validBounds(bounds: FigmaBounds | undefined): bounds is FigmaBounds {
   return Boolean(bounds && bounds.width > 0 && bounds.height > 0);
 }
 
-function responsiveFrameKind(node: FigmaNode): "desktop" | "mobile" | null {
+function responsiveFrameKind(node: FigmaNode): "desktop" | "tablet" | "mobile" | null {
   const bounds = node.absoluteBoundingBox;
   if (!bounds) return null;
   const name = node.name.toLowerCase();
   const desktopName = /(?:^|[\/_\s-])(?:pc|desktop)(?:$|[\/_\s-])|デスクトップ/.test(name);
+  const tabletName = /(?:^|[\/_\s-])(?:tablet|tab|ipad)(?:$|[\/_\s-])|タブレット/.test(name);
   const mobileName = /(?:^|[\/_\s-])(?:sp|mobile|phone)(?:$|[\/_\s-])|スマホ/.test(name);
-  if (desktopName && bounds.width >= 768) return "desktop";
+  if (tabletName && bounds.width >= 600 && bounds.width <= 1_200) return "tablet";
+  if (desktopName && bounds.width >= 900) return "desktop";
   if (mobileName && bounds.width <= 768) return "mobile";
   return null;
 }

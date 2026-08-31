@@ -11,6 +11,7 @@ import {
   FigmaElementorExporter,
   figmaRotationShouldApply,
   figmaTextShouldWrap,
+  renderFigmaPreview,
 } from "../packages/elementor-renderer/src/figma-exporter.ts";
 import type { FigmaNode, MockFigmaFile } from "@figmapress/figma-parser";
 import { cssColorIsPainted } from "../apps/web/src/lib/text-integrity.ts";
@@ -1403,6 +1404,85 @@ test("paired PC and SP frames become device-specific Elementor layouts", async (
   assert.match(result.previewHtml, /figmapress-figma-preview--desktop/);
   assert.match(result.previewHtml, /figmapress-figma-preview--mobile/);
   assert.ok(result.warnings.some((warning) => warning.includes("PC版とスマホ版")));
+});
+
+test("explicit tablet frames become an isolated third Elementor layout", () => {
+  const responsiveText = (
+    id: string,
+    value: string,
+    x: number,
+    width: number,
+  ): FigmaNode => ({
+    id,
+    name: value,
+    type: "TEXT",
+    characters: value,
+    absoluteBoundingBox: { x: x + 40, y: 120, width: width - 80, height: 50 },
+    style: { fontFamily: "Noto Sans JP", fontSize: 32, fontWeight: 700 },
+  });
+  const responsiveRoot = (
+    id: string,
+    name: string,
+    x: number,
+    width: number,
+    value: string,
+  ): FigmaNode => ({
+    id,
+    name,
+    type: "FRAME",
+    absoluteBoundingBox: { x, y: 0, width, height: 1000 },
+    children: [responsiveText(`${id}:text`, value, x, width)],
+  });
+  const file: MockFigmaFile = {
+    document: {
+      id: "0:0",
+      name: "Three responsive layouts",
+      type: "DOCUMENT",
+      children: [{
+        id: "0:1",
+        name: "Web",
+        type: "CANVAS",
+        children: [
+          responsiveRoot("10:1", "PC-page", 0, 1440, "PC"),
+          responsiveRoot("10:3", "Tablet-page", 1600, 834, "Tablet"),
+          responsiveRoot("10:2", "SP-page", 2600, 440, "Mobile"),
+        ],
+      }],
+    },
+  };
+
+  const template = new FigmaElementorExporter().toTemplate(file, "Responsive page");
+  assert.equal(template.content.length, 3);
+  const [desktop, tablet, mobile] = template.content;
+  assert.match(String(desktop?.settings.css_classes), /figmapress-layout--desktop/);
+  assert.equal(desktop?.settings.hide_tablet, "hidden-tablet");
+  assert.match(String(tablet?.settings.css_classes), /figmapress-layout--tablet/);
+  assert.equal(tablet?.settings.hide_desktop, "hidden-desktop");
+  assert.equal(tablet?.settings.hide_mobile, "hidden-mobile");
+  assert.equal(tablet?.settings._element_id, "top-tablet");
+  assert.equal(tablet?.settings.figmapress_source_width, 834);
+  assert.equal(tablet?.settings.figmapress_source_aspect_ratio, "834/1000");
+  assert.match(String(mobile?.settings.css_classes), /figmapress-layout--mobile/);
+  assert.deepEqual(template.page_settings.figmapress_responsive_breakpoints, {
+    mobile_max: 767,
+    tablet_min: 768,
+    tablet_max: 1024,
+    desktop_min: 1025,
+  });
+  const marked = markNativeElementorTemplate(template, {
+    desktop: { nodeId: "10:1", name: "PC-page", url: "https://images.example/pc.png", width: 800, height: 556, sourceWidth: 1440, sourceHeight: 1000, format: "png" },
+    tablet: { nodeId: "10:3", name: "Tablet-page", url: "https://images.example/tablet.png", width: 834, height: 1000, sourceWidth: 834, sourceHeight: 1000, format: "png" },
+    mobile: { nodeId: "10:2", name: "SP-page", url: "https://images.example/mobile.png", width: 440, height: 1000, sourceWidth: 440, sourceHeight: 1000, format: "png" },
+  });
+  const nativeAudit = auditNativeElementorTemplate(marked);
+  assert.equal(nativeAudit.tabletRoots, 1);
+  assert.equal(marked.page_settings.figmapress_reference_tablet_node_id, "10:3");
+
+  const preview = renderFigmaPreview(file);
+  assert.match(String(preview), /figmapress-figma-preview--desktop/);
+  assert.match(String(preview), /figmapress-figma-preview--tablet/);
+  assert.match(String(preview), /data-figmapress-layout="tablet"/);
+  assert.match(String(preview), /figmapress-figma-preview--mobile/);
 });
 
 test("Figma interaction layers become functional Elementor widgets", async () => {

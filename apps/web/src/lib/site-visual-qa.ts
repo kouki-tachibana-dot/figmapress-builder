@@ -4,7 +4,7 @@ import type {
 } from "@figmapress/elementor-renderer";
 import type { VisualQaStatus } from "./visual-qa";
 
-export type SiteVisualQaVariant = "desktop" | "mobile";
+export type SiteVisualQaVariant = "desktop" | "tablet" | "mobile";
 
 export interface SiteVisualQaResultLike {
   pageKey: FigmaSitePageKey;
@@ -29,6 +29,7 @@ export function expectedSiteVisualQaChecks(
 ): Array<{ pageKey: FigmaSitePageKey; variant: SiteVisualQaVariant }> {
   return plan.pages.flatMap((page) => [
     ...(page.hasDesktop ? [{ pageKey: page.key, variant: "desktop" as const }] : []),
+    ...(page.hasTablet ? [{ pageKey: page.key, variant: "tablet" as const }] : []),
     ...(page.hasMobile ? [{ pageKey: page.key, variant: "mobile" as const }] : []),
   ]);
 }

@@ -111,7 +111,8 @@ export function createFigmaQualityReport(
   assets: FigmaRenderAssets = {},
 ): FigmaQualityReport {
   const roots = findFigmaResponsiveRoots(file);
-  const designRoots = [roots.desktop, roots.mobile].filter((node): node is FigmaNode => Boolean(node));
+  const designRoots = [roots.desktop, roots.tablet, roots.mobile]
+    .filter((node): node is FigmaNode => Boolean(node));
   const entries = designRoots.flatMap((root) => flatten(root));
   const visibleEntries = entries.filter(({ node }) => node.visible !== false);
   const boundedEntries = visibleEntries.filter(({ node }) => validBounds(node));

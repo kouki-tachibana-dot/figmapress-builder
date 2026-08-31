@@ -131,13 +131,13 @@ export interface VisualQaAnalysis {
 }
 
 export interface VisualQaCorrectionOutcome {
-  variant: "desktop" | "mobile";
+  variant: "desktop" | "tablet" | "mobile";
   score: number;
   changedPixelRatio: number;
 }
 
 export interface VisualQaSectionCorrectionTarget {
-  variant: "desktop" | "mobile";
+  variant: "desktop" | "tablet" | "mobile";
   nodeId: string;
 }
 
@@ -164,7 +164,7 @@ export interface VisualQaDecorationCorrectionOutcome
 export function shouldKeepVisualCorrections(
   before: VisualQaCorrectionOutcome[],
   after: VisualQaCorrectionOutcome[],
-  correctedVariants: Array<"desktop" | "mobile">,
+  correctedVariants: Array<"desktop" | "tablet" | "mobile">,
 ): boolean {
   const targetVariants = new Set(correctedVariants);
   if (!targetVariants.size) return false;

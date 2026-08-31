@@ -15,6 +15,7 @@ export interface FigmaSitePagePlan {
   title: string;
   slug: string;
   hasDesktop: boolean;
+  hasTablet?: boolean;
   hasMobile: boolean;
   frameId?: string;
 }
@@ -85,13 +86,15 @@ export function createFigmaMultiPagePlan(
     title,
     slug: safeHomeSlug,
     hasDesktop: Boolean(roots.desktop),
+    hasTablet: Boolean(roots.tablet),
     hasMobile: Boolean(roots.mobile),
   }];
   for (const definition of pageDefinitions) {
     const hasDesktop = rootHasAnchor(roots.desktop, definition.key);
+    const hasTablet = rootHasAnchor(roots.tablet, definition.key);
     const hasMobile = rootHasAnchor(roots.mobile, definition.key);
-    if (!hasDesktop && !hasMobile) continue;
-    pages.push({ ...definition, hasDesktop, hasMobile });
+    if (!hasDesktop && !hasTablet && !hasMobile) continue;
+    pages.push({ ...definition, hasDesktop, hasTablet, hasMobile });
   }
   return {
     title,
@@ -170,7 +173,7 @@ export function createFigmaSectionFile(
   key: SectionAnchor,
 ): MockFigmaFile {
   const roots = findFigmaResponsiveRoots(file);
-  const children = [roots.desktop, roots.mobile]
+  const children = [roots.desktop, roots.tablet, roots.mobile]
     .filter((root): root is FigmaNode => Boolean(root))
     .map((root) => slicedRoot(root, key))
     .filter((root): root is FigmaNode => Boolean(root));
@@ -220,7 +223,7 @@ function keyFromAnchor(
   }
   const normalized = value
     .replace(/^#/, "")
-    .replace(/-(?:desktop|mobile)$/, "")
+    .replace(/-(?:desktop|tablet|mobile)$/, "")
     .toLowerCase();
   if (normalized === "top" || normalized === "site-navigation") return "home";
   if (links.has(normalized)) return normalized;

@@ -127,7 +127,7 @@ export async function convertFile(
       ? ["Elementor出力はFigmaの座標・文字スタイル・画像を直接保持する高忠実度モードです。"]
       : []),
     ...(responsiveFidelityLayout
-      ? ["FigmaのPC版とスマホ版を端末別レイアウトとして変換しました。"]
+      ? ["FigmaのPC版とスマホ版を含む端末別レイアウト（タブレット版がある場合は3段階）として変換しました。"]
       : []),
     ...(qualityReport
       ? qualityReport.checks

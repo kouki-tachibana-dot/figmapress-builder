@@ -20,7 +20,7 @@ export interface VisualQaReference {
 }
 
 export interface VisualQaBrowserResult extends VisualQaMetrics {
-  variant: "desktop" | "mobile";
+  variant: "desktop" | "tablet" | "mobile";
   referenceName: string;
   referenceNodeId: string;
   renderWidth: number;
@@ -168,7 +168,7 @@ async function waitForFonts(
 
 function enforceElementorResponsiveVariant(
   document: Document,
-  variant: "desktop" | "mobile",
+  variant: "desktop" | "tablet" | "mobile",
 ): void {
   const layouts = Array.from(
     document.querySelectorAll<HTMLElement>(
@@ -177,6 +177,7 @@ function enforceElementorResponsiveVariant(
   );
   const hasResponsiveLayouts = layouts.some((layout) =>
     layout.classList.contains("figmapress-layout--desktop")
+    || layout.classList.contains("figmapress-layout--tablet")
     || layout.classList.contains("figmapress-layout--mobile")
     || layout.classList.contains("figmapress-figma-preview--desktop")
     || layout.classList.contains("figmapress-figma-preview--mobile"),
@@ -354,7 +355,7 @@ function verifiedExactSnapshot(
 export async function runVisualQa(
   reference: VisualQaReference,
   sourceDocument: string,
-  variant: "desktop" | "mobile",
+  variant: "desktop" | "tablet" | "mobile",
 ): Promise<VisualQaBrowserResult> {
   const {
     width,
@@ -468,11 +469,11 @@ export async function runVisualQa(
       element.classList.contains("figmapress-layout"),
     );
     if (
-      frameDocument.querySelector(".figmapress-layout--desktop, .figmapress-layout--mobile")
+      frameDocument.querySelector(".figmapress-layout--desktop, .figmapress-layout--tablet, .figmapress-layout--mobile")
       && visibleElementorLayouts.length !== 1
     ) {
       throw new Error(
-        "実ページのPC／スマホ表示を分離できませんでした。Connectorを更新して再試行してください。",
+        "実ページのPC／タブレット／スマホ表示を分離できませんでした。Connectorを更新して再試行してください。",
       );
     }
     const exactSnapshot = verifiedExactSnapshot(

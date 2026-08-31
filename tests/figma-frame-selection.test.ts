@@ -69,6 +69,21 @@ test("pairs responsive frames by page content instead of globally largest PC and
   assert.deepEqual(selectedFigmaFrameIds(pages, "20:2"), ["20:1", "20:2"]);
 });
 
+test("pairs an explicit tablet frame with the same desktop and mobile page", () => {
+  const input = document([
+    frame("10:1", "PC-page", 0, 0, 1440, 7200, "トップページ"),
+    frame("10:3", "Tablet-page", 1540, 0, 834, 6500, "トップページ"),
+    frame("10:2", "SP-page", 2474, 0, 440, 6100, "トップページ"),
+  ]);
+
+  const pages = discoverFigmaPageCandidates(input);
+  assert.equal(pages.length, 1);
+  assert.equal(pages[0]?.desktop?.id, "10:1");
+  assert.equal(pages[0]?.tablet?.id, "10:3");
+  assert.equal(pages[0]?.mobile?.id, "10:2");
+  assert.deepEqual(selectedFigmaFrameIds(pages, "10:3"), ["10:1", "10:3", "10:2"]);
+});
+
 test("does not join an unrelated nearby mobile frame when headings disagree", () => {
   const input = document([
     frame("10:1", "PC-page", 0, 0, 1440, 7200, "トップページ"),

@@ -49,6 +49,7 @@ export interface FigmaVisualReference {
 
 export interface FigmaVisualReferences {
   desktop?: FigmaVisualReference;
+  tablet?: FigmaVisualReference;
   mobile?: FigmaVisualReference;
 }
 
@@ -264,19 +265,22 @@ function findNodeById(node: FigmaNode, id: string): FigmaNode | null {
   return null;
 }
 
-function responsiveFrameKind(node: FigmaNode): "desktop" | "mobile" | null {
+function responsiveFrameKind(node: FigmaNode): "desktop" | "tablet" | "mobile" | null {
   const bounds = node.absoluteBoundingBox;
   if (!bounds) return null;
   const name = node.name.toLowerCase();
   const desktopName = /(?:^|[\/_\s-])(?:pc|desktop)(?:$|[\/_\s-])|デスクトップ/.test(name);
+  const tabletName = /(?:^|[\/_\s-])(?:tablet|tab|ipad)(?:$|[\/_\s-])|タブレット/.test(name);
   const mobileName = /(?:^|[\/_\s-])(?:sp|mobile|phone)(?:$|[\/_\s-])|スマホ/.test(name);
-  if (desktopName && bounds.width >= 768) return "desktop";
+  if (tabletName && bounds.width >= 600 && bounds.width <= 1_200) return "tablet";
+  if (desktopName && bounds.width >= 900) return "desktop";
   if (mobileName && bounds.width <= 768) return "mobile";
   return null;
 }
 
 function responsivePageRoots(document: FigmaNode): {
   desktop: FigmaNode | null;
+  tablet: FigmaNode | null;
   mobile: FigmaNode | null;
 } {
   const candidates = (document.children ?? [])
@@ -285,6 +289,7 @@ function responsivePageRoots(document: FigmaNode): {
     .filter((node) => node.visible !== false && node.absoluteBoundingBox);
   return {
     desktop: candidates.find((node) => responsiveFrameKind(node) === "desktop") ?? null,
+    tablet: candidates.find((node) => responsiveFrameKind(node) === "tablet") ?? null,
     mobile: candidates.find((node) => responsiveFrameKind(node) === "mobile") ?? null,
   };
 }
@@ -346,7 +351,7 @@ export function collectUncoveredVisibleImageRefs(
     for (const child of node.children ?? []) visit(child, rendered);
   };
   const responsive = responsivePageRoots(document);
-  const roots = [responsive.desktop, responsive.mobile].filter(
+  const roots = [responsive.desktop, responsive.tablet, responsive.mobile].filter(
     (node): node is FigmaNode => Boolean(node),
   );
   if (roots.length) {
@@ -449,32 +454,23 @@ export function collectRenderedNodeIds(document: FigmaNode): string[] {
   };
 
   const responsive = responsivePageRoots(document);
-  if (responsive.desktop && responsive.mobile) {
-    const desktopCandidates = collect(responsive.desktop, MAX_RENDERED_NODES);
-    const mobileCandidates = collect(responsive.mobile, MAX_RENDERED_NODES);
-    if (desktopCandidates.length + mobileCandidates.length <= MAX_RENDERED_NODES) {
-      return [...desktopCandidates, ...mobileCandidates];
+  const responsiveRoots = [responsive.desktop, responsive.tablet, responsive.mobile]
+    .filter((node): node is FigmaNode => Boolean(node));
+  if (responsiveRoots.length >= 2) {
+    const candidates = responsiveRoots.map((root) => collect(root, MAX_RENDERED_NODES));
+    if (candidates.reduce((total, items) => total + items.length, 0) <= MAX_RENDERED_NODES) {
+      return candidates.flat();
     }
-    let desktopLimit = Math.min(
-      desktopCandidates.length,
-      Math.floor(MAX_RENDERED_NODES / 2),
+    const limits = candidates.map((items) =>
+      Math.min(items.length, Math.floor(MAX_RENDERED_NODES / responsiveRoots.length)),
     );
-    let mobileLimit = Math.min(
-      mobileCandidates.length,
-      MAX_RENDERED_NODES - desktopLimit,
-    );
-    let remaining = MAX_RENDERED_NODES - desktopLimit - mobileLimit;
-    const desktopExtra = Math.min(
-      remaining,
-      desktopCandidates.length - desktopLimit,
-    );
-    desktopLimit += desktopExtra;
-    remaining -= desktopExtra;
-    mobileLimit += Math.min(remaining, mobileCandidates.length - mobileLimit);
-    return [
-      ...collect(responsive.desktop, desktopLimit),
-      ...collect(responsive.mobile, mobileLimit),
-    ];
+    let remaining = MAX_RENDERED_NODES - limits.reduce((total, limit) => total + limit, 0);
+    for (let index = 0; index < candidates.length && remaining > 0; index += 1) {
+      const extra = Math.min(remaining, (candidates[index]?.length ?? 0) - (limits[index] ?? 0));
+      limits[index] = (limits[index] ?? 0) + extra;
+      remaining -= extra;
+    }
+    return responsiveRoots.flatMap((root, index) => collect(root, limits[index] ?? 0));
   }
   return collect(document, MAX_RENDERED_NODES);
 }
@@ -564,8 +560,9 @@ async function fetchVisualReferences(
         - (leftBounds?.width ?? 0) * (leftBounds?.height ?? 0);
     });
   const desktop = responsive.desktop ?? candidates[0] ?? null;
+  const tablet = responsive.tablet;
   const mobile = responsive.mobile;
-  const roots = [desktop, mobile].filter((node): node is FigmaNode =>
+  const roots = [desktop, tablet, mobile].filter((node): node is FigmaNode =>
     Boolean(node?.absoluteBoundingBox),
   );
   if (!roots.length) return {};
@@ -575,10 +572,12 @@ async function fetchVisualReferences(
       const requestDeadline = Date.now() + 45_000;
       const bounds = node.absoluteBoundingBox;
       if (!bounds) return null;
-      const mobileFrame = bounds.width <= 768;
+      const frameKind = responsiveFrameKind(node);
+      const mobileFrame = frameKind === "mobile";
+      const tabletFrame = frameKind === "tablet";
       const losslessWidthScale = Math.min(
         1,
-        (mobileFrame ? 440 : 800) / bounds.width,
+        (mobileFrame ? 440 : tabletFrame ? 834 : 800) / bounds.width,
       );
       const losslessPixelScale = Math.min(
         1,
@@ -594,7 +593,7 @@ async function fetchVisualReferences(
         0.01,
         Math.min(
           1,
-          (mobileFrame ? 440 : 960) / bounds.width,
+          (mobileFrame ? 440 : tabletFrame ? 834 : 960) / bounds.width,
           Math.sqrt(8_000_000 / (bounds.width * bounds.height)),
         ),
       );
@@ -616,7 +615,7 @@ async function fetchVisualReferences(
       }
       const compactFallbackScale = Math.max(
         0.01,
-        Math.min(1, (mobileFrame ? 320 : 640) / bounds.width),
+        Math.min(1, (mobileFrame ? 320 : tabletFrame ? 768 : 640) / bounds.width),
       );
       if (!attempts.some((attempt) =>
         attempt.format === "jpg"
@@ -686,7 +685,7 @@ async function fetchVisualReferences(
         format: renderedFormat,
       };
     } catch {
-      // A single slow PC/SP render must not discard a successful companion.
+      // A single slow responsive render must not discard successful companions.
       return null;
     }
   }));
@@ -699,10 +698,11 @@ async function fetchVisualReferences(
     if (!references.size) {
       warnings.push("Visual QA用のFigma基準画像を取得できませんでした。");
     } else if (references.size < roots.length) {
-      warnings.push("Visual QA用のFigma基準画像をPC/SPの一部だけ取得しました。未取得画面は再試行してください。");
+      warnings.push("Visual QA用のFigma基準画像をPC／タブレット／スマホの一部だけ取得しました。未取得画面は再試行してください。");
     }
     return {
       desktop: desktop ? references.get(desktop.id) : undefined,
+      tablet: tablet ? references.get(tablet.id) : undefined,
       mobile: mobile ? references.get(mobile.id) : undefined,
     };
   } catch {
@@ -799,6 +799,7 @@ export async function fetchFigmaFile(
           const frameIds = selectedFigmaFrameIds(pageCandidates, selectedNode.id);
           const page = pageCandidates.find((candidate) =>
             candidate.desktop?.id === selectedNode?.id
+            || candidate.tablet?.id === selectedNode?.id
             || candidate.mobile?.id === selectedNode?.id,
           );
           if (frameIds.length) {
@@ -810,14 +811,14 @@ export async function fetchFigmaFile(
               ),
             };
             pageTitle = page?.title || pageTitle;
-            if (frameIds.length === 2) {
-              warnings.push("同じWebページのPC版とスマホ版を内容と配置から自動検出しました。");
+            if (frameIds.length >= 2) {
+              warnings.push("同じWebページのPC版とスマホ版を含む端末別フレームを、内容と配置から自動検出しました。");
             }
           }
         }
       }
     } catch {
-      warnings.push("スマホ版フレームを追加取得できなかったため、選択した画面のみ変換しました。");
+      warnings.push("端末別フレームを追加取得できなかったため、選択した画面のみ変換しました。");
     }
   } else if (!selectedNode || selectedNode.type === "CANVAS" || selectedNode.type === "DOCUMENT") {
     if (pageCandidates.length > 1) {
