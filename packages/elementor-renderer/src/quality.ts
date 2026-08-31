@@ -42,7 +42,7 @@ export interface FigmaQualityReport {
   grade: "A" | "B" | "C";
   readyForDraft: boolean;
   metrics: {
-    responsiveVariants: 1 | 2;
+    responsiveVariants: 1 | 2 | 3;
     visibleNodes: number;
     boundedNodes: number;
     editableTextNodes: number;
@@ -183,6 +183,7 @@ export function createFigmaQualityReport(
   };
   const absoluteLayoutNodes = boundedEntries.filter(({ node, parent }) =>
     node !== roots.desktop
+    && node !== roots.tablet
     && node !== roots.mobile
     && !isAutoLayout(parent),
   ).length;
@@ -296,10 +297,14 @@ export function createFigmaQualityReport(
     {
       id: "responsive",
       label: "レスポンシブ",
-      status: roots.mobile ? "pass" : "info",
-      detail: roots.mobile
-        ? "PC版・スマホ版を端末別に統合"
-        : "単一レイアウトとして変換",
+      status: roots.tablet || roots.mobile ? "pass" : "info",
+      detail: roots.tablet && roots.mobile
+        ? "FigmaのPC版・タブレット版・スマホ版を端末別に統合"
+        : roots.tablet
+          ? "FigmaのPC版・タブレット版を端末別に統合"
+          : roots.mobile
+            ? "FigmaのPC版・スマホ版から編集可能なタブレット版を自動生成"
+            : "単一レイアウトとして変換",
     },
     {
       id: "interactions",
@@ -345,7 +350,11 @@ export function createFigmaQualityReport(
     grade: score >= 95 ? "A" : score >= 85 ? "B" : "C",
     readyForDraft: checks.every((check) => check.status !== "warning"),
     metrics: {
-      responsiveVariants: roots.mobile ? 2 : 1,
+      responsiveVariants: roots.tablet && roots.mobile
+        ? 3
+        : roots.mobile
+          ? template.page_settings.figmapress_tablet_mode === "adaptive" ? 3 : 2
+          : roots.tablet ? 2 : 1,
       visibleNodes: visibleNodes.length,
       boundedNodes: boundedNodes.length,
       editableTextNodes: editableTextNodes.length,

@@ -13,6 +13,9 @@ import {
   figmaTextShouldWrap,
   renderFigmaPreview,
 } from "../packages/elementor-renderer/src/figma-exporter.ts";
+import {
+  deriveAdaptiveTabletRoot,
+} from "../packages/elementor-renderer/src/adaptive-tablet.ts";
 import type { FigmaNode, MockFigmaFile } from "@figmapress/figma-parser";
 import { cssColorIsPainted } from "../apps/web/src/lib/text-integrity.ts";
 
@@ -1345,11 +1348,13 @@ test("paired PC and SP frames become device-specific Elementor layouts", async (
     "mobile-logo": "https://images.example/mobile-logo.png",
     "mobile-envelope": "https://images.example/mobile-envelope.png",
   });
-  assert.equal(result.elementorTemplate.content.length, 2);
-  const [desktopRoot, mobileRoot] = result.elementorTemplate.content;
+  assert.equal(result.elementorTemplate.content.length, 3);
+  const [desktopRoot, tabletRoot, mobileRoot] = result.elementorTemplate.content;
   assert.equal(desktopRoot?.settings.hide_mobile, "hidden-mobile");
   assert.equal(desktopRoot?.settings.figmapress_node_id, "46:12");
   assert.equal(desktopRoot?.settings._element_id, "top-desktop");
+  assert.equal(tabletRoot?.settings.figmapress_tablet_mode, "adaptive");
+  assert.equal(tabletRoot?.settings._element_id, "top-tablet");
   assert.equal(mobileRoot?.settings.hide_desktop, "hidden-desktop");
   assert.equal(mobileRoot?.settings.hide_tablet, "hidden-tablet");
   assert.equal(mobileRoot?.settings._element_id, "top-mobile");
@@ -1404,6 +1409,140 @@ test("paired PC and SP frames become device-specific Elementor layouts", async (
   assert.match(result.previewHtml, /figmapress-figma-preview--desktop/);
   assert.match(result.previewHtml, /figmapress-figma-preview--mobile/);
   assert.ok(result.warnings.some((warning) => warning.includes("PC版とスマホ版")));
+});
+
+test("adaptive tablet geometry interpolates reliable desktop and mobile counterparts", () => {
+  const desktop: FigmaNode = {
+    id: "10:1",
+    name: "PC-page",
+    type: "FRAME",
+    absoluteBoundingBox: { x: 0, y: 0, width: 1440, height: 7200 },
+    children: [{
+      id: "10:10",
+      name: "Services Grid",
+      type: "FRAME",
+      layoutMode: "HORIZONTAL",
+      absoluteBoundingBox: { x: 80, y: 1000, width: 1280, height: 600 },
+      paddingLeft: 80,
+      children: [{
+        id: "10:11",
+        name: "事業内容",
+        type: "TEXT",
+        characters: "事業内容",
+        absoluteBoundingBox: { x: 120, y: 1080, width: 480, height: 80 },
+        style: { fontSize: 48, lineHeightPx: 64 },
+        styleOverrideTable: { "1": { fontSize: 56 } },
+      }],
+    }],
+  };
+  const mobile: FigmaNode = {
+    id: "10:2",
+    name: "SP-page",
+    type: "FRAME",
+    absoluteBoundingBox: { x: 1600, y: 0, width: 440, height: 6100 },
+    children: [{
+      id: "10:20",
+      name: "Services Grid",
+      type: "FRAME",
+      layoutMode: "VERTICAL",
+      absoluteBoundingBox: { x: 1620, y: 820, width: 400, height: 720 },
+      paddingLeft: 24,
+      children: [{
+        id: "10:21",
+        name: "事業内容",
+        type: "TEXT",
+        characters: "事業内容",
+        absoluteBoundingBox: { x: 1640, y: 900, width: 360, height: 52 },
+        style: { fontSize: 24, lineHeightPx: 36 },
+        styleOverrideTable: { "1": { fontSize: 28 } },
+      }],
+    }],
+  };
+
+  const tablet = deriveAdaptiveTabletRoot(desktop, mobile);
+  assert.ok(tablet?.absoluteBoundingBox);
+  assert.equal(tablet.id, "10:1:adaptive-tablet");
+  assert.equal(tablet.absoluteBoundingBox.width, 834);
+  assert.equal(tablet.absoluteBoundingBox.height, 6533.4);
+  const section = tablet.children?.[0];
+  const heading = section?.children?.[0];
+  assert.equal(section?.layoutMode, "VERTICAL");
+  assert.equal(section?.paddingLeft, 46.064);
+  assert.deepEqual(section?.absoluteBoundingBox, {
+    x: 43.64,
+    y: 890.92,
+    width: 746.72,
+    height: 672.72,
+  });
+  assert.equal(heading?.style?.fontSize, 33.456);
+  assert.equal(heading?.style?.lineHeightPx, 47.032);
+  assert.equal(heading?.styleOverrideTable?.["1"]?.fontSize, 39.032);
+});
+
+test("desktop and mobile Figma frames generate a distinct adaptive Elementor tablet layout", () => {
+  const frame = (
+    id: string,
+    name: string,
+    x: number,
+    width: number,
+    height: number,
+    fontSize: number,
+  ): FigmaNode => ({
+    id,
+    name,
+    type: "FRAME",
+    absoluteBoundingBox: { x, y: 0, width, height },
+    children: [{
+      id: `${id}:title`,
+      name: "Responsive title",
+      type: "TEXT",
+      characters: "Responsive title",
+      absoluteBoundingBox: { x: x + 40, y: 120, width: width - 80, height: 60 },
+      style: { fontFamily: "Noto Sans JP", fontSize, fontWeight: 700 },
+    }],
+  });
+  const file: MockFigmaFile = {
+    document: {
+      id: "0:0",
+      name: "Adaptive responsive layouts",
+      type: "DOCUMENT",
+      children: [{
+        id: "0:1",
+        name: "Web",
+        type: "CANVAS",
+        children: [
+          frame("10:1", "PC-page", 0, 1440, 1000, 48),
+          frame("10:2", "SP-page", 1600, 440, 1400, 24),
+        ],
+      }],
+    },
+  };
+
+  const template = new FigmaElementorExporter().toTemplate(file, "Adaptive page");
+  assert.equal(template.content.length, 3);
+  const [desktop, tablet, mobile] = template.content;
+  assert.equal(desktop?.settings.hide_tablet, "hidden-tablet");
+  assert.match(String(tablet?.settings.css_classes), /figmapress-layout--adaptive-tablet/);
+  assert.equal(tablet?.settings.figmapress_tablet_mode, "adaptive");
+  assert.equal(tablet?.settings.figmapress_source_width, 834);
+  assert.equal(tablet?.settings.figmapress_adaptive_source_desktop_node_id, "10:1");
+  assert.equal(tablet?.settings.figmapress_adaptive_source_mobile_node_id, "10:2");
+  assert.match(String(mobile?.settings.css_classes), /figmapress-layout--mobile/);
+  assert.equal(template.page_settings.figmapress_tablet_mode, "adaptive");
+  assert.equal(template.page_settings.figmapress_adaptive_tablet_width, 834);
+  assert.equal(template.page_settings.figmapress_adaptive_tablet_basis, "desktop-mobile-interpolation");
+
+  const marked = markNativeElementorTemplate(template, {
+    desktop: { nodeId: "10:1", name: "PC-page", url: "https://images.example/pc.png", width: 800, height: 556, sourceWidth: 1440, sourceHeight: 1000, format: "png" },
+    mobile: { nodeId: "10:2", name: "SP-page", url: "https://images.example/mobile.png", width: 440, height: 1400, sourceWidth: 440, sourceHeight: 1400, format: "png" },
+  });
+  const nativeAudit = auditNativeElementorTemplate(marked);
+  assert.equal(nativeAudit.tabletRoots, 1);
+  assert.equal(marked.page_settings.figmapress_reference_tablet_node_id, undefined);
+
+  const preview = renderFigmaPreview(file);
+  assert.match(String(preview), /figmapress-figma-preview--adaptive-tablet/);
+  assert.match(String(preview), /data-figmapress-tablet-mode="adaptive"/);
 });
 
 test("explicit tablet frames become an isolated third Elementor layout", () => {
@@ -1872,10 +2011,14 @@ test("root-level corporate inquiry fields become complete responsive forms", asy
   };
   visit(result.elementorTemplate.content);
   const forms = elements.filter((element) => element.widgetType === "figmapress-contact-form");
-  assert.equal(forms.length, 2);
+  assert.equal(forms.length, 3);
   assert.deepEqual(
     forms.map((element) => element.settings.figmapress_node_id),
-    ["40:1:figmapress-contact-form", "40:2:figmapress-contact-form"],
+    [
+      "40:1:figmapress-contact-form",
+      "40:1:adaptive-tablet:figmapress-contact-form",
+      "40:2:figmapress-contact-form",
+    ],
   );
   const fields = forms[0]?.settings.fields as Array<{
     name: string;
@@ -1900,7 +2043,7 @@ test("root-level corporate inquiry fields become complete responsive forms", asy
     false,
   );
   assert.equal(result.qualityReport?.metrics.expectedFunctionalWidgets.contactForm, 2);
-  assert.equal(result.qualityReport?.metrics.functionalWidgets.contactForm, 2);
+  assert.equal(result.qualityReport?.metrics.functionalWidgets.contactForm, 3);
   const desktopBackground = result.previewHtml.indexOf(
     'data-figmapress-node-id="40:1:large-background"',
   );
@@ -2783,19 +2926,20 @@ test("generic corporate header groups become one desktop and mobile navigation w
   };
   visit(result.elementorTemplate.content);
   const navigation = elements.filter((element) => element.widgetType === "figmapress-nav");
-  assert.equal(navigation.length, 2);
+  assert.equal(navigation.length, 3);
   assert.deepEqual(
     navigation.map((element) => element.settings.figmapress_node_id),
-    ["10:header", "10:mobile-header"],
+    ["10:header", "10:header", "10:mobile-header"],
   );
   assert.equal((navigation[0]?.settings.items as Array<unknown>).length, 8);
   assert.equal((navigation[1]?.settings.items as Array<unknown>).length, 8);
+  assert.equal((navigation[2]?.settings.items as Array<unknown>).length, 8);
   assert.equal(
     elements.filter((element) => element.settings.figmapress_node_id === "10:footer")[0]?.widgetType,
     undefined,
   );
   assert.equal(result.qualityReport?.metrics.expectedFunctionalWidgets.navigation, 2);
-  assert.equal(result.qualityReport?.metrics.functionalWidgets.navigation, 2);
+  assert.equal(result.qualityReport?.metrics.functionalWidgets.navigation, 3);
   assert.equal(
     result.qualityReport?.checks.find((check) => check.id === "interactions")?.status,
     "pass",
@@ -2914,13 +3058,18 @@ test("ungrouped root-level corporate headers are synthesized without duplicating
   };
   visit(result.elementorTemplate.content);
   const navigation = elements.filter((element) => element.widgetType === "figmapress-nav");
-  assert.equal(navigation.length, 2);
+  assert.equal(navigation.length, 3);
   assert.deepEqual(
     navigation.map((element) => element.settings.figmapress_node_id),
-    ["20:1:figmapress-navigation", "20:2:figmapress-navigation"],
+    [
+      "20:1:figmapress-navigation",
+      "20:1:adaptive-tablet:figmapress-navigation",
+      "20:2:figmapress-navigation",
+    ],
   );
   assert.equal((navigation[0]?.settings.items as Array<unknown>).length, 5);
   assert.equal((navigation[1]?.settings.items as Array<unknown>).length, 5);
+  assert.equal((navigation[2]?.settings.items as Array<unknown>).length, 5);
   assert.equal(
     (navigation[0]?.settings.home_url as { url: string }).url,
     "#figmapress-page-home",
@@ -2930,13 +3079,17 @@ test("ungrouped root-level corporate headers are synthesized without duplicating
     "#figmapress-page-home",
   );
   assert.equal(
+    (navigation[2]?.settings.home_url as { url: string }).url,
+    "#figmapress-page-home",
+  );
+  assert.equal(
     elements.some((element) => element.settings.figmapress_node_id === "20:menu:1"),
     false,
   );
   assert.ok(elements.some((element) => element.settings.figmapress_node_id === "20:hero"));
   assert.ok(elements.some((element) => element.settings.figmapress_node_id === "20:footer"));
   assert.equal(result.qualityReport?.metrics.expectedFunctionalWidgets.navigation, 2);
-  assert.equal(result.qualityReport?.metrics.functionalWidgets.navigation, 2);
+  assert.equal(result.qualityReport?.metrics.functionalWidgets.navigation, 3);
 });
 
 test("cross-page Figma prototype links survive page pruning in Elementor and preview", async () => {
@@ -3014,7 +3167,7 @@ test("cross-page Figma prototype links survive page pruning in Elementor and pre
     && element.settings.html_tag === "a"
     && (element.settings.link as { url?: string })?.url === "#figmapress-page-company"
   );
-  assert.equal(pageLinks.length, 2);
+  assert.equal(pageLinks.length, 3);
   assert.match(result.previewHtml, /data-figmapress-preview-link/);
   assert.match(result.previewHtml, /href="#figmapress-page-company"/);
   assert.match(

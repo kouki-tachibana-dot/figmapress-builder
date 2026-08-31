@@ -108,6 +108,32 @@ function nativeTemplate(
   };
 }
 
+function withAdaptiveTablet(template: ElementorTemplate): ElementorTemplate {
+  const tablet = structuredClone(template.content[0]);
+  if (!tablet) return template;
+  const visit = (element: typeof tablet): void => {
+    element.id = `${element.id}-adaptive-tablet`;
+    if (element.widgetType === "figmapress-nav") {
+      element.settings.layout_variant = "tablet";
+    }
+    for (const child of element.elements) visit(child);
+  };
+  visit(tablet);
+  tablet.settings = {
+    ...tablet.settings,
+    css_classes: "figmapress-layout figmapress-layout--tablet figmapress-layout--adaptive-tablet",
+    figmapress_tablet_mode: "adaptive",
+  };
+  return {
+    ...template,
+    page_settings: {
+      ...template.page_settings,
+      figmapress_tablet_mode: "adaptive",
+    },
+    content: [template.content[0]!, tablet, ...template.content.slice(1)],
+  };
+}
+
 test("all native pages and every logical destination pass the preflight", () => {
   const templates = new Map<FigmaSitePageKey, ElementorTemplate>([
     ["home", nativeTemplate("home", ["company", "contact"])],
@@ -189,6 +215,24 @@ test("each responsive layout requires exactly one H1", () => {
     ])),
     /会社案内.*スマホ版のH1は1つ必要.*現在0/,
   );
+});
+
+test("an adaptive tablet layout must pass the same semantic preflight without a tablet reference", () => {
+  const company = withAdaptiveTablet(nativeTemplate("company", ["home", "contact"]));
+  const tabletHeading = company.content[1]?.elements.find(
+    (element) => element.id === "company-heading-desktop-adaptive-tablet",
+  );
+  if (tabletHeading) tabletHeading.settings.editor = "<div>会社案内</div>";
+
+  assert.throws(
+    () => inspectFigmaSiteTemplates(plan, new Map([
+      ["home", nativeTemplate("home", ["company", "contact"])],
+      ["company", company],
+      ["contact", nativeTemplate("contact", ["home", "company"])],
+    ])),
+    /会社案内.*タブレット版のH1は1つ必要.*現在0/,
+  );
+  assert.equal(company.page_settings.figmapress_reference_tablet_node_id, undefined);
 });
 
 test("a candidate page without its native Elementor marker is rejected", () => {

@@ -129,6 +129,9 @@ export async function convertFile(
     ...(responsiveFidelityLayout
       ? ["FigmaのPC版とスマホ版を含む端末別レイアウト（タブレット版がある場合は3段階）として変換しました。"]
       : []),
+    ...(elementorTemplate.page_settings.figmapress_tablet_mode === "adaptive"
+      ? ["タブレット原稿がないため、PC構成とスマホ構成から834px用の編集可能なAdaptive Tabletレイアウトを生成しました。Figma一致率ではなく、834px／1024pxの崩れ・操作検査で判定します。"]
+      : []),
     ...(qualityReport
       ? qualityReport.checks
         .filter((check) => check.status === "warning")

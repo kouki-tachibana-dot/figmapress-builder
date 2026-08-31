@@ -11,6 +11,10 @@ import type {
   ElementorSettings,
   ElementorTemplate,
 } from "./types";
+import {
+  ADAPTIVE_TABLET_WIDTH,
+  deriveAdaptiveTabletRoot,
+} from "./adaptive-tablet";
 
 export interface FigmaRenderAssets {
   imageUrls?: Record<string, string>;
@@ -238,7 +242,14 @@ export class FigmaElementorExporter {
     const ids = new ElementIdFactory();
     const fallbackMenuTexts = findFigmaNavigationMenuTexts(root);
     const responsive = Boolean(roots.tablet?.absoluteBoundingBox || roots.mobile?.absoluteBoundingBox);
-    const hasTablet = Boolean(roots.tablet?.absoluteBoundingBox);
+    const adaptiveTablet = !roots.tablet?.absoluteBoundingBox && roots.mobile?.absoluteBoundingBox
+      ? deriveAdaptiveTabletRoot(root, roots.mobile)
+      : null;
+    const tabletRoot = roots.tablet?.absoluteBoundingBox ? roots.tablet : adaptiveTablet;
+    const hasTablet = Boolean(tabletRoot?.absoluteBoundingBox);
+    const tabletFallbackMenuTexts = adaptiveTablet
+      ? findFigmaNavigationMenuTexts(adaptiveTablet)
+      : fallbackMenuTexts;
     const content: ElementorElement[] = [
       renderRootElement(
         root,
@@ -259,23 +270,30 @@ export class FigmaElementorExporter {
           : {},
       ),
     ];
-    if (roots.tablet?.absoluteBoundingBox) {
-      content.push(renderRootElement(
-        roots.tablet,
+    if (tabletRoot?.absoluteBoundingBox) {
+      const tabletElement = renderRootElement(
+        tabletRoot,
         createRenderContext(
           ids,
-          roots.tablet,
+          tabletRoot,
           assets,
           "tablet",
           "-tablet",
-          fallbackMenuTexts,
+          tabletFallbackMenuTexts,
           title,
         ),
         {
           hide_desktop: "hidden-desktop",
           hide_mobile: "hidden-mobile",
         },
-      ));
+      );
+      tabletElement.settings.figmapress_tablet_mode = adaptiveTablet ? "adaptive" : "source";
+      if (adaptiveTablet) {
+        tabletElement.settings.css_classes = `${String(tabletElement.settings.css_classes)} figmapress-layout--adaptive-tablet`;
+        tabletElement.settings.figmapress_adaptive_source_desktop_node_id = root.id;
+        tabletElement.settings.figmapress_adaptive_source_mobile_node_id = roots.mobile?.id ?? "";
+      }
+      content.push(tabletElement);
     }
     if (roots.mobile?.absoluteBoundingBox) {
       content.push(renderRootElement(
@@ -309,6 +327,15 @@ export class FigmaElementorExporter {
           tablet_max: 1024,
           desktop_min: 1025,
         },
+        figmapress_tablet_mode: roots.tablet
+          ? "source"
+          : adaptiveTablet ? "adaptive" : "desktop-inherited",
+        ...(adaptiveTablet
+          ? {
+              figmapress_adaptive_tablet_width: ADAPTIVE_TABLET_WIDTH,
+              figmapress_adaptive_tablet_basis: "desktop-mobile-interpolation",
+            }
+          : {}),
         figmapress_webfonts: figmaWebfonts(
           [root, roots.tablet, roots.mobile].filter((node): node is FigmaNode => Boolean(node)),
         ),
@@ -330,6 +357,13 @@ export function renderFigmaPreview(
   const ids = new ElementIdFactory();
   const fallbackMenuTexts = findFigmaNavigationMenuTexts(root);
   const responsive = Boolean(roots.tablet?.absoluteBoundingBox || roots.mobile?.absoluteBoundingBox);
+  const adaptiveTablet = !roots.tablet?.absoluteBoundingBox && roots.mobile?.absoluteBoundingBox
+    ? deriveAdaptiveTabletRoot(root, roots.mobile)
+    : null;
+  const tabletRoot = roots.tablet?.absoluteBoundingBox ? roots.tablet : adaptiveTablet;
+  const tabletFallbackMenuTexts = adaptiveTablet
+    ? findFigmaNavigationMenuTexts(adaptiveTablet)
+    : fallbackMenuTexts;
   const desktop = previewRoot(
     root,
     createRenderContext(
@@ -343,19 +377,20 @@ export function renderFigmaPreview(
     ),
     responsive ? " figmapress-figma-preview--desktop" : "",
   );
-  const tablet = roots.tablet?.absoluteBoundingBox
+  const tablet = tabletRoot?.absoluteBoundingBox
     ? previewRoot(
-        roots.tablet,
+        tabletRoot,
         createRenderContext(
           ids,
-          roots.tablet,
+          tabletRoot,
           assets,
           "tablet",
           "-tablet",
-          fallbackMenuTexts,
+          tabletFallbackMenuTexts,
           root.name,
         ),
-        " figmapress-figma-preview--tablet",
+        ` figmapress-figma-preview--tablet${adaptiveTablet ? " figmapress-figma-preview--adaptive-tablet" : ""}`,
+        adaptiveTablet ? "adaptive" : "source",
       )
     : "";
   if (!roots.mobile?.absoluteBoundingBox) {
@@ -462,6 +497,7 @@ function previewRoot(
   root: FigmaNode,
   context: RenderContext,
   className: string,
+  tabletMode?: "source" | "adaptive",
 ): string {
   const rootBounds = context.rootBounds;
   const gradient = gradientCss(figmaGradient(root));
@@ -472,7 +508,10 @@ function previewRoot(
   // form and accordion grouping is reserved for the Elementor document; using
   // that grouped tree here can change root-level stacking even when every node
   // keeps the correct geometry.
-  return `<div class="figmapress-figma-preview${className}" data-figmapress-layout="${context.variant}" style="--figma-unit:calc(100cqw / ${round(rootBounds.width)});aspect-ratio:${round(rootBounds.width)}/${round(rootBounds.height)};${background}${previewAutoLayout(root)}${previewEffects(root)}">${(root.children ?? []).map((node) => previewNode(node, rootBounds, root, context)).join("")}</div>`;
+  const tabletModeAttribute = tabletMode
+    ? ` data-figmapress-tablet-mode="${tabletMode}"`
+    : "";
+  return `<div class="figmapress-figma-preview${className}" data-figmapress-layout="${context.variant}"${tabletModeAttribute} style="--figma-unit:calc(100cqw / ${round(rootBounds.width)});aspect-ratio:${round(rootBounds.width)}/${round(rootBounds.height)};${background}${previewAutoLayout(root)}${previewEffects(root)}">${(root.children ?? []).map((node) => previewNode(node, rootBounds, root, context)).join("")}</div>`;
 }
 
 function rootRenderNodes(root: FigmaNode, context: RenderContext): FigmaNode[] {

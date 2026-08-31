@@ -177,7 +177,7 @@ export function inspectFigmaSiteTemplates(
     }
     const requiredVariants = [
       ...(page.hasDesktop ? ["desktop" as const] : []),
-      ...(page.hasTablet ? ["tablet" as const] : []),
+      ...(nativeAudit.tabletRoots > 0 ? ["tablet" as const] : []),
       ...(page.hasMobile ? ["mobile" as const] : []),
     ];
     for (const variant of requiredVariants) {

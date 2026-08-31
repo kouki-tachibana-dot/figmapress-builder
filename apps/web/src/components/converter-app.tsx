@@ -118,7 +118,7 @@ type SiteVisualQaBrowserResult = VisualQaBrowserResult & {
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
-const APP_RELEASE = "0.30.0";
+const APP_RELEASE = "0.30.1";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -264,7 +264,7 @@ interface ConversionResult {
     grade: "A" | "B" | "C";
     readyForDraft: boolean;
     metrics: {
-      responsiveVariants: 1 | 2;
+      responsiveVariants: 1 | 2 | 3;
       visibleNodes: number;
       boundedNodes: number;
       editableTextNodes: number;

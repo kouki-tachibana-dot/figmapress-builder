@@ -138,10 +138,11 @@ test("section page keeps responsive header, target section, and footer only", ()
     .find((candidate) => candidate.key === "policies");
   assert.ok(page);
   const template = createFigmaSitePageTemplate(file, page);
-  assert.equal(template.content.length, 2);
+  assert.equal(template.content.length, 3);
   const elements = flatten(template.content);
   assert.ok(elements.some((element) => element.widgetType === "figmapress-nav"));
   assert.ok(elements.some((element) => element.settings._element_id === "policies-desktop"));
+  assert.ok(elements.some((element) => element.settings._element_id === "policies-tablet"));
   assert.ok(elements.some((element) => element.settings._element_id === "policies-mobile"));
   assert.equal(elements.some((element) => element.settings._element_id === "profile-desktop"), false);
   assert.equal(elements.some((element) => element.settings.figmapress_node_name === "Footer/Footer Section"), true);
@@ -159,7 +160,7 @@ test("page-link rewrite connects desktop, mobile, CTA, and text links to WordPre
   ]);
   const navigations = flatten(linked.content)
     .filter((element) => element.widgetType === "figmapress-nav");
-  assert.equal(navigations.length, 2);
+  assert.equal(navigations.length, 3);
   for (const navigation of navigations) {
     const items = navigation.settings.items as Array<{ label: string; url: { url: string } }>;
     assert.equal(items.find((item) => item.label === "政策")?.url.url, "https://example.com/seisaku/");
