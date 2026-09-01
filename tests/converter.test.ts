@@ -86,6 +86,71 @@ test("full-bleed rotated section backgrounds do not rotate their bounding box tw
   );
 });
 
+test("flat long-form Figma pages expose normal-flow Elementor section containers", () => {
+  const root: FigmaNode = {
+    id: "10:1",
+    name: "PC Editable page",
+    type: "FRAME",
+    absoluteBoundingBox: { x: 0, y: 0, width: 1440, height: 1200 },
+    children: [0, 400, 800].flatMap((y, index): FigmaNode[] => [{
+      id: `10:${index}:background`,
+      name: `Section ${index + 1} background`,
+      type: "RECTANGLE",
+      absoluteBoundingBox: { x: 0, y, width: 1440, height: 400 },
+      fills: [{ type: "SOLID", color: { r: 0.1 * index, g: 0.2, b: 0.3 } }],
+    }, {
+      id: `10:${index}:heading`,
+      name: `Section ${index + 1} heading`,
+      type: "TEXT",
+      characters: `Section ${index + 1}`,
+      absoluteBoundingBox: { x: 120, y: y + 100, width: 600, height: 60 },
+      style: { fontSize: 40, fontWeight: 700, lineHeightPx: 52 },
+    }]),
+  };
+  const file: MockFigmaFile = {
+    document: {
+      id: "0:0",
+      name: "Editable sections",
+      type: "DOCUMENT",
+      children: [{ id: "0:1", name: "Page", type: "CANVAS", children: [root] }],
+    },
+  };
+
+  const template = new FigmaElementorExporter().toTemplate(file, "Editable page");
+  const layout = template.content[0];
+  assert.ok(layout);
+  assert.equal(layout.elements.length, 3);
+  assert.deepEqual(
+    layout.elements.map((section) => section.settings.figmapress_flow_section),
+    ["yes", "yes", "yes"],
+  );
+  assert.deepEqual(
+    layout.elements.map((section) => section.settings.figmapress_source_y),
+    [0, 400, 800],
+  );
+  assert.deepEqual(
+    layout.elements.map((section) => section.settings.figmapress_source_height),
+    [400, 400, 400],
+  );
+  assert.deepEqual(
+    layout.elements.map((section) => section.settings._title),
+    ["FigmaPress セクション 1", "FigmaPress セクション 2", "FigmaPress セクション 3"],
+  );
+  for (const section of layout.elements) {
+    assert.equal(section.settings.position, undefined);
+    assert.equal(section.settings.width && (section.settings.width as { size: number }).size, 100);
+    assert.equal(section.elements[0]?.settings.position, "absolute");
+  }
+  assert.deepEqual(
+    layout.elements.map((section) => section.elements[1]?.settings._offset_y),
+    [
+      { unit: "%", size: 25, sizes: [] },
+      { unit: "%", size: 25, sizes: [] },
+      { unit: "%", size: 25, sizes: [] },
+    ],
+  );
+});
+
 test("mock Figma JSON converts into six Gutenberg blocks", async () => {
   const result = await convertFile(mockFigma as MockFigmaFile);
 
@@ -2601,14 +2666,17 @@ test("flat mobile footer layers become one positioned footer container without c
     String(element.settings.css_classes).includes("figmapress-layout--mobile")
   );
   assert.ok(mobile);
-  const footers = mobile.elements.filter((element) => element.settings.html_tag === "footer");
+  const footers = mobile.elements.flatMap((section) => section.elements)
+    .filter((element) => element.settings.html_tag === "footer");
   assert.equal(footers.length, 1);
   const footer = footers[0];
+  const footerSection = mobile.elements.find((section) => section.elements.includes(footer!));
   assert.equal(footer?.settings.figmapress_node_id, "20:0:semantic-footer");
   assert.equal(
     Math.round(Number((footer?.settings._offset_y as { size?: number } | undefined)?.size)),
-    88,
+    0,
   );
+  assert.equal(footerSection?.settings.figmapress_source_y, 880);
   assert.equal(
     Math.round(Number((footer?.settings.min_height as { size?: number } | undefined)?.size)),
     27,

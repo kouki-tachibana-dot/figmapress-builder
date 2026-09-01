@@ -151,6 +151,11 @@ interface CarouselPlan {
   nextIconUrl: string;
 }
 
+interface RootFlowSection {
+  bounds: FigmaBounds;
+  nodes: FigmaNode[];
+}
+
 class ElementIdFactory {
   private readonly seen = new Set<string>();
 
@@ -448,27 +453,22 @@ function renderRootElement(
 ): ElementorElement {
   const rootBounds = context.rootBounds;
   const rootAccordion = accordionPlan(root);
-  const children = rootRenderNodes(root, context)
-    .filter((node) => !rootAccordion || !isInsideInteractionBounds(node, rootAccordion.bounds))
-    .map((node) => renderElement(node, rootBounds, root, context))
-    .filter((element): element is ElementorElement => element !== null)
-    .map((element) => ({
-      ...element,
-      settings: {
-        ...element.settings,
-        figmapress_section: "yes",
-      },
-    }));
-  if (rootAccordion) {
-    const accordion = accordionElement(root, rootAccordion, rootBounds, root, context);
-    children.push({
-      ...accordion,
-      settings: {
-        ...accordion.settings,
-        figmapress_section: "yes",
-      },
-    });
-  }
+  const renderNodes = rootRenderNodes(root, context)
+    .filter((node) => !rootAccordion || !isInsideInteractionBounds(node, rootAccordion.bounds));
+  const flowSections = rootFlowSections(renderNodes, rootBounds);
+  const paintOrderByNodeId = new Map(
+    renderNodes.map((node, index) => [node.id, index + 1]),
+  );
+  const children = flowSections.length >= 2
+    ? flowSections.map((section, index) => renderRootFlowSection(
+        root,
+        section,
+        index,
+        rootAccordion,
+        paintOrderByNodeId,
+        context,
+      ))
+    : renderRootAbsoluteChildren(root, renderNodes, rootAccordion, context);
   return {
     id: context.ids.create(`${root.id}:root`),
     elType: "container",
@@ -491,6 +491,180 @@ function renderRootElement(
     },
     elements: children,
   };
+}
+
+/**
+ * Long Figma pages are often exported as a flat paint tree. Keeping every
+ * layer directly under one full-page absolute canvas makes Elementor append a
+ * newly created container after the entire page. When the paint tree contains
+ * trustworthy full-width background bands, wrap each band in a normal-flow
+ * Elementor container and keep exact positioning only inside that band.
+ *
+ * This preserves the source coordinates while exposing real section siblings
+ * in Elementor, so the editor's standard "+" affordance can insert content
+ * above or between sections instead of thousands of pixels below the target.
+ */
+function rootFlowSections(nodes: FigmaNode[], rootBounds: FigmaBounds): RootFlowSection[] {
+  const minimumAnchorHeight = Math.max(48, rootBounds.width * 0.05);
+  const minimumBoundaryGap = Math.max(48, rootBounds.width * 0.06);
+  const rootRight = rootBounds.x + rootBounds.width;
+  const rootBottom = rootBounds.y + rootBounds.height;
+  const candidateStarts = nodes
+    .map((node) => node.absoluteBoundingBox)
+    .filter((bounds): bounds is FigmaBounds => Boolean(
+      validBounds(bounds)
+      && bounds.height >= minimumAnchorHeight
+      && bounds.x <= rootBounds.x + rootBounds.width * 0.08
+      && bounds.x + bounds.width >= rootRight - rootBounds.width * 0.08
+      && bounds.y >= rootBounds.y
+      && bounds.y < rootBottom,
+    ))
+    .map((bounds) => bounds.y)
+    .sort((left, right) => left - right);
+
+  const boundaries = [rootBounds.y];
+  for (const start of candidateStarts) {
+    const previous = boundaries[boundaries.length - 1] as number;
+    if (start - previous >= minimumBoundaryGap) boundaries.push(start);
+  }
+  if (boundaries.length < 2) return [];
+
+  const sections: RootFlowSection[] = boundaries.map((start, index) => {
+    const end = boundaries[index + 1] ?? rootBottom;
+    return {
+      bounds: {
+        x: rootBounds.x,
+        y: start,
+        width: rootBounds.width,
+        height: Math.max(0, end - start),
+      },
+      nodes: [],
+    };
+  }).filter((section) => section.bounds.height > 0);
+
+  for (const node of nodes) {
+    const bounds = node.absoluteBoundingBox;
+    if (!validBounds(bounds)) continue;
+    let sectionIndex = sections.length - 1;
+    for (let index = 0; index < sections.length; index += 1) {
+      const nextStart = sections[index + 1]?.bounds.y ?? rootBottom;
+      if (bounds.y < nextStart) {
+        sectionIndex = index;
+        break;
+      }
+    }
+    sections[sectionIndex]?.nodes.push(node);
+  }
+
+  return sections.filter((section) => section.nodes.length > 0);
+}
+
+function renderRootFlowSection(
+  root: FigmaNode,
+  section: RootFlowSection,
+  index: number,
+  rootAccordion: AccordionPlan | null,
+  paintOrderByNodeId: Map<string, number>,
+  context: RenderContext,
+): ElementorElement {
+  const sectionNode: FigmaNode = {
+    id: `${root.id}:flow-section:${index}`,
+    name: `FigmaPress Section ${index + 1}`,
+    type: "FRAME",
+    absoluteBoundingBox: section.bounds,
+    clipsContent: false,
+    // The wrapper is an Elementor editing boundary, not a semantic Figma
+    // group. Keeping its child list empty prevents it from inheriting footer
+    // or navigation intent from the real source node rendered inside it.
+    children: [],
+  };
+  const elements = section.nodes
+    .map((node) => ({
+      node,
+      element: renderElement(node, section.bounds, sectionNode, context),
+    }))
+    .filter((entry): entry is { node: FigmaNode; element: ElementorElement } => entry.element !== null)
+    .map(({ node, element }) => ({
+      ...element,
+      settings: {
+        ...element.settings,
+        figmapress_section: "yes",
+        z_index: paintOrderByNodeId.get(node.id) ?? 1,
+        _z_index: paintOrderByNodeId.get(node.id) ?? 1,
+      },
+    }));
+  if (rootAccordion && boundsStartInside(rootAccordion.bounds, section.bounds)) {
+    const accordion = accordionElement(root, rootAccordion, section.bounds, sectionNode, context);
+    elements.push({
+      ...accordion,
+      settings: {
+        ...accordion.settings,
+        figmapress_section: "yes",
+        z_index: paintOrderByNodeId.size + 1,
+        _z_index: paintOrderByNodeId.size + 1,
+      },
+    });
+  }
+  return {
+    id: context.ids.create(`${sectionNode.id}:elementor`),
+    elType: "container",
+    isInner: true,
+    settings: {
+      content_width: "full",
+      flex_direction: "column",
+      flex_gap: gap(0),
+      flex_shrink: "0",
+      padding: dimensions(0, 0, 0, 0),
+      overflow: "",
+      width: size(100, "%"),
+      width_tablet: size(100, "%"),
+      width_mobile: size(100, "%"),
+      min_height: canvasSize(section.bounds.height, context),
+      figmapress_section: "yes",
+      figmapress_flow_section: "yes",
+      figmapress_section_index: index,
+      figmapress_source_y: round(section.bounds.y - context.rootBounds.y),
+      figmapress_source_height: round(section.bounds.height),
+      figmapress_node_id: sectionNode.id,
+      figmapress_node_name: sectionNode.name,
+      _title: `FigmaPress セクション ${index + 1}`,
+      css_classes: `figmapress-flow-section figmapress-flow-section--${index + 1}`,
+    },
+    elements,
+  };
+}
+
+function renderRootAbsoluteChildren(
+  root: FigmaNode,
+  nodes: FigmaNode[],
+  rootAccordion: AccordionPlan | null,
+  context: RenderContext,
+): ElementorElement[] {
+  const children = nodes
+    .map((node) => renderElement(node, context.rootBounds, root, context))
+    .filter((element): element is ElementorElement => element !== null)
+    .map((element) => ({
+      ...element,
+      settings: {
+        ...element.settings,
+        figmapress_section: "yes",
+      },
+    }));
+  if (rootAccordion) {
+    const accordion = accordionElement(root, rootAccordion, context.rootBounds, root, context);
+    children.push({
+      ...accordion,
+      settings: {
+        ...accordion.settings,
+        figmapress_section: "yes",
+      },
+    });
+  }
+  return children;
+}
+
+function boundsStartInside(bounds: FigmaBounds, section: FigmaBounds): boolean {
+  return bounds.y >= section.y && bounds.y < section.y + section.height;
 }
 
 function previewRoot(
