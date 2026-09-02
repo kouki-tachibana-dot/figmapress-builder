@@ -48,6 +48,10 @@ const accessibilityPatchStylePath = new URL(
   "../wordpress-plugin/figmapress-connector/assets/elementor-accessibility-0195.css",
   import.meta.url,
 );
+const responsiveStylePath = new URL(
+  "../wordpress-plugin/figmapress-connector/assets/elementor-responsive-0197.css",
+  import.meta.url,
+);
 const phoneticPatchScriptPath = new URL(
   "../wordpress-plugin/figmapress-connector/assets/elementor-accessibility-0196.js",
   import.meta.url,
@@ -278,6 +282,23 @@ test("Connector removes ordinary-name autocomplete from joined kana field hints"
   assert.match(plugin, /elementor-accessibility-0196\.js/);
   assert.match(plugin, /wp_enqueue_script\( 'figmapress-elementor-accessibility-0196' \)/);
   assert.match(script, /\(\?:\^\|\[\^a-z0-9\]\)kana/);
+});
+
+test("Connector owns responsive layout visibility across Elementor 4 breakpoints", async () => {
+  const [plugin, rest, style] = await Promise.all([
+    readFile(pluginPath, "utf8"),
+    readFile(restApiPath, "utf8"),
+    readFile(responsiveStylePath, "utf8"),
+  ]);
+
+  assert.match(plugin, /elementor-responsive-0197\.css/);
+  assert.match(plugin, /wp_enqueue_style\( 'figmapress-elementor-responsive-0197' \)/);
+  assert.match(rest, /wp_enqueue_style\( 'figmapress-elementor-responsive-0197' \)/);
+  assert.match(style, /@media \(min-width: 768px\) and \(max-width: 1024px\)/);
+  assert.match(style, /@media \(max-width: 767px\)/);
+  assert.match(style, /\.figmapress-layout--desktop[\s\S]*display: none !important;/);
+  assert.match(style, /\.figmapress-layout--tablet[\s\S]*display: flex !important;/);
+  assert.match(style, /\.figmapress-layout--mobile[\s\S]*display: flex !important;/);
 });
 
 test("Connector routes only owned Elementor pages away from the memory-heavy block editor", async () => {

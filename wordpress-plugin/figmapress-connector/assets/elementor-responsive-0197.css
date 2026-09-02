@@ -1,0 +1,35 @@
+/*
+ * Elementor 4 can render the legacy elementor-hidden-* classes without the
+ * corresponding responsive CSS. Keep FigmaPress responsive roots deterministic
+ * in the editor preview, draft preview, and public frontend.
+ */
+.elementor .figmapress-layout--desktop {
+    display: flex !important;
+}
+
+.elementor .figmapress-layout--tablet,
+.elementor .figmapress-layout--mobile {
+    display: none !important;
+}
+
+@media (min-width: 768px) and (max-width: 1024px) {
+    .elementor .figmapress-layout--desktop,
+    .elementor .figmapress-layout--mobile {
+        display: none !important;
+    }
+
+    .elementor .figmapress-layout--tablet {
+        display: flex !important;
+    }
+}
+
+@media (max-width: 767px) {
+    .elementor .figmapress-layout--desktop,
+    .elementor .figmapress-layout--tablet {
+        display: none !important;
+    }
+
+    .elementor .figmapress-layout--mobile {
+        display: flex !important;
+    }
+}

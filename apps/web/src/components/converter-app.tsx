@@ -119,7 +119,7 @@ type SiteVisualQaBrowserResult = VisualQaBrowserResult & {
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
-const APP_RELEASE = "0.30.4";
+const APP_RELEASE = "0.30.5";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -129,7 +129,7 @@ const FIGMA_HEADER_MEDIA_CONNECTOR_VERSION = "0.16.18";
 const MULTI_PAGE_CONNECTOR_VERSION = "0.17.18";
 const FIGMA_PAGE_SET_CONNECTOR_VERSION = "0.17.28";
 const DYNAMIC_FORM_CONNECTOR_VERSION = "0.17.30";
-const NATIVE_ELEMENTOR_CONNECTOR_VERSION = "0.19.6";
+const NATIVE_ELEMENTOR_CONNECTOR_VERSION = "0.19.7";
 
 function safeWordPressSiteBridgeUrl(baseUrl: string): string {
   try {
@@ -4049,7 +4049,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
               )}
               {wpStatus && wpTarget === "elementor" && wpStatus.connectorInstalled && !connectorSupportsNativeElementor && (
                 <div className="alert alert--error" role="alert">
-                  画像に焼き込まず、実テキストとElementorコンテナで保存するにはConnector v{NATIVE_ELEMENTOR_CONNECTOR_VERSION}以上が必要です。<a href="/downloads/figmapress-connector.zip" download>最新版ZIPをダウンロード</a>して更新し、再診断してください。
+                  実テキストとElementorコンテナを保ち、PC・タブレット・スマホを正しく切り替えるにはConnector v{NATIVE_ELEMENTOR_CONNECTOR_VERSION}以上が必要です。<a href="/downloads/figmapress-connector.zip" download>最新版ZIPをダウンロード</a>して更新し、再診断してください。
                 </div>
               )}
               {wpStatus && wpTarget === "elementor" && wpBuildMode === "site" && wpStatus.connectorInstalled && connectorSupportsNativeElementor && !connectorSupportsRequiredProWidgets && (

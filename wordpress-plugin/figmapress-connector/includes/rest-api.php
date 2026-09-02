@@ -1827,6 +1827,7 @@ function figmapress_connector_rest_elementor_snapshot( WP_REST_Request $request 
         }
         wp_enqueue_style( 'elementor-frontend' );
         wp_enqueue_style( 'figmapress-elementor-interactions' );
+        wp_enqueue_style( 'figmapress-elementor-responsive-0197' );
         figmapress_connector_enqueue_page_webfonts( $post_id );
 
         if ( class_exists( '\\Elementor\\Core\\Files\\CSS\\Post' ) ) {
