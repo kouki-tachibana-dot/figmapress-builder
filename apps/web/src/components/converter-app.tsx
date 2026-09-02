@@ -119,7 +119,7 @@ type SiteVisualQaBrowserResult = VisualQaBrowserResult & {
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
-const APP_RELEASE = "0.30.3";
+const APP_RELEASE = "0.30.4";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -183,6 +183,26 @@ function sameOriginWordPressLink(
     return link.toString();
   } catch {
     return undefined;
+  }
+}
+
+function plannedWordPressPageLinks(
+  baseUrl: string,
+  plan: FigmaMultiPagePlan | null | undefined,
+): Array<{ key: FigmaSitePageKey; rawLink: string }> | null {
+  if (!plan) return null;
+  try {
+    const base = new URL(baseUrl);
+    if (base.protocol !== "https:" || base.username || base.password) return null;
+    return plan.pages.map((page) => {
+      const slug = page.slug.replace(/^\/+|\/+$/g, "");
+      return {
+        key: page.key,
+        rawLink: new URL(`${slug || "home"}/`, `${base.origin}/`).toString(),
+      };
+    });
+  } catch {
+    return null;
   }
 }
 
@@ -2291,6 +2311,12 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   async function createWordPressDraft(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!output || !confirmed) return;
+    const reviewPageLinks = wpBuildMode === "single" && wpCreateReviewCopy
+      ? plannedWordPressPageLinks(baseUrl, output.multiPagePlan)
+      : null;
+    const singlePageTemplate = reviewPageLinks
+      ? rewriteElementorTemplatePageLinks(output.elementorTemplate, reviewPageLinks)
+      : output.elementorTemplate;
     if (visualQaBlocksDraft) {
       setWpError(
         !visualQaComplete
@@ -2312,13 +2338,16 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       return;
     }
     if (wpTarget === "elementor") {
-      const nativeAudit = auditNativeElementorTemplate(output.elementorTemplate);
+      const nativeAudit = auditNativeElementorTemplate(singlePageTemplate);
       if (!nativeAudit.valid) {
         setWpError(`Elementorネイティブ構造に問題があります（${nativeAudit.errors.slice(0, 4).join("、")}）。WordPressには保存していません。`);
         return;
       }
       if (wpBuildMode === "single") {
-        const linkAudit = auditElementorTemplateLinks(output.elementorTemplate);
+        const linkAudit = auditElementorTemplateLinks(
+          singlePageTemplate,
+          reviewPageLinks ?? undefined,
+        );
         if (!linkAudit.valid) {
           const multiPageHint = linkAudit.unresolvedPlaceholders.length > 0 && multiPageAvailable
             ? "「サイト一式を自動構築」を選び、全ページ事前検証を実行してください。"
@@ -2379,7 +2408,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         ? {
             ...output,
             elementorTemplate: adaptElementorTemplateToNativeWidgets(
-              output.elementorTemplate,
+              singlePageTemplate,
               { capabilities: nativeWidgetCapabilities },
             ),
           }
