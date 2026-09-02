@@ -76,6 +76,7 @@ import type { FigmaPageCandidate } from "@/lib/figma-frame-selection";
 import { currentCandidateFigmaSitePageKey } from "@/lib/figma-site-plan";
 import {
   figmaFrameId,
+  figmaReviewSourceKey,
   figmaSiteSourceKey,
   figmaSourceKey,
 } from "@/lib/figma-source-key";
@@ -118,7 +119,7 @@ type SiteVisualQaBrowserResult = VisualQaBrowserResult & {
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
-const APP_RELEASE = "0.30.2";
+const APP_RELEASE = "0.30.3";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -868,6 +869,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const [wpTransport, setWpTransport] = useState<"direct" | "proxy" | null>(null);
   const [wpTarget, setWpTarget] = useState<OutputTarget>("elementor");
   const [wpBuildMode, setWpBuildMode] = useState<"single" | "site">("single");
+  const [wpCreateReviewCopy, setWpCreateReviewCopy] = useState(false);
   const [wpSiteResult, setWpSiteResult] = useState<BrowserPreparedSiteResult | null>(null);
   const [wpSiteProgress, setWpSiteProgress] = useState("");
   const [sitePreflightBusy, setSitePreflightBusy] = useState(false);
@@ -1255,6 +1257,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     sitePreflightEntries.current.clear();
     setSiteVisualQaResults([]);
     setWpBuildMode("single");
+    setWpCreateReviewCopy(false);
     setWpVisualQaBusy(false);
     setWpMediaBusy(false);
     setWpVisualQaError("");
@@ -2358,6 +2361,20 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       const page = output.blueprint.pages[0];
       const requestId = draftRequestId || createRequestId();
       if (!draftRequestId) setDraftRequestId(requestId);
+      const reviewId = requestId.replace(/[^a-f0-9]/gi, "").toLowerCase().slice(0, 8);
+      const reviewSourceKey = wpCreateReviewCopy
+        ? figmaReviewSourceKey(conversionSourceKey, requestId)
+        : conversionSourceKey;
+      if (wpCreateReviewCopy && !reviewSourceKey) {
+        throw new Error("検証用コピーの識別子を作成できませんでした。Figma URLから再変換してください。");
+      }
+      const reviewTitle = wpCreateReviewCopy
+        ? `${page?.title || output.summary.pageTitle}（検証 v${APP_RELEASE}）`
+        : page?.title || output.summary.pageTitle;
+      const pageSlug = page?.slug || "/";
+      const reviewSlug = wpCreateReviewCopy
+        ? `${pageSlug === "/" ? "home" : pageSlug.replace(/^\/+|\/+$/g, "")}-review-${reviewId}`
+        : pageSlug;
       const nativeOutput = wpTarget === "elementor"
         ? {
             ...output,
@@ -2371,12 +2388,12 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         ? {
             target: wpTarget,
             ...credentials,
-            title: page?.title || output.summary.pageTitle,
-            slug: page?.slug || "/",
+            title: reviewTitle,
+            slug: reviewSlug,
             template: nativeOutput.elementorTemplate,
             pageTemplate: "elementor_canvas",
             requestId,
-            sourceKey: conversionSourceKey,
+            sourceKey: reviewSourceKey,
           }
         : {
             target: wpTarget,
@@ -2406,7 +2423,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
               template: nativeOutput.elementorTemplate,
               pageTemplate: "elementor_canvas" as const,
               requestId,
-              sourceKey: conversionSourceKey,
+              sourceKey: reviewSourceKey,
             }
           : {
               target: "gutenberg" as const,
@@ -3765,7 +3782,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
               <fieldset className="target-picker">
                 <legend>編集方式</legend>
                 <label className={wpTarget === "gutenberg" ? "is-active" : ""}>
-                  <input checked={wpTarget === "gutenberg"} name="target" onChange={() => { setWpTarget("gutenberg"); setWpBuildMode("single"); }} type="radio" />
+                  <input checked={wpTarget === "gutenberg"} name="target" onChange={() => { setWpTarget("gutenberg"); setWpBuildMode("single"); setWpCreateReviewCopy(false); }} type="radio" />
                   <span><strong>Gutenberg</strong><small>6種の意味ブロックへ簡易変換</small></span>
                 </label>
                 <label className={wpTarget === "elementor" ? "is-active" : ""}>
@@ -3792,7 +3809,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                     <input
                       checked={wpBuildMode === "site"}
                       name="buildMode"
-                      onChange={() => setWpBuildMode("site")}
+                      onChange={() => { setWpBuildMode("site"); setWpCreateReviewCopy(false); }}
                       type="radio"
                     />
                     <span>
@@ -3863,6 +3880,19 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                     </div>
                   )}
                 </fieldset>
+              )}
+              {wpTarget === "elementor" && wpBuildMode === "single" && conversionSourceKey && (
+                <label className="site-placeholder-approval">
+                  <input
+                    checked={wpCreateReviewCopy}
+                    onChange={(event) => setWpCreateReviewCopy(event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span>
+                    既存下書きを更新せず、検証用コピーを新規作成
+                    <small>タイトル・URL・Figma識別子を分け、現在のページを変更しません。</small>
+                  </span>
+                </label>
               )}
               {wordpressProfiles.length > 0 && (
                 <div className="wp-profile-row">
@@ -4208,7 +4238,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                       : "作成中…"
                     : wpBuildMode === "site"
                       ? `${multiPagePlan?.pages.length ?? 0}ページ＋メニューを下書き構築 →`
-                      : `${wpTarget === "elementor" ? "Elementor" : "Gutenberg"}下書きを作成 →`}
+                      : wpCreateReviewCopy
+                        ? "検証用Elementor下書きを新規作成 →"
+                        : `${wpTarget === "elementor" ? "Elementor" : "Gutenberg"}下書きを作成 →`}
                 </button>
               </div>
             </form>

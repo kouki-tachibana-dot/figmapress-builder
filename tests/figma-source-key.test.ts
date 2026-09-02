@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   figmaFrameId,
+  figmaReviewSourceKey,
   figmaSiteSourceKey,
   figmaSourceKey,
 } from "../apps/web/src/lib/figma-source-key";
@@ -41,6 +42,19 @@ test("focused Figma URLs expose the frame used by preflight and site saving", ()
     figmaFrameId("https://www.figma.com/design/PaNNOGcUo5Uyg5UrEsYeyd/site"),
     undefined,
   );
+});
+
+test("review drafts get an isolated, retry-stable source identity", () => {
+  const sourceKey = figmaSourceKey(figmaUrl, "192:657");
+  assert.equal(
+    figmaReviewSourceKey(sourceKey, "01234567-89ab-cdef-0123-456789abcdef"),
+    "figma:PaNNOGcUo5Uyg5UrEsYeyd:192:657:page:review-0123456789abcdef",
+  );
+  assert.equal(
+    figmaReviewSourceKey(sourceKey, "01234567-89ab-cdef-0123-456789abcdef"),
+    figmaReviewSourceKey(sourceKey, "01234567-89ab-cdef-0123-456789abcdef"),
+  );
+  assert.equal(figmaReviewSourceKey("unsafe", "0123456789abcdef"), undefined);
 });
 
 test("non-Figma and malformed inputs never create WordPress source identities", () => {

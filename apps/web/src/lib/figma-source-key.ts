@@ -41,6 +41,25 @@ export function figmaSourceKey(
   return `figma:${identity.fileKey}:${selectedFrameId || identity.nodeId}`;
 }
 
+/**
+ * Creates an isolated identity for a review draft without changing the stable
+ * identity used by the production draft. Reusing the same request id remains
+ * idempotent while a fresh conversion creates a new review copy.
+ */
+export function figmaReviewSourceKey(
+  sourceKey: string | undefined,
+  requestId: string,
+): string | undefined {
+  if (!sourceKey) return undefined;
+  const baseKey = sourceKey.replace(/:page:[a-z0-9-]{1,80}$/i, "");
+  if (!/^figma:[A-Za-z0-9_-]{6,160}:(?:root|[0-9]+:[0-9]+)$/.test(baseKey)) {
+    return undefined;
+  }
+  const reviewId = requestId.replace(/[^a-f0-9]/gi, "").toLowerCase().slice(0, 16);
+  if (reviewId.length < 8) return undefined;
+  return `${baseKey}:page:review-${reviewId}`;
+}
+
 /** Node id carried by a focused Figma URL, when it names a real frame. */
 export function figmaFrameId(input: string): string | undefined {
   const identity = parseFigmaSourceIdentity(input);
