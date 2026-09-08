@@ -1,0 +1,974 @@
+{
+  "version": "1.6",
+  "correctionsApplied": [],
+  "sectionCorrectionsApplied": [],
+  "textGeometryCorrectionsApplied": [],
+  "mediaGeometryCorrectionsApplied": [],
+  "decorationGeometryCorrectionsApplied": [],
+  "baselineScores": {},
+  "results": [
+    {
+      "score": 99.9,
+      "status": "pass",
+      "width": 960,
+      "height": 5243,
+      "changedPixelRatio": 1.1,
+      "rawChangedPixelRatio": 2.5,
+      "edgeEquivalentPixelRatio": 1.3,
+      "textureEquivalentPixelRatio": 0.1,
+      "contentChangedPixelRatio": 1.8,
+      "worstBandChangedPixelRatio": 2.5,
+      "meanColorError": 0.8,
+      "rawMeanColorError": 3.5,
+      "brightnessDelta": 0.7,
+      "generatedHeight": 5243,
+      "heightDifferenceRatio": 0,
+      "hotspots": [
+        {
+          "startPercent": 10,
+          "endPercent": 20,
+          "changedPixelRatio": 2.5,
+          "meanColorError": 1.7,
+          "label": "上部 10–20%"
+        }
+      ],
+      "alignment": {
+        "offsetX": 0,
+        "offsetY": 0,
+        "baselineError": 10.5,
+        "correctedError": 10.5,
+        "errorReductionRatio": 0,
+        "confidence": "low",
+        "safeToApply": false,
+        "reason": "局所差分の影響が大きく、全体移動による補正の確度は低い状態です。"
+      },
+      "recommendations": [
+        "Figma基準画像との大きな視覚差は検出されませんでした。",
+        "文字「お客様との出会いから施工、アフターメンテナンスまで。 私たちが提供し続けるのは、お客様の期待を大きく超える革新的サービスです。 建工101に注文してよかった。 すべてのお客様にそう言っていただける企業であるために、 社員一人ひとりがサービスの求道者として日々研鑽に励んでいます。」の差分影響が大きいため、文字幅・明示改行・行高を優先して確認してください。"
+      ],
+      "variant": "desktop",
+      "referenceName": "2Company-PC",
+      "referenceNodeId": "192:657",
+      "renderWidth": 1440,
+      "renderHeight": 7865,
+      "sections": [
+        {
+          "nodeId": "192:3598",
+          "name": "Rectangle 44",
+          "x": 66,
+          "y": 578,
+          "width": 828,
+          "height": 4326,
+          "changedPixelRatio": 1.3,
+          "meanColorError": 0.9,
+          "impactRatio": 0.91
+        },
+        {
+          "nodeId": "192:3600",
+          "name": "Mask group",
+          "x": 0,
+          "y": 578,
+          "width": 960,
+          "height": 1348,
+          "changedPixelRatio": 1.6,
+          "meanColorError": 1.2,
+          "impactRatio": 0.42
+        },
+        {
+          "nodeId": "192:3606",
+          "name": "AdobeStock_600974213 2",
+          "x": 0,
+          "y": 3364,
+          "width": 960,
+          "height": 1441,
+          "changedPixelRatio": 1,
+          "meanColorError": 0.7,
+          "impactRatio": 0.27
+        },
+        {
+          "nodeId": "196:3680",
+          "name": "Mask group",
+          "x": 66,
+          "y": 704,
+          "width": 828,
+          "height": 230,
+          "changedPixelRatio": 6.5,
+          "meanColorError": 4.4,
+          "impactRatio": 0.25,
+          "alignment": {
+            "offsetX": 0,
+            "offsetY": 0,
+            "baselineError": 19.1,
+            "correctedError": 19.1,
+            "errorReductionRatio": 0,
+            "confidence": "low",
+            "safeToApply": false,
+            "reason": "「Mask group」は単純な位置移動だけで安全に改善できる確度が不足しています。"
+          }
+        },
+        {
+          "nodeId": "192:3604",
+          "name": "AdobeStock_600974213 1",
+          "x": 0,
+          "y": 1924,
+          "width": 960,
+          "height": 1441,
+          "changedPixelRatio": 0.9,
+          "meanColorError": 0.7,
+          "impactRatio": 0.24
+        },
+        {
+          "nodeId": "207:796",
+          "name": "Group 153",
+          "x": 146,
+          "y": 753,
+          "width": 668,
+          "height": 121,
+          "changedPixelRatio": 8.7,
+          "meanColorError": 5.2,
+          "impactRatio": 0.14,
+          "alignment": {
+            "offsetX": 0,
+            "offsetY": 0,
+            "baselineError": 28.8,
+            "correctedError": 28.8,
+            "errorReductionRatio": 0,
+            "confidence": "low",
+            "safeToApply": false,
+            "reason": "「Group 153」は単純な位置移動だけで安全に改善できる確度が不足しています。"
+          }
+        }
+      ],
+      "textNodes": [
+        {
+          "nodeId": "192:737",
+          "name": "お客様との出会いから施工、アフターメンテナンスまで。 私たちが提供し続けるのは、お客様の期待を大きく超える革新的サービスです。 建工101に注文してよかった。 すべてのお客様にそう言っていただける企業であるために、 社員一人ひとりがサービスの求道者として日々研鑽に励んでいます。",
+          "x": 146,
+          "y": 811,
+          "width": 668,
+          "height": 63,
+          "changedPixelRatio": 14.6,
+          "meanColorError": 8.7,
+          "impactRatio": 0.12,
+          "geometry": {
+            "offsetX": 2,
+            "offsetY": -1,
+            "scaleX": 0.99,
+            "scaleY": 0.95,
+            "baselineError": 37,
+            "correctedError": 35.3,
+            "errorReductionRatio": 4.5,
+            "confidence": "low",
+            "safeToApply": false,
+            "reason": "安全な探索範囲を超える差があり、自動的な文字寸法補正を見送りました。"
+          }
+        },
+        {
+          "nodeId": "207:794",
+          "name": "お客様との出会いから施工、アフターメンテナンスまで。 私たちが提供し続けるのは、お客様の期待を大きく超える革新的サービスです。 建工101に注文してよかった。 すべてのお客様にそう言っていただける企業であるために、 社員一人ひとりがサービスの求道者として日々研鑽に励んでいます。",
+          "x": 146,
+          "y": 811,
+          "width": 668,
+          "height": 63,
+          "changedPixelRatio": 14.6,
+          "meanColorError": 8.7,
+          "impactRatio": 0.12,
+          "geometry": {
+            "offsetX": 2,
+            "offsetY": -1,
+            "scaleX": 0.99,
+            "scaleY": 0.95,
+            "baselineError": 37,
+            "correctedError": 35.3,
+            "errorReductionRatio": 4.5,
+            "confidence": "low",
+            "safeToApply": false,
+            "reason": "安全な探索範囲を超える差があり、自動的な文字寸法補正を見送りました。"
+          }
+        },
+        {
+          "nodeId": "207:804",
+          "name": "お客様との出会いから施工、アフターメンテナンスまで。 私たちが提供し続けるのは、お客様の期待を大きく超える革新的サービスです。 建工101に注文してよかった。 すべてのお客様にそう言っていただける企業であるために、 社員一人ひとりがサービスの求道者として日々研鑽に励んでいます。",
+          "x": 146,
+          "y": 811,
+          "width": 668,
+          "height": 63,
+          "changedPixelRatio": 14.6,
+          "meanColorError": 8.7,
+          "impactRatio": 0.12,
+          "geometry": {
+            "offsetX": 2,
+            "offsetY": -1,
+            "scaleX": 0.99,
+            "scaleY": 0.95,
+            "baselineError": 37,
+            "correctedError": 35.3,
+            "errorReductionRatio": 4.5,
+            "confidence": "low",
+            "safeToApply": false,
+            "reason": "安全な探索範囲を超える差があり、自動的な文字寸法補正を見送りました。"
+          }
+        },
+        {
+          "nodeId": "192:714",
+          "name": "株式会社建工101／リフォーム101（イチマルイチ） 今井 真太郎 【本社】 〒654-0011　神戸市須磨区前池町2丁目3-3 【明石支店】 〒674-0083　兵庫県明石市魚住町住吉4丁目5-1 【本社】 TEL 078-742-7848 / FAX.078-742-7849 【明石支店】 TEL 078-995-5095 / 0120-110-196 FAX 078-995-5096",
+          "x": 486,
+          "y": 1588,
+          "width": 327,
+          "height": 280,
+          "changedPixelRatio": 5.6,
+          "meanColorError": 4.5,
+          "impactRatio": 0.1,
+          "geometry": {
+            "offsetX": 3,
+            "offsetY": -3,
+            "scaleX": 1.03,
+            "scaleY": 0.97,
+            "baselineError": 21.6,
+            "correctedError": 19.4,
+            "errorReductionRatio": 9.9,
+            "confidence": "low",
+            "safeToApply": false,
+            "reason": "文字差分を幅・高さの微調整だけで改善できる確度が不足しています。"
+          }
+        },
+        {
+          "nodeId": "192:2928",
+          "name": "SampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSample SampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSample SampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSample SampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSample",
+          "x": 121,
+          "y": 4181,
+          "width": 721,
+          "height": 70,
+          "changedPixelRatio": 4.7,
+          "meanColorError": 4.7,
+          "impactRatio": 0.05
+        },
+        {
+          "nodeId": "192:1818",
+          "name": "株式会社建工101ではオフィス・工場・寮・店舗・マンションなどの企業・オーナー様向けのリフォーム・建設事業を行っています。 その他、工場や寮のリフォーム、店舗の改装など幅広くお引き受けしています。",
+          "x": 120,
+          "y": 2612,
+          "width": 562,
+          "height": 36,
+          "changedPixelRatio": 7.8,
+          "meanColorError": 5.5,
+          "impactRatio": 0.03
+        },
+        {
+          "nodeId": "192:740",
+          "name": "私たち若い世代の経営者は、生まれた時からインターネットがあり、 今ではAIやSNSを当たり前のようにビジネスに活用しています。 年配の先輩方からは、「若い人はデジタルに強くて羨ましい」 「これからは君たちの時代だ」とお褒めいただくことも増えました。 しかし、私は日々の経営の中で、ある「違和感」や「危機感」を抱いています。 それは、「すべてをデジタルで効率化すれば、本当に人は幸せになるのだろうか」ということです。 画面の向こうの1万人のフォロワーよりも、目の前にいる1人の社員や、",
+          "x": 120,
+          "y": 1122,
+          "width": 336,
+          "height": 208,
+          "changedPixelRatio": 1.9,
+          "meanColorError": 1.6,
+          "impactRatio": 0.03
+        },
+        {
+          "nodeId": "192:727",
+          "name": "サービスの求道者であろう。 期待を超える革新的サービスを提供します。",
+          "x": 313,
+          "y": 753,
+          "width": 335,
+          "height": 46,
+          "changedPixelRatio": 5.7,
+          "meanColorError": 3.5,
+          "impactRatio": 0.02
+        }
+      ],
+      "visualNodes": [
+        {
+          "nodeId": "192:3600",
+          "name": "Mask group",
+          "x": 0,
+          "y": 578,
+          "width": 960,
+          "height": 1348,
+          "changedPixelRatio": 1.6,
+          "meanColorError": 1.2,
+          "impactRatio": 0.42
+        },
+        {
+          "nodeId": "192:3606",
+          "name": "AdobeStock_600974213 2",
+          "x": 0,
+          "y": 3364,
+          "width": 960,
+          "height": 1441,
+          "changedPixelRatio": 1,
+          "meanColorError": 0.7,
+          "impactRatio": 0.27
+        },
+        {
+          "nodeId": "196:3680",
+          "name": "Mask group",
+          "x": 66,
+          "y": 704,
+          "width": 828,
+          "height": 230,
+          "changedPixelRatio": 6.5,
+          "meanColorError": 4.4,
+          "impactRatio": 0.25,
+          "geometry": {
+            "offsetX": 0,
+            "offsetY": 0,
+            "scaleX": 1,
+            "scaleY": 0.99,
+            "baselineError": 20.2,
+            "correctedError": 19.7,
+            "errorReductionRatio": 2.5,
+            "confidence": "low",
+            "safeToApply": false,
+            "reason": "文字差分を幅・高さの微調整だけで改善できる確度が不足しています。"
+          }
+        },
+        {
+          "nodeId": "192:3604",
+          "name": "AdobeStock_600974213 1",
+          "x": 0,
+          "y": 1924,
+          "width": 960,
+          "height": 1441,
+          "changedPixelRatio": 0.9,
+          "meanColorError": 0.7,
+          "impactRatio": 0.24
+        },
+        {
+          "nodeId": "192:3608",
+          "name": "AdobeStock_600974213 3",
+          "x": 0,
+          "y": 4804,
+          "width": 960,
+          "height": 439,
+          "changedPixelRatio": 1.1,
+          "meanColorError": 0.7,
+          "impactRatio": 0.09
+        },
+        {
+          "nodeId": "192:3466",
+          "name": "Mask group",
+          "x": 0,
+          "y": 0,
+          "width": 960,
+          "height": 579,
+          "changedPixelRatio": 0.3,
+          "meanColorError": 0.3,
+          "impactRatio": 0.04
+        },
+        {
+          "nodeId": "438:1577",
+          "name": "Mask group",
+          "x": 641,
+          "y": 3833,
+          "width": 142,
+          "height": 201,
+          "changedPixelRatio": 1,
+          "meanColorError": 0.7,
+          "impactRatio": 0.01
+        },
+        {
+          "nodeId": "205:384",
+          "name": "Rectangle 105",
+          "x": 221,
+          "y": 3311,
+          "width": 521,
+          "height": 127,
+          "changedPixelRatio": 0.8,
+          "meanColorError": 0.4,
+          "impactRatio": 0.01
+        }
+      ],
+      "decorationNodes": [
+        {
+          "nodeId": "192:3598",
+          "name": "Rectangle 44",
+          "x": 66,
+          "y": 578,
+          "width": 828,
+          "height": 4326,
+          "changedPixelRatio": 1.3,
+          "meanColorError": 0.9,
+          "impactRatio": 0.91
+        },
+        {
+          "nodeId": "442:2948",
+          "name": "Rectangle 79",
+          "x": 0,
+          "y": 4743,
+          "width": 960,
+          "height": 500,
+          "changedPixelRatio": 1,
+          "meanColorError": 0.7,
+          "impactRatio": 0.09
+        },
+        {
+          "nodeId": "192:3524",
+          "name": "Rectangle 66",
+          "x": 119,
+          "y": 2157,
+          "width": 721,
+          "height": 293,
+          "changedPixelRatio": 1.3,
+          "meanColorError": 0.9,
+          "impactRatio": 0.05
+        },
+        {
+          "nodeId": "192:742",
+          "name": "Rectangle 62",
+          "x": 812,
+          "y": 1572,
+          "width": 28,
+          "height": 312,
+          "changedPixelRatio": 12.5,
+          "meanColorError": 7.4,
+          "impactRatio": 0.02
+        },
+        {
+          "nodeId": "442:2967",
+          "name": "Rectangle 35",
+          "x": 349,
+          "y": 5173,
+          "width": 223,
+          "height": 49,
+          "changedPixelRatio": 10.5,
+          "meanColorError": 6.7,
+          "impactRatio": 0.02
+        },
+        {
+          "nodeId": "442:2971",
+          "name": "Rectangle 59",
+          "x": 116,
+          "y": 5173,
+          "width": 223,
+          "height": 49,
+          "changedPixelRatio": 9.3,
+          "meanColorError": 6,
+          "impactRatio": 0.02
+        },
+        {
+          "nodeId": "442:2964",
+          "name": "Rectangle 36",
+          "x": 583,
+          "y": 5173,
+          "width": 257,
+          "height": 49,
+          "changedPixelRatio": 8.8,
+          "meanColorError": 5.7,
+          "impactRatio": 0.02
+        },
+        {
+          "nodeId": "192:2985",
+          "name": "Rectangle 165",
+          "x": 148,
+          "y": 4485,
+          "width": 667,
+          "height": 34,
+          "changedPixelRatio": 3.7,
+          "meanColorError": 2.1,
+          "impactRatio": 0.02
+        }
+      ]
+    },
+    {
+      "score": 99.9,
+      "status": "pass",
+      "width": 440,
+      "height": 7559,
+      "changedPixelRatio": 0.9,
+      "rawChangedPixelRatio": 3.1,
+      "edgeEquivalentPixelRatio": 2.1,
+      "textureEquivalentPixelRatio": 0,
+      "contentChangedPixelRatio": 1.6,
+      "worstBandChangedPixelRatio": 3.1,
+      "meanColorError": 0.8,
+      "rawMeanColorError": 3.5,
+      "brightnessDelta": 0.1,
+      "generatedHeight": 7559,
+      "heightDifferenceRatio": 0,
+      "hotspots": [
+        {
+          "startPercent": 10,
+          "endPercent": 20,
+          "changedPixelRatio": 3.1,
+          "meanColorError": 2.4,
+          "label": "上部 10–20%"
+        },
+        {
+          "startPercent": 30,
+          "endPercent": 40,
+          "changedPixelRatio": 2.8,
+          "meanColorError": 3.1,
+          "label": "中央 30–40%"
+        }
+      ],
+      "alignment": {
+        "offsetX": 0,
+        "offsetY": 0,
+        "baselineError": 14.7,
+        "correctedError": 14.7,
+        "errorReductionRatio": 0,
+        "confidence": "low",
+        "safeToApply": false,
+        "reason": "局所差分の影響が大きく、全体移動による補正の確度は低い状態です。"
+      },
+      "recommendations": [
+        "Figma基準画像との大きな視覚差は検出されませんでした。",
+        "文字「お客様との出会いから施工、 アフターメンテナンスまで。 私たちが提供し続けるのは、 お客様の期待を大きく超える 革新的サービスです。 建工101に注文してよかった。 すべてのお客様にそう言っていただける 企業であるために、 社員一人ひとりがサービスの求道者として 日々研鑽に励んでいます。」の差分影響が大きいため、文字幅・明示改行・行高を優先して確認してください。"
+      ],
+      "variant": "mobile",
+      "referenceName": "1Company-SP",
+      "referenceNodeId": "192:794",
+      "renderWidth": 440,
+      "renderHeight": 7559,
+      "sections": [
+        {
+          "nodeId": "424:88",
+          "name": "Rectangle 227",
+          "x": 19,
+          "y": 698,
+          "width": 401,
+          "height": 6861,
+          "changedPixelRatio": 1.1,
+          "meanColorError": 1,
+          "impactRatio": 0.9
+        },
+        {
+          "nodeId": "424:3",
+          "name": "Mask group",
+          "x": 0,
+          "y": 698,
+          "width": 440,
+          "height": 625,
+          "changedPixelRatio": 3.6,
+          "meanColorError": 2.7,
+          "impactRatio": 0.3,
+          "alignment": {
+            "offsetX": 0,
+            "offsetY": 0,
+            "baselineError": 25.7,
+            "correctedError": 25.7,
+            "errorReductionRatio": 0,
+            "confidence": "low",
+            "safeToApply": false,
+            "reason": "「Mask group」は単純な位置移動だけで安全に改善できる確度が不足しています。"
+          }
+        },
+        {
+          "nodeId": "438:1408",
+          "name": "Mask group",
+          "x": 19,
+          "y": 871,
+          "width": 401,
+          "height": 358,
+          "changedPixelRatio": 6.7,
+          "meanColorError": 5.2,
+          "impactRatio": 0.29,
+          "alignment": {
+            "offsetX": 1,
+            "offsetY": 0,
+            "baselineError": 38.8,
+            "correctedError": 38.5,
+            "errorReductionRatio": 0.5,
+            "confidence": "low",
+            "safeToApply": false,
+            "reason": "「Mask group」は単純な位置移動だけで安全に改善できる確度が不足しています。"
+          }
+        },
+        {
+          "nodeId": "424:33",
+          "name": "Mask group",
+          "x": 0,
+          "y": 2570,
+          "width": 440,
+          "height": 625,
+          "changedPixelRatio": 3,
+          "meanColorError": 3.4,
+          "impactRatio": 0.25,
+          "alignment": {
+            "offsetX": 0,
+            "offsetY": 0,
+            "baselineError": 19.2,
+            "correctedError": 19.2,
+            "errorReductionRatio": 0,
+            "confidence": "low",
+            "safeToApply": false,
+            "reason": "「Mask group」は単純な位置移動だけで安全に改善できる確度が不足しています。"
+          }
+        },
+        {
+          "nodeId": "438:1418",
+          "name": "お客様との出会いから施工、 アフターメンテナンスまで。 私たちが提供し続けるのは、 お客様の期待を大きく超える 革新的サービスです。 建工101に注文してよかった。 すべてのお客様にそう言っていただける 企業であるために、 社員一人ひとりがサービスの求道者として 日々研鑽に励んでいます。",
+          "x": 70,
+          "y": 955,
+          "width": 298,
+          "height": 201,
+          "changedPixelRatio": 10.3,
+          "meanColorError": 7.8,
+          "impactRatio": 0.19,
+          "alignment": {
+            "offsetX": 0,
+            "offsetY": -1,
+            "baselineError": 54.6,
+            "correctedError": 52.6,
+            "errorReductionRatio": 3.5,
+            "confidence": "low",
+            "safeToApply": false,
+            "reason": "「お客様との出会いから施工、 アフターメンテナンスまで。 私たちが提供し続けるのは、 お客様の期待を大きく超える 革新的サービスです。 建工101に注文してよかった。 すべてのお客様にそう言っていただける 企業であるために、 社員一人ひとりがサービスの求道者として 日々研鑽に励んでいます。」は単純な位置移動だけで安全に改善できる確度が不足しています。"
+          }
+        },
+        {
+          "nodeId": "438:1420",
+          "name": "お客様との出会いから施工、 アフターメンテナンスまで。 私たちが提供し続けるのは、 お客様の期待を大きく超える 革新的サービスです。 建工101に注文してよかった。 すべてのお客様にそう言っていただける 企業であるために、 社員一人ひとりがサービスの求道者として 日々研鑽に励んでいます。",
+          "x": 70,
+          "y": 955,
+          "width": 298,
+          "height": 201,
+          "changedPixelRatio": 10.3,
+          "meanColorError": 7.8,
+          "impactRatio": 0.19,
+          "alignment": {
+            "offsetX": 0,
+            "offsetY": -1,
+            "baselineError": 54.6,
+            "correctedError": 52.6,
+            "errorReductionRatio": 3.5,
+            "confidence": "low",
+            "safeToApply": false,
+            "reason": "「お客様との出会いから施工、 アフターメンテナンスまで。 私たちが提供し続けるのは、 お客様の期待を大きく超える 革新的サービスです。 建工101に注文してよかった。 すべてのお客様にそう言っていただける 企業であるために、 社員一人ひとりがサービスの求道者として 日々研鑽に励んでいます。」は単純な位置移動だけで安全に改善できる確度が不足しています。"
+          }
+        }
+      ],
+      "textNodes": [
+        {
+          "nodeId": "438:1445",
+          "name": "会社名 株式会社建工101／リフォーム101（イチマルイチ） 代表者 今井 真太郎 住所 【本社】 〒654-0011　神戸市須磨区前池町2丁目3-3 【明石支店】 〒674-0083　兵庫県明石市魚住町住吉4丁目5-1 TEL 【本社】 TEL 078-742-7848 / FAX.078-742-7849 【明石支店】 TEL 078-995-5095 / 0120-110-196 FAX 078-995-5096",
+          "x": 40,
+          "y": 2437,
+          "width": 362,
+          "height": 571,
+          "changedPixelRatio": 4.4,
+          "meanColorError": 4.9,
+          "impactRatio": 0.27,
+          "geometry": {
+            "offsetX": 0,
+            "offsetY": 1,
+            "scaleX": 1.025,
+            "scaleY": 1.005,
+            "baselineError": 30,
+            "correctedError": 25.5,
+            "errorReductionRatio": 15.1,
+            "confidence": "low",
+            "safeToApply": false,
+            "reason": "文字差分を幅・高さの微調整だけで改善できる確度が不足しています。"
+          }
+        },
+        {
+          "nodeId": "438:1422",
+          "name": "お客様との出会いから施工、 アフターメンテナンスまで。 私たちが提供し続けるのは、 お客様の期待を大きく超える 革新的サービスです。 建工101に注文してよかった。 すべてのお客様にそう言っていただける 企業であるために、 社員一人ひとりがサービスの求道者として 日々研鑽に励んでいます。",
+          "x": 70,
+          "y": 955,
+          "width": 298,
+          "height": 200,
+          "changedPixelRatio": 10.4,
+          "meanColorError": 7.8,
+          "impactRatio": 0.19,
+          "geometry": {
+            "offsetX": 0,
+            "offsetY": -1,
+            "scaleX": 0.975,
+            "scaleY": 0.995,
+            "baselineError": 54.7,
+            "correctedError": 54,
+            "errorReductionRatio": 1.3,
+            "confidence": "low",
+            "safeToApply": false,
+            "reason": "文字差分を幅・高さの微調整だけで改善できる確度が不足しています。"
+          }
+        },
+        {
+          "nodeId": "438:1418",
+          "name": "お客様との出会いから施工、 アフターメンテナンスまで。 私たちが提供し続けるのは、 お客様の期待を大きく超える 革新的サービスです。 建工101に注文してよかった。 すべてのお客様にそう言っていただける 企業であるために、 社員一人ひとりがサービスの求道者として 日々研鑽に励んでいます。",
+          "x": 70,
+          "y": 955,
+          "width": 298,
+          "height": 201,
+          "changedPixelRatio": 10.3,
+          "meanColorError": 7.8,
+          "impactRatio": 0.19,
+          "geometry": {
+            "offsetX": 0,
+            "offsetY": 0,
+            "scaleX": 0.975,
+            "scaleY": 1.01,
+            "baselineError": 56.4,
+            "correctedError": 53.4,
+            "errorReductionRatio": 5.3,
+            "confidence": "low",
+            "safeToApply": false,
+            "reason": "文字差分を幅・高さの微調整だけで改善できる確度が不足しています。"
+          }
+        },
+        {
+          "nodeId": "438:1420",
+          "name": "お客様との出会いから施工、 アフターメンテナンスまで。 私たちが提供し続けるのは、 お客様の期待を大きく超える 革新的サービスです。 建工101に注文してよかった。 すべてのお客様にそう言っていただける 企業であるために、 社員一人ひとりがサービスの求道者として 日々研鑽に励んでいます。",
+          "x": 70,
+          "y": 955,
+          "width": 298,
+          "height": 201,
+          "changedPixelRatio": 10.3,
+          "meanColorError": 7.8,
+          "impactRatio": 0.19,
+          "geometry": {
+            "offsetX": 0,
+            "offsetY": 0,
+            "scaleX": 0.975,
+            "scaleY": 1.01,
+            "baselineError": 56.4,
+            "correctedError": 53.4,
+            "errorReductionRatio": 5.3,
+            "confidence": "low",
+            "safeToApply": false,
+            "reason": "文字差分を幅・高さの微調整だけで改善できる確度が不足しています。"
+          }
+        },
+        {
+          "nodeId": "438:1431",
+          "name": "私たち若い世代の経営者は、生まれた時からインターネットがあり、今ではAIやSNSを当たり前のようにビジネスに活用しています。 年配の先輩方からは、「若い人はデジタルに強くて羨ましい」「これからは君たちの時代だ」とお褒めいただくことも増えました。 しかし、私は日々の経営の中で、ある「違和感」や「危機感」を抱いています。 それは、「すべてをデジタルで効率化すれば、本当に人は幸せになるのだろうか」ということです。 画面の向こうの1万人のフォロワーよりも、目の前にいる1人の社員や、",
+          "x": 41,
+          "y": 1470,
+          "width": 346,
+          "height": 393,
+          "changedPixelRatio": 1.8,
+          "meanColorError": 1.9,
+          "impactRatio": 0.07
+        },
+        {
+          "nodeId": "439:1715",
+          "name": "SampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSampleSample",
+          "x": 40,
+          "y": 5797,
+          "width": 362,
+          "height": 209,
+          "changedPixelRatio": 1.5,
+          "meanColorError": 1.5,
+          "impactRatio": 0.03
+        },
+        {
+          "nodeId": "438:1464",
+          "name": "株式会社建工101/ リフォーム101 本社",
+          "x": 58,
+          "y": 3684,
+          "width": 323,
+          "height": 25,
+          "changedPixelRatio": 8.6,
+          "meanColorError": 10.3,
+          "impactRatio": 0.02
+        },
+        {
+          "nodeId": "438:1468",
+          "name": "〒654-0011 神戸市須磨区前池町2丁目3-3 TEL 078-742-7848 FAX 078-742-7849",
+          "x": 74,
+          "y": 4012,
+          "width": 292,
+          "height": 76,
+          "changedPixelRatio": 3.6,
+          "meanColorError": 4.2,
+          "impactRatio": 0.02
+        }
+      ],
+      "visualNodes": [
+        {
+          "nodeId": "424:3",
+          "name": "Mask group",
+          "x": 0,
+          "y": 698,
+          "width": 440,
+          "height": 625,
+          "changedPixelRatio": 3.6,
+          "meanColorError": 2.7,
+          "impactRatio": 0.3
+        },
+        {
+          "nodeId": "438:1408",
+          "name": "Mask group",
+          "x": 19,
+          "y": 871,
+          "width": 401,
+          "height": 358,
+          "changedPixelRatio": 6.7,
+          "meanColorError": 5.2,
+          "impactRatio": 0.29,
+          "geometry": {
+            "offsetX": 1,
+            "offsetY": -1,
+            "scaleX": 1,
+            "scaleY": 0.995,
+            "baselineError": 41.1,
+            "correctedError": 39,
+            "errorReductionRatio": 5.2,
+            "confidence": "low",
+            "safeToApply": false,
+            "reason": "文字差分を幅・高さの微調整だけで改善できる確度が不足しています。"
+          }
+        },
+        {
+          "nodeId": "424:33",
+          "name": "Mask group",
+          "x": 0,
+          "y": 2570,
+          "width": 440,
+          "height": 625,
+          "changedPixelRatio": 3,
+          "meanColorError": 3.4,
+          "impactRatio": 0.25
+        },
+        {
+          "nodeId": "424:23",
+          "name": "Mask group",
+          "x": 0,
+          "y": 1322,
+          "width": 440,
+          "height": 625,
+          "changedPixelRatio": 1,
+          "meanColorError": 1,
+          "impactRatio": 0.08
+        },
+        {
+          "nodeId": "424:53",
+          "name": "Mask group",
+          "x": 0,
+          "y": 5067,
+          "width": 440,
+          "height": 625,
+          "changedPixelRatio": 0.9,
+          "meanColorError": 0.7,
+          "impactRatio": 0.07
+        },
+        {
+          "nodeId": "438:1475",
+          "name": "Mask group",
+          "x": 0,
+          "y": 5691,
+          "width": 440,
+          "height": 625,
+          "changedPixelRatio": 0.6,
+          "meanColorError": 0.5,
+          "impactRatio": 0.05
+        },
+        {
+          "nodeId": "424:28",
+          "name": "Mask group",
+          "x": 0,
+          "y": 1946,
+          "width": 440,
+          "height": 625,
+          "changedPixelRatio": 0.5,
+          "meanColorError": 0.4,
+          "impactRatio": 0.04
+        },
+        {
+          "nodeId": "438:1508",
+          "name": "大型素材 (31) 1",
+          "x": 52,
+          "y": 4937,
+          "width": 339,
+          "height": 238,
+          "changedPixelRatio": 1.3,
+          "meanColorError": 0.9,
+          "impactRatio": 0.03
+        }
+      ],
+      "decorationNodes": [
+        {
+          "nodeId": "424:88",
+          "name": "Rectangle 227",
+          "x": 19,
+          "y": 698,
+          "width": 401,
+          "height": 6861,
+          "changedPixelRatio": 1.1,
+          "meanColorError": 1,
+          "impactRatio": 0.9
+        },
+        {
+          "nodeId": "438:1462",
+          "name": "Rectangle 201",
+          "x": 40,
+          "y": 3654,
+          "width": 362,
+          "height": 769,
+          "changedPixelRatio": 0.6,
+          "meanColorError": 0.7,
+          "impactRatio": 0.05
+        },
+        {
+          "nodeId": "424:87",
+          "name": "Rectangle 226",
+          "x": 0,
+          "y": 6866,
+          "width": 440,
+          "height": 693,
+          "changedPixelRatio": 0.2,
+          "meanColorError": 0.2,
+          "impactRatio": 0.02
+        },
+        {
+          "nodeId": "438:1428",
+          "name": "Rectangle 200",
+          "x": 40,
+          "y": 1381,
+          "width": 362,
+          "height": 74,
+          "changedPixelRatio": 0.8,
+          "meanColorError": 0.6,
+          "impactRatio": 0.01
+        },
+        {
+          "nodeId": "438:1470",
+          "name": "Rectangle 200",
+          "x": 40,
+          "y": 4443,
+          "width": 362,
+          "height": 45,
+          "changedPixelRatio": 0.5,
+          "meanColorError": 0.4,
+          "impactRatio": 0
+        },
+        {
+          "nodeId": "439:1754",
+          "name": "Rectangle 201",
+          "x": 40,
+          "y": 6481,
+          "width": 362,
+          "height": 51,
+          "changedPixelRatio": 0.4,
+          "meanColorError": 0.3,
+          "impactRatio": 0
+        },
+        {
+          "nodeId": "438:1454",
+          "name": "Rectangle 200",
+          "x": 40,
+          "y": 3602,
+          "width": 362,
+          "height": 45,
+          "changedPixelRatio": 0.3,
+          "meanColorError": 0.3,
+          "impactRatio": 0
+        },
+        {
+          "nodeId": "424:72",
+          "name": "Rectangle 35",
+          "x": 43,
+          "y": 7336,
+          "width": 355,
+          "height": 61,
+          "changedPixelRatio": 0.1,
+          "meanColorError": 0.1,
+          "impactRatio": 0
+        }
+      ]
+    }
+  ]
+}
