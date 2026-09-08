@@ -35,4 +35,20 @@
 - 2026-09-09の実ブラウザ確認はMacロックにより停止。今回の実WordPress Connector更新、新規9コピーの作成、保存後のPC/Tablet/SP巡回、Pro編集・フォーム送信/受信はまだ未実施。公開ページ、元9下書き、公開メニューはこの工程では操作していない。
 - 自動試験合格・Builder画素スコアは製品の99.9%完成率ではない。解除後に実WordPress保存再読込とリンク/機能を確認する。
 
-配信結果は検証完了後に追記する。
+## 配信結果
+
+- URL: [公開Builder v0.31.5](https://figmapress-builder.vercel.app/?release=0.31.5#convert)。HTTP200とHTML版数0.31.5を確認。
+- Target: production / Status: READY / Commit: `571aab2912eac84860664fa50f414dbf17517a44` / Framework: Next.js 16.3.0 / Build Duration: 24秒。
+- [候補・最終deployment](https://figmapress-builder-278y52a73-chat-oikaze.vercel.app)、ID `dpl_GSEeT71NKVh3nC3natx9pnTaD4yy`。
+- 候補でHTTP200/版数/Connector manifest0.19.11/ZIPバイト一致を確認。不正HTTP接続先のreview API入力は400で拒否した（外部WordPressへの保存なし）。
+- 同commitの[GitHub CI 34243117546](https://github.com/kouki-tachibana-dot/figmapress-builder/actions/runs/34243117546)が成功した後、公開エイリアスへのpromote成功。公開URLの版数・manifest・ZIP SHA-256を再確認した。
+- ロールバック先は直前 v0.31.4 の `dpl_HCUGgEdwCPFSwaYmzc8rkz4CKyjK`。
+
+### 配信後の観測
+
+- Error scan: 最終deploymentの過去30分で1件。上記の意図的なHTTP URL拒否試験（target `review-site`、HTTPS必須、8ms）と一致。それ以外のerrorは同検索範囲では検出されなかった。
+- Drains: 今回未確認。
+- Monitoring: 長期・継続監視の設定は今回未確認。今回のログ検索は無障害保証ではない。
+- リリース後の実ブラウザ確認、WordPressへのConnector更新・9レビュー下書き保存は、Macロック解除待ち。Builderの公開とWordPress反映を混同しない。
+
+Next.jsとブラウザ検証のスキルに従って認証/入力の境界と表示・操作を検査し、配信スキルに従って候補確認後に同じ成果物をpromoteした。
