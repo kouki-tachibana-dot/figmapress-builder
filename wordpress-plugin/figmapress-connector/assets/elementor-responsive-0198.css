@@ -19,6 +19,18 @@
     }
 }
 @media (max-width: 767px) {
+    /* The header can be white-on-photo, but its dropdown has a light panel.
+     * Give the open panel its own foreground instead of inheriting white.
+     * Keep this in the inline sheet so hosts stripping asset versions update it.
+     */
+    .figmapress-nav .figmapress-nav__panel {
+        --figmapress-text: var(--figmapress-dropdown-text, #202020);
+    }
+    .figmapress-nav .figmapress-nav__items a:hover,
+    .figmapress-nav .figmapress-nav__items a:focus-visible {
+        color: var(--figmapress-dropdown-text, #202020);
+        text-decoration: underline;
+    }
     .elementor:has(> .figmapress-layout--mobile) > .figmapress-layout--desktop,
     .elementor:has(> .figmapress-layout--mobile) > .figmapress-layout--tablet {
         display: none !important;

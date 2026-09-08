@@ -82,3 +82,23 @@ test("custom Elementor breakpoint values are used by the actual PHP stylesheet",
     expect((await inspect(page, variant)).valid).toBe(true);
   }
 });
+
+test("white-on-photo header stays white on desktop but mobile dropdown links remain readable", async ({ page }) => {
+  const interactions = readFileSync("wordpress-plugin/figmapress-connector/assets/elementor-interactions.css", "utf8");
+  const navigation = `<nav class="figmapress-nav figmapress-nav--fidelity" style="--figmapress-text:#fff;--figmapress-accent:#fff;--figmapress-nav-bg:transparent;height:100px">
+    <input class="figmapress-nav__state" type="checkbox" checked>
+    <div class="figmapress-nav__panel"><ul class="figmapress-nav__items"><li><a href="#company">会社案内</a></li></ul></div>
+  </nav>`;
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mount(page, navigation, interactions + css);
+  const link = page.getByRole("link", { name: "会社案内" });
+  expect(await link.evaluate(el => getComputedStyle(el).color)).toBe("rgb(255, 255, 255)");
+  await page.setViewportSize({ width: 440, height: 900 });
+  await expect(link).toBeVisible();
+  expect(await link.evaluate(el => getComputedStyle(el).color)).toBe("rgb(32, 32, 32)");
+  await link.hover();
+  expect(await link.evaluate(el => getComputedStyle(el).color)).toBe("rgb(32, 32, 32)");
+  await link.focus();
+  expect(await link.evaluate(el => getComputedStyle(el).textDecorationLine)).toContain("underline");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(440);
+});
