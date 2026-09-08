@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { WordPressSiteInputSchema, WordPressSiteShape, WordPressSiteLookupSchema, WordPressSiteLookupShape } from "@/lib/wordpress-site-input";
+import { WordPressReviewSiteSchema, WordPressReviewSiteShape } from "@/lib/wordpress-site-input";
 import {
   WpAuthError,
   WpRequestError,
@@ -7,6 +8,7 @@ import {
   createElementorDraftPage,
   prepareWordPressSite,
   lookupWordPressSite,
+  prepareWordPressReviewSite,
 } from "@figmapress/wp-connector";
 import {
   RequestError,
@@ -45,6 +47,7 @@ const ElementorTemplateSchema = z.object({
 }).strict();
 
 const RequestSchema = z.discriminatedUnion("target", [
+  CredentialsSchema.extend({ target: z.literal("review-site"), ...WordPressReviewSiteShape }).strict(),
   CredentialsSchema.extend({ target: z.literal("site-map"), ...WordPressSiteLookupShape }).strict(),
   CommonSchema.extend({
     target: z.literal("gutenberg"),
@@ -64,6 +67,11 @@ const RequestSchema = z.discriminatedUnion("target", [
     ...WordPressSiteShape,
   }).strict(),
 ]).superRefine((value, context) => {
+  if (value.target === "review-site") {
+    const result = WordPressReviewSiteSchema.safeParse(value);
+    if (!result.success) result.error.issues.forEach(issue => context.addIssue(issue));
+    return;
+  }
   if (value.target === "site-map") {
     const result = WordPressSiteLookupSchema.safeParse(value);
     if (!result.success) result.error.issues.forEach(issue => context.addIssue(issue));
@@ -119,6 +127,8 @@ export async function POST(request: Request): Promise<Response> {
       };
       const result = parsed.data.target === "site-map"
         ? await lookupWordPressSite(config, { siteKey: parsed.data.siteKey, pages: parsed.data.pages })
+        : parsed.data.target === "review-site"
+        ? await prepareWordPressReviewSite(config, { siteKey: parsed.data.siteKey, reviewId: parsed.data.reviewId, title: parsed.data.title, pages: parsed.data.pages })
         : parsed.data.target === "site"
         ? await prepareWordPressSite(config, {
             siteKey: parsed.data.siteKey,

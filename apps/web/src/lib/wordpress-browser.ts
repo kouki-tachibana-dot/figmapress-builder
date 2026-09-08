@@ -1,4 +1,5 @@
 import { validateWordPressSiteMap, type WordPressSiteLookupInput, type WordPressSiteMapResult } from "../../../../packages/wp-connector/src/site-map";
+import { validateReviewSiteResult, type PrepareReviewSiteInput, type PrepareReviewSiteResult } from "../../../../packages/wp-connector/src/review-site";
 
 export interface BrowserWordPressConfig {
   baseUrl: string;
@@ -512,6 +513,14 @@ export async function prepareWordPressSiteDirect(
     throw new WordPressDirectError("WordPressが下書き以外のページ状態を返しました。", "request");
   }
   return result;
+}
+
+export async function prepareWordPressReviewSiteDirect(config: BrowserWordPressConfig, input: PrepareReviewSiteInput): Promise<PrepareReviewSiteResult> {
+  const payload = JSON.stringify(input);
+  const result = await responseJson<unknown>(await directFetch(config,
+    config.connectorToken ? "/figmapress/v1/paired/review-prepare" : "/figmapress/v1/sites/review-prepare",
+    { method: "POST", body: config.connectorToken ? undefined : payload }, config.connectorToken ? { payload } : undefined, "hex"), config.connectorToken);
+  return validateReviewSiteResult(input, result);
 }
 
 function normalizeSlug(value: string): string {

@@ -42,6 +42,7 @@ import {
   localizeWordPressElementorMediaDirect,
   lookupWordPressSiteDirect,
   prepareWordPressSiteDirect,
+  prepareWordPressReviewSiteDirect,
   probeWordPressDirect,
   updateWordPressElementorDocumentDirect,
   type BrowserElementorSnapshot,
@@ -51,6 +52,7 @@ import {
 } from "@/lib/wordpress-browser";
 import { readWordPressCredentials } from "@/lib/wordpress-form";
 import { resolveWordPressPageLinks, receiptFromWordPressSiteMap, type WordPressSiteReceipt } from "@/lib/wordpress-page-links";
+import { validateReviewSiteResult, validateReviewPageSave, type PrepareReviewSiteInput, type PrepareReviewSiteResult } from "../../../../packages/wp-connector/src/review-site";
 import { validateWordPressSiteMap, type WordPressSiteMapResult } from "@figmapress/wp-connector";
 import {
   decodeWordPressPairingFragment,
@@ -125,7 +127,7 @@ type SiteVisualQaBrowserResult = VisualQaBrowserResult & {
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
-const APP_RELEASE = "0.31.4";
+const APP_RELEASE = "0.31.5";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -879,6 +881,8 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const [wpTarget, setWpTarget] = useState<OutputTarget>("elementor");
   const [wpBuildMode, setWpBuildMode] = useState<"single" | "site">("single");
   const [wpCreateReviewCopy, setWpCreateReviewCopy] = useState(false);
+  const [wpReviewSite, setWpReviewSite] = useState(false);
+  const reviewRunRef = useRef<{ context: string; id: string } | null>(null);
   const [wpSiteResult, setWpSiteResult] = useState<BrowserPreparedSiteResult | null>(null);
   const wpSiteReceiptRef = useRef<WordPressSiteReceipt | null>(null);
   const wpMapRequest = useRef(0);
@@ -1129,7 +1133,8 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       || !multiPagePlan
       || !connectorSupportsMultiPage
       || sitePreflightResult?.pages !== multiPagePlan?.pages.length
-      || (sitePreflightResult?.unlinkedDownloads.length ?? 0) > 0
+      || (!wpReviewSite && (sitePreflightResult?.unlinkedDownloads.length ?? 0) > 0)
+      || (wpReviewSite && (wpPageMap?.status !== "ready" || !versionAtLeast(wpStatus?.connectorVersion, "0.19.11")))
       || (siteVisualQaRequired && siteVisualQaGate?.blocked));
   const wordpressSiteBridgeUrl = connectorToken
     ? safeWordPressSiteBridgeUrl(baseUrl)
@@ -1220,6 +1225,8 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
 
   function invalidateSiteVerification() {
     siteSelectionRevision.current += 1;
+    reviewRunRef.current = null;
+    setWpReviewSite(false);
     setConfirmedSitePlan(null);
     sitePreflightTemplates.current.clear();
     sitePreflightEntries.current.clear();
@@ -2202,7 +2209,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     if (sitePreflightResult.placeholderTextWidgets > 0 && !sitePlaceholderApproved) {
       throw new Error("Figma内の仮テキストを確認し、そのまま下書きへ含める場合は明示承認してください。");
     }
-    if (sitePreflightResult.unlinkedDownloads.length > 0) {
+    if (sitePreflightResult.unlinkedDownloads.length > 0 && !wpReviewSite) {
       throw new Error("他の検査は完了しましたが、資料リンクが未接続です。未接続項目を確認してください。WordPressには送信していません。");
     }
     if (siteVisualQaRequired && siteVisualQaGate?.blocked) {
@@ -2223,6 +2230,17 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
           : `${conversionSiteSourceKey}:page:${page.key}`,
       })),
     };
+    let reviewInput: PrepareReviewSiteInput | null = null;
+    if (wpReviewSite) {
+      if (!versionAtLeast(wpStatus?.connectorVersion, "0.19.11")) throw new Error("検証コピー一式にはConnector v0.19.11以上が必要です。");
+      resolveWordPressPageLinks(credentials.baseUrl, conversionSiteSourceKey, plan.pages.map(page => page.key), wpSiteReceiptRef.current);
+      const originals = wpSiteReceiptRef.current!.result.pages;
+      const context = JSON.stringify([credentials.baseUrl, credentials.username, conversionSiteSourceKey, plan.pages.map(page => [page.key, page.frameId, originals.find(original => original.key === page.key)?.id])]);
+      if (reviewRunRef.current?.context !== context) reviewRunRef.current = { context, id: crypto.randomUUID().replaceAll("-", "") };
+      reviewInput = { siteKey: conversionSiteSourceKey, reviewId: reviewRunRef.current.id, title: plan.title,
+        pages: plan.pages.map(page => ({ key: page.key, title: page.title, slug: page.slug,
+          originalId: originals.find(original => original.key === page.key)!.id })) };
+    }
     const resumeAfterIndex = resumeAfterPageKey
       ? plan.pages.findIndex((page) => page.key === resumeAfterPageKey)
       : -1;
@@ -2238,6 +2256,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       : null;
     let pageTemplates: Map<FigmaSitePageKey, ElementorTemplate>;
     let prepared: BrowserPreparedSiteResult;
+    let reviewPrepared: PrepareReviewSiteResult | null = null;
     try {
       setWpSiteProgress("Figmaから各ページの編集データを準備しています…");
       pageTemplates = new Map(sitePreflightTemplates.current);
@@ -2260,7 +2279,20 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       }
       // Recheck the exact selected documents before preparing any WordPress
       // pages. The unrelated single-page preview is never a save prerequisite.
-      inspectFigmaSiteTemplates(plan, pageTemplates, { allowPlaceholderText: sitePlaceholderApproved });
+      inspectFigmaSiteTemplates(plan, pageTemplates, { allowPlaceholderText: sitePlaceholderApproved, inspectUnlinkedDownloads: wpReviewSite });
+      if (reviewInput) {
+        const input = reviewInput;
+        setWpSiteProgress(`検証ID ${input.reviewId.slice(0, 8)}：元ページを変更せず、検証コピーと専用メニューを準備しています…`);
+        const proxy = async () => (await readApi<{ ok: true; result: PrepareReviewSiteResult }>(await fetch("/api/wordpress", {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ target: "review-site", ...credentials, ...input }),
+        }))).result;
+        const result = credentials.connectorToken && siteBridge
+          ? await siteBridge.prepareReview<PrepareReviewSiteResult>(credentials.connectorToken, input)
+          : await runWordPressWriteWithNetworkFallback(wpTransport, () => prepareWordPressReviewSiteDirect(credentials, input), proxy,
+            error => error instanceof WordPressDirectError && error.kind === "network");
+        reviewPrepared = validateReviewSiteResult(input, result);
+        prepared = reviewPrepared;
+      } else {
       setWpSiteProgress("下書きページと未割り当てメニューを準備しています…");
       const prepareThroughProxy = async (): Promise<BrowserPreparedSiteResult> => {
         if (wpTransport === "direct") {
@@ -2289,6 +2321,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
           siteInput,
         );
       }
+      }
     } catch (error) {
       siteBridge?.close();
       throw error;
@@ -2298,9 +2331,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
 
     const receipt = { baseUrl: credentials.baseUrl, result: prepared };
     const pageLinks = resolveWordPressPageLinks(
-      credentials.baseUrl, conversionSiteSourceKey, plan.pages.map((page) => page.key), receipt,
+      credentials.baseUrl, reviewPrepared?.siteKey ?? conversionSiteSourceKey, plan.pages.map((page) => page.key), receipt,
     );
-    wpSiteReceiptRef.current = receipt;
+    if (!reviewPrepared) wpSiteReceiptRef.current = receipt;
     let currentResult = prepared;
     for (let index = startIndex; index < plan.pages.length; index += 1) {
       const page = plan.pages[index];
@@ -2333,10 +2366,10 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
           `「${page.title}」のElementor Pro構造に問題があります（${nativeWidgetAudit.errors.slice(0, 4).join("、")}）。WordPressには保存していません。`,
         );
       }
-      const requestId = createRequestId();
+      const requestId = reviewPrepared?.pages.find(candidate => candidate.key === page.key)?.requestId ?? createRequestId();
       const input = {
         target: "elementor" as const,
-        title: page.title,
+        title: reviewPrepared ? target.title : page.title,
         slug: target.slug,
         template: nativeLinkedTemplate,
         pageTemplate: "elementor_canvas" as const,
@@ -2394,6 +2427,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
               const data = await readApi<{ ok: true; result: WordPressResult }>(response);
               return data.result;
             })();
+      if (reviewPrepared) validateReviewPageSave(reviewPrepared.pages.find(candidate => candidate.key === page.key)!, saved);
       saved = {
         ...saved,
         requestId,
@@ -2410,7 +2444,12 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       setWpSiteResult(currentResult);
     }
     setWpResult(null);
-    setWpSiteProgress("複数ページとメニューの下書き構築が完了しました。");
+    if (reviewPrepared) setWpSiteResult({ ...currentResult, warnings: [
+      `元ページは変更していません。資料未接続${sitePreflightResult.unlinkedDownloads.length}件・実画面と機能の確認は未完了です。`,
+    ] });
+    setWpSiteProgress(reviewPrepared
+      ? `検証コピー${plan.pages.length}ページの本文保存が完了しました。元ページは変更していません。資料未接続${sitePreflightResult.unlinkedDownloads.length}件・実画面と機能の確認は未完了です。`
+      : "複数ページとメニューの下書き構築が完了しました。");
     } finally {
       siteBridge?.close();
     }
@@ -4005,7 +4044,16 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                       <p role="status">{multiPagePlan
                         ? `採用${multiPagePlan.pages.length}ページを確定しました。除外${candidateSitePlan.pages.length - multiPagePlan.pages.length}ページ。変更すると検査結果を破棄して再検査します。`
                         : "採用ページは未確定です。構成を確定するまで検査・WordPress保存は行いません。"}</p>
-                      <p>すべて下書きで作成します。メニューは未割り当てのため、公開中サイトには表示されません。再実行時は同じ下書きを更新します。</p>
+                      <p>{wpReviewSite
+                        ? "検証用の別ページと未割り当ての専用メニューを作成します。同じ画面での再試行は同じ検証IDを使い、保存済み本文は置き換えません。再変換・ページ構成変更・画面再読み込み後は新しい検証になります。"
+                        : "すべて下書きで作成します。メニューは未割り当てのため、公開中サイトには表示されません。再実行時は同じ下書きを更新します。"}</p>
+                      <label className="site-placeholder-approval">
+                        <input type="checkbox" checked={wpReviewSite} disabled={wpBusy || wpMediaBusy || sitePreflightBusy}
+                          onChange={event => { setWpReviewSite(event.target.checked); setWpSiteResult(null); setWpSiteProgress(""); }} />
+                        <span>既存ページを変更せず、採用ページ一式の検証コピーを作成
+                          <small>先に読み取り専用対応表を取得してください。資料未接続は未完了として残し、構造・画面比較・安全なリンクの検査は省略しません。Connector v0.19.11以上が必要です。</small>
+                        </span>
+                      </label>
                       <label className="site-placeholder-approval">
                         <input
                           checked={sitePlaceholderApproved}
@@ -4332,14 +4380,16 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                 <div className="site-build-result" role="status">
                   <div>
                     <strong>{wpSiteResult.pages.length}ページを下書きで準備しました</strong>
-                    <span>同じFigma URLで再実行すると、重複を作らず同じページを更新します。</span>
+                    <span>{"review" in wpSiteResult && wpSiteResult.review
+                      ? "独立した検証コピーです。同じ画面での再試行では保存済み本文を置き換えません。公開・機能検証の完了ではありません。"
+                      : "同じFigma URLで再実行すると、重複を作らず同じページを更新します。"}</span>
                   </div>
                   <ul>
                     {wpSiteResult.pages.map((page) => (
                       <li key={page.key}>
                         <span>
                           <strong>{page.title}</strong>
-                          <small>下書き #{page.id}・{page.updated ? "更新" : "新規"}</small>
+                          <small>下書き #{page.id}・{"review" in wpSiteResult && wpSiteResult.review ? "検証コピー" : page.updated ? "更新" : "新規"}</small>
                         </span>
                         <span className="site-build-result__actions">
                           {sameOriginWordPressLink(baseUrl, page.previewLink) && <a href={sameOriginWordPressLink(baseUrl, page.previewLink)} rel="noreferrer" target="_blank">確認 ↗</a>}
@@ -4441,7 +4491,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                       ? "実ページ検証中…"
                       : "作成中…"
                     : wpBuildMode === "site"
-                      ? `${multiPagePlan?.pages.length ?? 0}ページ＋メニューを下書き構築 →`
+                      ? wpReviewSite
+                        ? `${multiPagePlan?.pages.length ?? 0}ページの検証コピーを構築 →`
+                        : `${multiPagePlan?.pages.length ?? 0}ページ＋メニューを下書き構築 →`
                       : wpCreateReviewCopy
                         ? "検証用Elementor下書きを新規作成 →"
                         : `${wpTarget === "elementor" ? "Elementor" : "Gutenberg"}下書きを作成 →`}

@@ -8,6 +8,8 @@
  */
 
 import { validateWordPressSiteMap, type WordPressSiteLookupInput, type WordPressSiteMapResult } from "./site-map";
+import { validateReviewSiteResult, type PrepareReviewSiteInput, type PrepareReviewSiteResult } from "./review-site";
+export { validateReviewSiteResult, type PrepareReviewSiteInput, type PrepareReviewSiteResult } from "./review-site";
 export { validateWordPressSiteMap, type WordPressSiteLookupInput, type WordPressSiteMapResult, type WordPressSiteMapIssue } from "./site-map";
 
 export interface WpConfig {
@@ -295,7 +297,8 @@ async function wpAdminPost(
   fields: Record<string, string>,
 ): Promise<Response> {
   const pairedRoute = action === "figmapress_site_prepare" ? "site-prepare"
-    : action === "figmapress_site_lookup" ? "site-map" : null;
+    : action === "figmapress_site_lookup" ? "site-map"
+    : action === "figmapress_review_prepare" ? "review-prepare" : null;
   if (!pairedRoute) throw new Error("Unsupported WordPress site action.");
   const connectorToken = cfg.connectorToken?.trim();
   if (!connectorToken) {
@@ -534,6 +537,16 @@ export async function prepareWordPressSite(
     );
   }
   return result;
+}
+
+export async function prepareWordPressReviewSite(cfg: WpConfig, input: PrepareReviewSiteInput): Promise<PrepareReviewSiteResult> {
+  const payload = JSON.stringify(input);
+  const response = cfg.connectorToken
+    ? await wpAdminPost(cfg, "figmapress_review_prepare", { payload })
+    : await wpFetch(cfg, "/figmapress/v1/sites/review-prepare", { method: "POST", body: payload });
+  const body = await response.text();
+  if (!response.ok) throw new WpRequestError(`Failed to prepare review copies (HTTP ${response.status})`, response.status, body);
+  return validateReviewSiteResult(input, JSON.parse(body));
 }
 
 export async function createDraftPage(

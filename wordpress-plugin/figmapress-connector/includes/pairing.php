@@ -138,7 +138,7 @@ function figmapress_connector_is_manual_pairing_request() {
     $rest_route = isset( $_GET['rest_route'] )
         ? wp_unslash( $_GET['rest_route'] )
         : '';
-    if ( in_array( rtrim( $rest_route, '/' ), array( '/figmapress/v1/paired/site-prepare', '/figmapress/v1/paired/site-map' ), true ) ) {
+    if ( in_array( rtrim( $rest_route, '/' ), array( '/figmapress/v1/paired/site-prepare', '/figmapress/v1/paired/site-map', '/figmapress/v1/paired/review-prepare' ), true ) ) {
         return true;
     }
 
@@ -153,7 +153,7 @@ function figmapress_connector_is_manual_pairing_request() {
         . trim( rest_get_url_prefix(), '/' )
         . '/figmapress/v1/paired/';
     return 1 === preg_match(
-        '#' . preg_quote( $manual_path, '#' ) . '(?:site-prepare|site-map)/?$#',
+        '#' . preg_quote( $manual_path, '#' ) . '(?:site-prepare|site-map|review-prepare)/?$#',
         $request_path
     );
 }
@@ -331,6 +331,7 @@ function figmapress_connector_render_browser_bridge() {
         rest_url( 'figmapress/v1/paired/site-prepare' )
     );
     $lookup_url = wp_json_encode( rest_url( 'figmapress/v1/paired/site-map' ) );
+    $review_url = wp_json_encode( rest_url( 'figmapress/v1/paired/review-prepare' ) );
     $elementor_upload_url = wp_json_encode(
         rest_url( 'figmapress/v1/elementor/uploads/' )
     );
@@ -364,6 +365,7 @@ function figmapress_connector_render_browser_bridge() {
     const allowedOrigin = <?php echo $builder_origin; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>;
     const prepareUrl = <?php echo $prepare_url; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>;
     const lookupUrl = <?php echo $lookup_url; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>;
+    const reviewUrl = <?php echo $review_url; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>;
     const elementorUploadUrl = <?php echo $elementor_upload_url; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>;
     const elementorPageUrl = <?php echo $elementor_page_url; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>;
     const status = document.getElementById('status');
@@ -449,6 +451,7 @@ function figmapress_connector_render_browser_bridge() {
             !event.data || ![
                 'figmapress:prepare-site',
                 'figmapress:lookup-site',
+                'figmapress:prepare-review',
                 'figmapress:save-elementor',
                 'figmapress:confirm-elementor',
                 'figmapress:localize-media'
@@ -467,6 +470,8 @@ function figmapress_connector_render_browser_bridge() {
         busy = true;
         status.textContent = action === 'figmapress:lookup-site'
             ? '既存ページの対応表を読み取っています（変更なし）…'
+            : action === 'figmapress:prepare-review'
+            ? '元ページを変更せず、独立した検証コピーを準備しています…'
             : action === 'figmapress:prepare-site'
             ? '下書きページとメニューを準備しています…'
             : action === 'figmapress:save-elementor'
@@ -478,6 +483,9 @@ function figmapress_connector_render_browser_bridge() {
             if (action === 'figmapress:lookup-site') {
                 parsed = await postForm(lookupUrl, connectorToken, { payload: serialized });
                 responseType = 'figmapress:site-map';
+            } else if (action === 'figmapress:prepare-review') {
+                parsed = await postForm(reviewUrl, connectorToken, { payload: serialized });
+                responseType = 'figmapress:review-prepared';
             } else if (action === 'figmapress:prepare-site') {
                 parsed = await postForm(prepareUrl, connectorToken, { payload: serialized });
             } else if (action === 'figmapress:save-elementor') {
@@ -561,6 +569,8 @@ function figmapress_connector_render_browser_bridge() {
             }
             status.textContent = action === 'figmapress:lookup-site'
                 ? 'ページ対応表を読み取りました。ページ・メニューは変更していません。'
+                : action === 'figmapress:prepare-review'
+                ? '検証コピーの入れ物を準備しました。本文保存はまだ完了していません。'
                 : '下書き準備が完了しました。FigmaPressへ戻ります…';
             post({
                 type: responseType,
@@ -580,6 +590,8 @@ function figmapress_connector_render_browser_bridge() {
             post({
                 type: action === 'figmapress:lookup-site'
                     ? 'figmapress:site-map'
+                    : action === 'figmapress:prepare-review'
+                    ? 'figmapress:review-prepared'
                     : action === 'figmapress:save-elementor'
                     ? 'figmapress:elementor-saved'
                     : action === 'figmapress:confirm-elementor'

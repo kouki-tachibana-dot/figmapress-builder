@@ -446,6 +446,9 @@ function figmapress_connector_rest_prepare_site( WP_REST_Request $request, $acto
         return new WP_Error( 'figmapress_invalid_site', '複数ページの入力内容が無効です。', array( 'status' => 422 ) );
     }
     $site_key = isset( $params['siteKey'] ) ? sanitize_text_field( $params['siteKey'] ) : '';
+    if ( strpos( $site_key, 'figma:review-' ) === 0 ) {
+        return new WP_Error( 'figmapress_review_requires_dedicated_route', '検証コピーは専用の準備処理を使用してください。', array( 'status' => 409 ) );
+    }
     $title = isset( $params['title'] ) ? sanitize_text_field( $params['title'] ) : '';
     $menu_name = isset( $params['menuName'] ) ? sanitize_text_field( $params['menuName'] ) : '';
     $requested_pages = isset( $params['pages'] ) && is_array( $params['pages'] ) ? $params['pages'] : array();
@@ -955,6 +958,12 @@ function figmapress_connector_stream_elementor_upload( $upload_id, $index, $tota
 
     $source_key    = (string) $valid['source_key'];
     $post_id       = figmapress_connector_find_editable_draft_by_meta( '_figmapress_source_key', $source_key );
+    $review_guard  = figmapress_connector_review_save_guard( $source_key, $upload_id, $post_id );
+    if ( true !== $review_guard ) {
+        $wpdb->delete( $wpdb->options, array( 'option_name' => $data_key ), array( '%s' ) );
+        delete_option( $state_key );
+        return $review_guard;
+    }
     $created_draft = false;
     if ( ! $post_id ) {
         // Single-page conversion can enter the low-memory streaming path
@@ -1222,6 +1231,8 @@ function figmapress_connector_rest_create_elementor_page( WP_REST_Request $reque
     if ( ! $existing_id && '' !== $request_id ) {
         $existing_id = figmapress_connector_find_page_by_meta( '_figmapress_request_id', $request_id );
     }
+    $review_guard = figmapress_connector_review_save_guard( $source_key, $request_id, $existing_id );
+    if ( true !== $review_guard ) return $review_guard;
     $reuse_existing = false;
     if ( $existing_id ) {
         if ( $existing_id && current_user_can( 'edit_post', $existing_id ) ) {
@@ -1556,6 +1567,15 @@ function figmapress_connector_rest_localize_elementor_media( WP_REST_Request $re
         return $post_id;
     }
 
+    $review_source = (string) get_post_meta( $post_id, '_figmapress_source_key', true );
+    $review_request = (string) get_post_meta( $post_id, '_figmapress_request_id', true );
+    $is_review = strpos( $review_source, 'figma:review-' ) === 0;
+    if ( $is_review ) {
+        $guard = figmapress_connector_review_save_guard( $review_source, $review_request, $post_id );
+        if ( is_wp_error( $guard ) ) return $guard;
+    }
+    $review_hash = $is_review ? figmapress_connector_elementor_storage_hash( $post_id ) : '';
+
     $content = figmapress_connector_read_elementor_data( $post_id );
     if ( ! is_array( $content ) ) {
         return new WP_Error( 'figmapress_empty_template', 'The Elementor draft contains no editable document.', array( 'status' => 422 ) );
@@ -1594,7 +1614,11 @@ function figmapress_connector_rest_localize_elementor_media( WP_REST_Request $re
     if ( ! in_array( $page_template, array( 'elementor_canvas', 'elementor_header_footer', 'default' ), true ) ) {
         $page_template = 'elementor_canvas';
     }
-    $stored = figmapress_connector_store_elementor_document( $post_id, $content, $page_settings, $page_template );
+    if ( $is_review && ( 'draft' !== get_post_status( $post_id ) || ! hash_equals( $review_hash, figmapress_connector_elementor_storage_hash( $post_id ) ) ) ) {
+        return figmapress_connector_review_error( '画像取得中に検証コピーが編集されました。本文を上書きしません。' );
+    }
+    $stored = figmapress_connector_store_elementor_document( $post_id, $content, $page_settings, $page_template,
+        $is_review ? $review_request : '', $is_review ? $review_source : '' );
     if ( is_wp_error( $stored ) ) {
         return $stored;
     }

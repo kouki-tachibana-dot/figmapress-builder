@@ -1,6 +1,22 @@
 import { z } from "zod";
 
 const SiteKeySchema = z.string().trim().regex(/^figma:[A-Za-z0-9_-]{6,160}:(?:root|[0-9]+:[0-9]+)$/);
+export const WordPressReviewSiteShape = {
+  siteKey: SiteKeySchema.refine(value => !value.startsWith("figma:review-")),
+  reviewId: z.string().regex(/^[a-f0-9]{32}$/),
+  title: z.string().trim().min(1).max(200),
+  pages: z.array(z.object({ key: z.string().regex(/^[a-z0-9][a-z0-9-]{0,79}$/),
+    title: z.string().trim().min(1).max(200), slug: z.string().trim().min(1).max(200),
+    originalId: z.number().int().positive().safe(),
+  }).strict()).min(2).max(20),
+};
+export const WordPressReviewSiteSchema = z.object(WordPressReviewSiteShape).superRefine((input, context) => {
+  if (!input.pages.some(page => page.key === "home")
+    || new Set(input.pages.map(page => page.key)).size !== input.pages.length
+    || new Set(input.pages.map(page => page.originalId)).size !== input.pages.length) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["pages"], message: "ホームを含む重複しない元ページ対応が必要です。" });
+  }
+});
 export const WordPressSiteLookupShape = {
   siteKey: SiteKeySchema,
   pages: z.array(z.object({
