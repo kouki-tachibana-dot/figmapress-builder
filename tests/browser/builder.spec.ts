@@ -160,3 +160,20 @@ test("page conversion API rejects missing selection and mismatched frame identit
     expect(response.status()).toBe(422);
   }
 });
+
+test("nine-page proxy input reaches the URL safety gate while foreign page identities are rejected earlier", async ({ request }) => {
+  const siteKey = "figma:FixtureOnly123:root";
+  const data = {
+    target: "site", baseUrl: "http://127.0.0.1", username: "fixture", applicationPassword: "not-a-real-password",
+    siteKey, title: "Fixture", menuName: "Unassigned",
+    pages: ["home", "company", "reasons", "services", "works", "demolition", "news", "contact", "officers"].map(key => ({
+      key, title: key, slug: key, sourceKey: key === "home" ? siteKey : `${siteKey}:page:${key}`,
+    })),
+  };
+  const response = await request.post("/api/wordpress", { headers: { Origin: "http://127.0.0.1:3031" }, data });
+  expect(response.status()).toBe(400);
+  expect(JSON.stringify(await response.json())).toContain("HTTPS");
+  data.pages[1].sourceKey = "figma:OtherFile123:root:page:company";
+  const invalid = await request.post("/api/wordpress", { headers: { Origin: "http://127.0.0.1:3031" }, data });
+  expect(invalid.status()).toBe(422);
+});

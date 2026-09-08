@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { WordPressSiteInputSchema, WordPressSiteShape } from "@/lib/wordpress-site-input";
 import {
   WpAuthError,
   WpRequestError,
@@ -34,18 +35,6 @@ const CommonSchema = CredentialsSchema.extend({
     slug: z.string().trim().max(200),
 });
 
-const SiteKeySchema = z.string().trim()
-  .regex(/^figma:[A-Za-z0-9_-]{6,160}:(?:root|[0-9]+:[0-9]+)$/);
-const SitePageKeySchema = z.enum(["home", "thoughts", "policies", "activities", "profile", "contact"]);
-const SitePageSchema = z.object({
-  key: SitePageKeySchema,
-  title: z.string().trim().min(1).max(200),
-  slug: z.string().trim().min(1).max(200),
-  sourceKey: z.string().trim().regex(
-    /^figma:[A-Za-z0-9_-]{6,160}:(?:root|[0-9]+:[0-9]+)(?::page:[a-z0-9-]{1,80})?$/,
-  ),
-}).strict();
-
 const ElementorTemplateSchema = z.object({
   title: z.string().max(200),
   type: z.literal("page"),
@@ -70,12 +59,13 @@ const RequestSchema = z.discriminatedUnion("target", [
   }).strict(),
   CredentialsSchema.extend({
     target: z.literal("site"),
-    siteKey: SiteKeySchema,
-    title: z.string().trim().min(1).max(200),
-    menuName: z.string().trim().min(1).max(200),
-    pages: z.array(SitePageSchema).min(2).max(8),
+    ...WordPressSiteShape,
   }).strict(),
-]);
+]).superRefine((value, context) => {
+  if (value.target !== "site") return;
+  const result = WordPressSiteInputSchema.safeParse(value);
+  if (!result.success) result.error.issues.forEach(issue => context.addIssue(issue));
+});
 
 function wordpressMessage(body: string, status: number): string {
   try {

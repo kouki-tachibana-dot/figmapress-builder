@@ -6,7 +6,14 @@
 
 ## 現在地
 
-### v0.31.2（追加実装・配信候補）
+### v0.31.3（保存経路の追加修正）
+
+- サーバー経由の `/api/wordpress` だけ、旧版の6種類のページkey・最大8ページという制限が残っていた。直接/paired Connectorと同じ2〜20ページ、動的なページkeyへ統一した。
+- 単に制限を緩めず、home必須・ページkeyの重複禁止・各source keyと対象site keyの完全一致を追加。別サイトの識別子、不正key、ページ内へのstatus追加などを拒否する。
+- 採用ページUIでもhomeなしの構成を確定時に拒否し、WordPressへ送る前に不足を知らせる。
+- この修正は既存の下書きを変更する操作ではない。実WordPress書き込みを使わず、9ページ入力がURL安全検査まで進むことと、異なるsource keyがその前に422で止まることをAPI試験する。
+
+### v0.31.2（追加実装・配信済み）
 
 資料の添付を他作業の前提にせず、採用ページ固定と読み取り専用検査を強化した。
 
@@ -18,6 +25,33 @@
 - ローカル: `npm run test:product` 単体254件・型・Lint・ビルド成功、`npm run test:e2e` 16件成功、依存監査0件。
 - ブラウザ回帰: 19候補から9ページだけの取得、9→10ページへの変更で全キャッシュ再取得、構成なし/異なるフレームのAPI拒否を確認。合成データによる試験であり、実Figma全9ページの合格ではない。
 - 今回はWordPressのConnector・下書き・公開ページ・メニューを変更していない。読み取り専用の既存ページ対応表と検証コピー作成は次工程。
+
+配信結果:
+
+- URL: [公開Builder v0.31.2](https://figmapress-builder.vercel.app/?release=0.31.2#convert)。ブラウザの版数、保存済みPAT利用準備状態を確認。
+- Target: production / Status: READY / Commit: `652c8146dd12a2a3a68895a16e2527bd75aba329` / Framework: Next.js 16.3.0 / Build: 22秒。
+- [配信候補](https://figmapress-builder-bube6yama-chat-oikaze.vercel.app)、ID `dpl_7cyKhTgRcXCu6t5ru53HjwZgqTi5`。候補HTTP200と版数を確認してpromote成功。
+- 最終コードの[GitHub CI 34231438005](https://github.com/kouki-tachibana-dot/figmapress-builder/actions/runs/34231438005)成功。単体254件・ブラウザ16件。
+- 公開Connector manifestはv0.19.9のまま。Connector更新は今回不要。
+- 配信後errorログ（対象deployment・過去30分）は `No logs found`。Drains/継続監視の設定は今回未確認で、長期無障害を意味しない。
+- [390pxのページ選択回帰画面](./qa/2026-09-08/builder-0312-selection-regression-390.png)は合成19候補で9→10選択へ変更した試験。実Figma/WPの視覚一致画像ではない。
+
+公開版の実Figma試験:
+
+- 保存済みPATで会社案内を再変換し、実19候補を確認した。以下の9ページのみチェックして「採用9ページを確定しました。除外10ページ。」を確認。初期状態で自動選択されないこと、確定後は未採用プレビューのQAが保存判定に混ざらないことも確認。
+- 検査用に、従来承認済みのサンプル原稿保持を選択。資料添付なしで採用9ページの事前検査を開始した。WordPress保存の同意・送信ボタンは操作していない。
+
+| 採用ページ | 主フレームID | ページkey |
+| --- | --- | --- |
+| ホーム | 192:176 | home |
+| 会社案内 | 192:657 | company |
+| 選ばれる理由 | 192:944 | reasons |
+| 事業内容 | 192:1226 | services |
+| 施工事例 | 192:1532 | works |
+| 解体工事 | 192:1808 | demolition |
+| お知らせ | 192:2071 | news |
+| お問い合わせ | 192:2359 | contact |
+| 役員一覧 | 402:14 | officers |
 
 ### v0.31.1時点の配信・実サイト検証
 

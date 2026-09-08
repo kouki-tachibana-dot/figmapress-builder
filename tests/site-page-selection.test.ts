@@ -18,7 +18,7 @@ test("explicit selection excludes old designs without renaming or reordering sou
 });
 
 test("unconfirmed, unknown, duplicate and shared-frame selections are rejected", () => {
-  for (const keys of [[], ["home"], ["home", "unknown"], ["home", "home"]]) {
+  for (const keys of [[], ["home"], ["home", "unknown"], ["home", "home"], ["company", "contact"]]) {
     assert.throws(() => selectFigmaSitePages(plan, keys));
   }
   assert.throws(() => selectFigmaSitePages({ ...plan, pages: [plan.pages[0], plan.pages[0]] }, ["home", "company"]));

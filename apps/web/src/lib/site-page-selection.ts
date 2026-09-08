@@ -3,6 +3,7 @@ import type { FigmaMultiPagePlan, FigmaSitePagePlan } from "@figmapress/elemento
 /** Keep source identities and canvas order: deselection must never rename a page. */
 export function selectFigmaSitePages(plan: FigmaMultiPagePlan, keys: readonly string[]): FigmaMultiPagePlan {
   if (keys.length < 2) throw new Error("採用するページを2ページ以上選択してください。");
+  if (!keys.includes("home")) throw new Error("サイト一式の構成にはホームページを含めてください。");
   if (new Set(keys).size !== keys.length || new Set(plan.pages.map(page => page.key)).size !== plan.pages.length) {
     throw new Error("ページ識別子が重複しています。Figmaから再変換してください。");
   }
