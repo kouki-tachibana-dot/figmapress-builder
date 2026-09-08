@@ -13,7 +13,38 @@
 - 認証を行ってからページ単位の権限を確認する。公式の[REST endpoint権限設計](https://developer.wordpress.org/rest-api/extending-the-rest-api/adding-custom-endpoints/)に従い、サイト構築に必要なメニュー編集権限を読み取りには要求しない。
 - [get_posts](https://developer.wordpress.org/reference/functions/get_posts/)は最大2 IDの取得に制限し、曖昧なページを先頭1件で選ばない。全postmetaのキャッシュを避け、巨大なElementorデータを対応表照会のために読まない。
 - PHP実コールバックを実行する書き込み検出付きテスト、Basic/ペアリング/全403フォールバック、9ページ取得、権限・入力拒否を追加。ブラウザでは未確定の拒否、構成変更中の古い応答破棄、未解決表示、390px横はみ出しなし、書き込み通信0件を検証。
-- 配信と実WordPressでの結果は下記へ追記する。検証コピーの一式作成と実保存再読込は、この照会の合格とは別の未完了項目。
+- 検証コピーの一式作成と実保存再読込は、この照会の合格とは別の未完了項目。
+
+配信・回帰試験:
+
+- 公開URL: [Builder v0.31.4](https://figmapress-builder.vercel.app/?release=0.31.4#convert)。HTTP200、ブラウザ版数0.31.4を確認。
+- Target: production / Status: READY / Commit: `d328aa979ce7d5b7269775ad1f3006d9fcf77648` / Framework: Next.js 16.3.0 / Build: 18秒。
+- [最終deployment](https://figmapress-builder-63sl7qjgk-chat-oikaze.vercel.app)、ID `dpl_HCUGgEdwCPFSwaYmzc8rkz4CKyjK`。候補を検査後にpromote。直前v0.31.3は `dpl_2JFFzhvVUiFmZfJxaV6SLBMDNPgk` として保持。
+- 単体265件・ブラウザ19件、型・Lint・本番ビルド・PHP構文・ZIP整合性が成功。依存監査の検出0件。[GitHub CI 34236361767](https://github.com/kouki-tachibana-dot/figmapress-builder/actions/runs/34236361767)も同commitで成功。
+- 公開Connector ZIPはHTTP200、検証したローカルZIPとSHA-256完全一致: `43db1e9cefb83ee96a861bc13da70ba7a354fa01dc1766e6f96a23efaa654a2f`。
+- 最終deploymentの過去30分errorログは1件。意図的なHTTP URL拒否試験（target `site-map`、HTTPS必須、4ms）と一致。それ以外のerrorは同検索範囲では検出されなかった。Drains/長期監視設定は今回未確認。
+- [390pxの未解決表示](./qa/2026-09-08/builder-0314-readonly-map-390.png)は合成フィクスチャ。実WordPressの画面一致を示す画像ではない。
+
+実WordPressでの照会:
+
+- `tachibana-kouki.com` のWordPress標準アップロード画面で、検証済みZIPを使ってConnectorのみ0.19.9→0.19.10へ更新。「プラグインの更新に成功しました」とプラグイン一覧の0.19.10/有効状態を確認。Elementor、Pro、テーマ、WordPress本体は更新していない。
+- 公開Builder v0.31.4で保存済みPATを使い実Figmaを読み込み、19候補から既定の9フレームだけを選択。「採用9ページを確定しました。除外10ページ。」を確認。
+- 保存済みConnector接続の診断が成功。WP 7.1 / Connector 0.19.10 / Elementor 4.2.4 / Pro 4.2.3を取得した。診断はWidget登録確認であり、全Widgetの編集・保存・機能試験ではない。
+- 「既存ページの対応表を取得（変更なし）」を実行し、9ページすべて解決。未解決0件。下記ID一覧と、WordPress内bridgeの「ページ対応表を読み取りました。ページ・メニューは変更していません。」をDOM・画面で確認。ブラウザのerror/warnログは取得範囲で0件。
+
+| ページkey | 実WordPress下書きID |
+| --- | --- |
+| home | 184626 |
+| company | 184627 |
+| reasons | 184628 |
+| services | 184629 |
+| works | 184630 |
+| demolition | 184631 |
+| news | 184632 |
+| contact | 184633 |
+| officers | 184634 |
+
+今回はページ保存・下書き準備・メニュー作成を実行していない。既存9下書きに残る旧リンクの修正、別の検証コピー9ページ作成、実Elementorでの保存再読込、全ページのPC/Tablet/SP機能検査は未完了。読み取り専用対応表の合格を製品完成率やリンク動作の合格として扱わない。
 
 ### v0.31.3（保存経路の追加修正）
 
