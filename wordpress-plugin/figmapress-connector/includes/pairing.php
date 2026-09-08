@@ -559,7 +559,9 @@ function figmapress_connector_render_browser_bridge() {
                 );
                 responseType = 'figmapress:elementor-media';
             }
-            status.textContent = '下書き準備が完了しました。FigmaPressへ戻ります…';
+            status.textContent = action === 'figmapress:lookup-site'
+                ? 'ページ対応表を読み取りました。ページ・メニューは変更していません。'
+                : '下書き準備が完了しました。FigmaPressへ戻ります…';
             post({
                 type: responseType,
                 requestId,

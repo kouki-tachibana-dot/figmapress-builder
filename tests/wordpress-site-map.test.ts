@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { runInNewContext } from "node:vm";
 import { lookupWordPressSite } from "../packages/wp-connector/src/index";
 import { validateWordPressSiteMap, type WordPressSiteMapResult } from "../packages/wp-connector/src/site-map";
 import { lookupWordPressSiteDirect } from "../apps/web/src/lib/wordpress-browser";
@@ -79,4 +81,29 @@ test("all blocked paired lookup fallbacks stay read-only, never site-prepare", a
   await lookupWordPressSite({ ...config, connectorToken: `fp1.7.${"a".repeat(43)}` }, input);
   assert.deepEqual(requests, [`${baseUrl}/wp-admin/admin-post.php`, `${baseUrl}/wp-admin/admin-ajax.php`, `${baseUrl}/wp-json/figmapress/v1/paired/site-map`]);
   assert.ok(requests.every(url => !url.includes("prepare")));
+});
+
+test("actual destination bridge checks origin and reports lookup without claiming a draft save", async () => {
+  const php = readFileSync("wordpress-plugin/figmapress-connector/includes/pairing.php", "utf8");
+  const literals: Record<string, string> = { builder_origin: "https://figmapress-builder.vercel.app", prepare_url: `${baseUrl}/wp-json/figmapress/v1/paired/site-prepare`, lookup_url: `${baseUrl}/wp-json/figmapress/v1/paired/site-map`, elementor_upload_url: `${baseUrl}/uploads`, elementor_page_url: `${baseUrl}/pages` };
+  const script = php.split("<script>")[1].split("</script>")[0].replace(/<\?php echo \$(\w+);[^\n]*?\?>/g, (_, name) => JSON.stringify(literals[name]));
+  const requests: string[] = [];
+  const messages: Array<{ type: string; ok?: boolean; result?: unknown }> = [];
+  const status = { textContent: "" };
+  const peer = { postMessage: (message: typeof messages[number]) => messages.push(message) };
+  let onMessage: (event: unknown) => Promise<void> = async () => {};
+  const windowDouble = { parent: peer, setInterval: () => 1, setTimeout: (cb: () => void) => cb(), addEventListener: (_: string, cb: typeof onMessage) => { onMessage = cb; } };
+  runInNewContext(script, { window: windowDouble, document: { getElementById: (id: string) => id === "status" ? status : {} },
+    TextEncoder, URLSearchParams, AbortSignal, setTimeout,
+    fetch: async (url: string) => { requests.push(url); return Response.json(result()); },
+  });
+  const event = { origin: literals.builder_origin, source: peer, data: { type: "figmapress:lookup-site", requestId: "12345678-1234-1234-1234-123456789abc", connectorToken: `fp1.7.${"a".repeat(43)}`, payload: input } };
+  await onMessage({ ...event, origin: "https://foreign.example" });
+  await onMessage({ ...event, source: {} });
+  assert.deepEqual(requests, []);
+  await onMessage(event);
+  assert.deepEqual(requests, [literals.lookup_url]);
+  assert.ok(messages.some(message => message.type === "figmapress:site-map" && message.ok === true));
+  assert.match(status.textContent, /ページ・メニューは変更していません/);
+  assert.doesNotMatch(status.textContent, /下書き準備が完了/);
 });
