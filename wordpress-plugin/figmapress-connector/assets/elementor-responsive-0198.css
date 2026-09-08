@@ -1,0 +1,29 @@
+/* Missing device variants inherit the nearest wider available layout.
+ * Only top-level FigmaPress roots are controlled; nested editor containers
+ * retain their own responsive settings. Values are replaced with the site's
+ * Elementor breakpoints by includes/responsive.php before this CSS is printed.
+ */
+.elementor > .figmapress-layout--desktop {
+    display: var(--display, flex) !important;
+}
+.elementor > .figmapress-layout--tablet,
+.elementor > .figmapress-layout--mobile {
+    display: none !important;
+}
+@media (max-width: 1024px) {
+    .elementor:has(> .figmapress-layout--tablet) > .figmapress-layout--desktop {
+        display: none !important;
+    }
+    .elementor > .figmapress-layout--tablet {
+        display: var(--display, flex) !important;
+    }
+}
+@media (max-width: 767px) {
+    .elementor:has(> .figmapress-layout--mobile) > .figmapress-layout--desktop,
+    .elementor:has(> .figmapress-layout--mobile) > .figmapress-layout--tablet {
+        display: none !important;
+    }
+    .elementor > .figmapress-layout--mobile {
+        display: var(--display, flex) !important;
+    }
+}

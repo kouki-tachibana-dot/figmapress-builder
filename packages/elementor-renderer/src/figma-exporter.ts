@@ -15,6 +15,7 @@ import {
   ADAPTIVE_TABLET_WIDTH,
   deriveAdaptiveTabletRoot,
 } from "./adaptive-tablet";
+import { inferFigmaVerticalFlow } from "./flow-inference";
 
 export interface FigmaRenderAssets {
   imageUrls?: Record<string, string>;
@@ -123,6 +124,7 @@ interface FigmaVisualAsset {
 interface AccordionItem {
   title: string;
   content: string;
+  contentNodes: FigmaNode[];
   titleBounds?: FigmaBounds;
   contentBounds?: FigmaBounds;
 }
@@ -269,7 +271,7 @@ export class FigmaElementorExporter {
         ),
         responsive
           ? {
-              hide_mobile: "hidden-mobile",
+              ...(roots.mobile || hasTablet ? { hide_mobile: "hidden-mobile" } : {}),
               ...(hasTablet ? { hide_tablet: "hidden-tablet" } : {}),
             }
           : {},
@@ -289,7 +291,7 @@ export class FigmaElementorExporter {
         ),
         {
           hide_desktop: "hidden-desktop",
-          hide_mobile: "hidden-mobile",
+          ...(roots.mobile ? { hide_mobile: "hidden-mobile" } : {}),
         },
       );
       tabletElement.settings.figmapress_tablet_mode = adaptiveTablet ? "adaptive" : "source";
@@ -825,16 +827,35 @@ function renderElement(
 
   const accordion = accordionPlan(node);
   const clickableContainer = Boolean(action && clickableContainerIntent(node));
-  const children = (node.children ?? [])
+  const inferredFlow = !accordion && !clickableContainer ? inferFigmaVerticalFlow(node) : null;
+  const layoutNode = inferredFlow ?? node;
+  const children = (layoutNode.children ?? [])
     .filter((child) => !accordion || !isInsideInteractionBounds(child, accordion.bounds))
     .map((child) => renderElement(
       child,
       bounds,
-      node,
+      layoutNode,
       context,
       suppressLinks || clickableContainer,
     ))
-    .filter((element): element is ElementorElement => element !== null);
+    .filter((element): element is ElementorElement => element !== null)
+    .map((element) => {
+      if (!inferredFlow || element.elType !== "widget") return element;
+      const source = inferredFlow.children?.find(child => child.id === element.settings.figmapress_node_id);
+      if (!source?.absoluteBoundingBox) return element;
+      // A real container preserves the source text box's minimum height while
+      // allowing edited copy to grow and push later siblings down naturally.
+      return {
+        id: context.ids.create(`${node.id}:flow-item:${source.id}`), elType: "container" as const, isInner: true,
+        settings: {
+          _title: source.name, content_width: "full", width: size(100, "%"),
+          min_height: canvasSize(source.absoluteBoundingBox.height, context),
+          flex_direction: "column", flex_gap: gap(0), flex_shrink: "0", padding: dimensions(0, 0, 0, 0),
+          figmapress_flow_item: "yes", figmapress_source_node_id: source.id,
+        },
+        elements: [element],
+      };
+    });
   if (accordion) {
     children.push(accordionElement(node, accordion, bounds, node, context));
   }
@@ -850,8 +871,9 @@ function renderElement(
     elType: "container",
     isInner: true,
     settings: {
-      ...baseContainerSettings(node, context, parentBounds),
+      ...baseContainerSettings(layoutNode, context, parentBounds),
       ...containerPosition(node, bounds, parentBounds, parentNode, context),
+      ...(inferredFlow ? { figmapress_inferred_flow: "vertical-equal-gap", _title: node.name } : {}),
       figmapress_node_id: node.id,
       figmapress_node_name: node.name,
       html_tag: clickableContainer ? "a" : htmlTag(node, parentNode, context.root),
@@ -1570,6 +1592,7 @@ function accordionPlan(node: FigmaNode): AccordionPlan | null {
     return {
       title: title.characters?.trim() ?? `項目 ${index + 1}`,
       content,
+      contentNodes: contentNodes.sort((left, right) => (left.absoluteBoundingBox?.y ?? 0) - (right.absoluteBoundingBox?.y ?? 0)),
       titleBounds,
       contentBounds: unionBounds(contentNodes.map((child) => child.absoluteBoundingBox as FigmaBounds)),
     };
@@ -1591,7 +1614,15 @@ function accordionElement(
     items: plan.items.map((item, index) => ({
       _id: hashId(`${node.id}:accordion:${index}`),
       title: item.title,
-      content: item.content,
+      content: item.contentNodes.map((child) => {
+        const label = escapeHtml(child.characters?.trim() ?? "");
+        const action = functionalLink(child, context, false);
+        // An explicit Figma download link must survive accordion conversion.
+        // Escape both label and URL; never fabricate a URL from the PDF name.
+        return action && /^(?:https?:\/\/|\/[^/]|#[a-z][\w:-]+)/i.test(action.url)
+          ? `<a href="${escapeAttribute(action.url)}"${action.external ? ' target="_blank" rel="noopener noreferrer"' : ""}>${label}</a>`
+          : label;
+      }).join("\n"),
     })),
     allow_multiple: "",
     open_first: "yes",

@@ -8,6 +8,8 @@ dist/
 .DS_Store
 *.log
 *.tsbuildinfo
+playwright-report/
+test-results/
 apps/web/browser-*.png
 examples/output/*
 !examples/output/.gitkeep

@@ -108,6 +108,7 @@ export interface FigmaNodeBase {
   isMask?: boolean;
   maskType?: "ALPHA" | "VECTOR" | "LUMINANCE";
   layoutMode?: "HORIZONTAL" | "VERTICAL" | "NONE";
+  layoutPositioning?: "AUTO" | "ABSOLUTE";
   layoutWrap?: "NO_WRAP" | "WRAP";
   primaryAxisAlignItems?: string;
   counterAxisAlignItems?: string;

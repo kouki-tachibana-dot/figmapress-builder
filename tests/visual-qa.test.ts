@@ -51,11 +51,11 @@ test("browser Visual QA waits for the srcdoc DOM separately from slow media", as
   assert.match(source, /link\[rel="stylesheet"\]/);
   assert.match(source, /setAttribute\("loading", "eager"\)/);
   assert.match(source, /\.figmapress-figma-preview, \.figmapress-layout/);
-  assert.match(source, /enforceElementorResponsiveVariant\(frameDocument, variant\)/);
+  assert.match(source, /assertResponsiveIntegrity\(frameDocument, variant\)/);
   assert.match(source, /\.figmapress-layout, \.figmapress-figma-preview/);
-  assert.match(source, /responsiveRoot\?\.getAttribute\("aria-hidden"\) === "true"/);
+  assert.match(source, /getComputedStyle\(responsiveRoot\)\.display === "none"/);
   assert.match(source, /image\.removeAttribute\("src"\)/);
-  assert.match(source, /matchesVariant \? "var\(--display, flex\)" : "none"/);
+  assert.doesNotMatch(source, /enforceElementorResponsiveVariant|layout\.style\.setProperty\(\s*"display"/);
   assert.match(source, /visibleElementorLayouts\.length !== 1/);
   assert.match(source, /renderedContentHeight\(visiblePreview\)/);
   assert.match(source, /bottom - rootRect\.top/);

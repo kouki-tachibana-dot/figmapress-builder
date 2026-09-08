@@ -49,7 +49,7 @@ const accessibilityPatchStylePath = new URL(
   import.meta.url,
 );
 const responsiveStylePath = new URL(
-  "../wordpress-plugin/figmapress-connector/assets/elementor-responsive-0197.css",
+  "../wordpress-plugin/figmapress-connector/assets/elementor-responsive-0198.css",
   import.meta.url,
 );
 const phoneticPatchScriptPath = new URL(
@@ -291,14 +291,15 @@ test("Connector owns responsive layout visibility across Elementor 4 breakpoints
     readFile(responsiveStylePath, "utf8"),
   ]);
 
-  assert.match(plugin, /elementor-responsive-0197\.css/);
-  assert.match(plugin, /wp_enqueue_style\( 'figmapress-elementor-responsive-0197' \)/);
-  assert.match(rest, /wp_enqueue_style\( 'figmapress-elementor-responsive-0197' \)/);
-  assert.match(style, /@media \(min-width: 768px\) and \(max-width: 1024px\)/);
+  assert.match(plugin, /figmapress_connector_responsive_css\(\)/);
+  assert.match(plugin, /wp_enqueue_style\( 'figmapress-elementor-responsive-0198' \)/);
+  assert.match(rest, /wp_enqueue_style\( 'figmapress-elementor-responsive-0198' \)/);
+  assert.match(style, /@media \(max-width: 1024px\)/);
   assert.match(style, /@media \(max-width: 767px\)/);
   assert.match(style, /\.figmapress-layout--desktop[\s\S]*display: none !important;/);
-  assert.match(style, /\.figmapress-layout--tablet[\s\S]*display: flex !important;/);
-  assert.match(style, /\.figmapress-layout--mobile[\s\S]*display: flex !important;/);
+  assert.match(style, /:has\(> \.figmapress-layout--mobile\)/);
+  assert.match(style, /:has\(> \.figmapress-layout--tablet\)/);
+  assert.match(style, /display: var\(--display, flex\) !important;/);
 });
 
 test("Connector routes only owned Elementor pages away from the memory-heavy block editor", async () => {

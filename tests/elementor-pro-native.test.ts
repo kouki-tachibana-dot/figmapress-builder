@@ -132,6 +132,7 @@ test("a fiscal-year column on the responsive root becomes a native accordion", (
               name: "Invoice PDF",
               type: "TEXT",
               characters: "令和7年度 ご請求書フォーマット.pdf",
+              interactions: [{ actions: [{ type: "URL", url: "https://files.example/invoice.pdf?year=2025&source=figma" }] }],
               absoluteBoundingBox: { x: 500, y: 220, width: 360, height: 30 },
             },
           ],
@@ -155,6 +156,8 @@ test("a fiscal-year column on the responsive root becomes a native accordion", (
   assert.ok(accordion);
   assert.equal((accordion.settings.items as unknown[]).length, 5);
   assert.equal(accordion.elements.length, 5);
+  assert.match(String(accordion.elements[0]?.elements[0]?.settings.editor), /href="https:\/\/files\.example\/invoice\.pdf\?year=2025&amp;source=figma"/);
+  assert.match(String(accordion.elements[0]?.elements[0]?.settings.editor), /noopener noreferrer/);
 });
 
 test("fallback accordion becomes an editable Elementor Accordion widget", () => {

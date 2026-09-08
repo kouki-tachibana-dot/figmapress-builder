@@ -7,6 +7,7 @@ import {
   type FigmaSitePageKey,
 } from "@figmapress/elementor-renderer";
 import { auditNativeElementorTemplate } from "./elementor-native";
+import { assertElementorActionsConnected } from "./elementor-actions";
 
 export interface FigmaSitePreflightReport {
   pages: number;
@@ -161,6 +162,7 @@ export function inspectFigmaSiteTemplates(
       throw new Error(`「${page.title}」の編集データを準備できませんでした。`);
     }
     const nativeAudit = auditNativeElementorTemplate(template);
+    assertElementorActionsConnected(template);
     if (!nativeAudit.valid) {
       throw new Error(
         `「${page.title}」のElementorネイティブ構造に問題があります（${nativeAudit.errors.slice(0, 4).join("、")}）。WordPressには送信していません。`,

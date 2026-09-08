@@ -1,6 +1,6 @@
 {
   "name": "figmapress-builder",
-  "version": "0.30.5",
+  "version": "0.31.0",
   "private": true,
   "packageManager": "npm@10.9.4",
   "engines": {
@@ -19,6 +19,7 @@
     "test": "tsx --test tests/*.test.ts",
     "test:links": "tsx --test tests/figma-site-plan.test.ts tests/multipage.test.ts",
     "test:product": "npm test && npm run typecheck && npm run lint && npm run build:web",
+    "test:e2e": "playwright test",
     "generate:blueprint": "tsx scripts/generate-blueprint.ts",
     "render:blocks": "tsx scripts/render-blocks.ts",
     "generate:theme": "tsx scripts/generate-theme.ts",
@@ -30,6 +31,7 @@
     "typecheck:web": "tsc -p apps/web/tsconfig.json --noEmit"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/node": "^20.11.30",
     "tsx": "^4.7.1",
     "typescript": "^5.4.2"

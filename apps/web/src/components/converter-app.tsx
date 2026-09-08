@@ -49,6 +49,7 @@ import {
   type BrowserPreparedSiteResult,
 } from "@/lib/wordpress-browser";
 import { readWordPressCredentials } from "@/lib/wordpress-form";
+import { resolveWordPressPageLinks, type WordPressSiteReceipt } from "@/lib/wordpress-page-links";
 import {
   decodeWordPressPairingFragment,
   pruneWordPressProfiles,
@@ -91,6 +92,7 @@ import {
   type WordPressSiteBridge,
 } from "@/lib/wordpress-site-bridge";
 import { auditNativeElementorTemplate } from "@/lib/elementor-native";
+import { assertElementorActionsConnected } from "@/lib/elementor-actions";
 import { inspectRenderedLinkIntegrity } from "@/lib/rendered-link-integrity";
 import {
   FigmaSitePlaceholderError,
@@ -119,7 +121,7 @@ type SiteVisualQaBrowserResult = VisualQaBrowserResult & {
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
-const APP_RELEASE = "0.30.5";
+const APP_RELEASE = "0.31.0";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -129,7 +131,7 @@ const FIGMA_HEADER_MEDIA_CONNECTOR_VERSION = "0.16.18";
 const MULTI_PAGE_CONNECTOR_VERSION = "0.17.18";
 const FIGMA_PAGE_SET_CONNECTOR_VERSION = "0.17.28";
 const DYNAMIC_FORM_CONNECTOR_VERSION = "0.17.30";
-const NATIVE_ELEMENTOR_CONNECTOR_VERSION = "0.19.7";
+const NATIVE_ELEMENTOR_CONNECTOR_VERSION = "0.19.8";
 
 function safeWordPressSiteBridgeUrl(baseUrl: string): string {
   try {
@@ -183,26 +185,6 @@ function sameOriginWordPressLink(
     return link.toString();
   } catch {
     return undefined;
-  }
-}
-
-function plannedWordPressPageLinks(
-  baseUrl: string,
-  plan: FigmaMultiPagePlan | null | undefined,
-): Array<{ key: FigmaSitePageKey; rawLink: string }> | null {
-  if (!plan) return null;
-  try {
-    const base = new URL(baseUrl);
-    if (base.protocol !== "https:" || base.username || base.password) return null;
-    return plan.pages.map((page) => {
-      const slug = page.slug.replace(/^\/+|\/+$/g, "");
-      return {
-        key: page.key,
-        rawLink: new URL(`${slug || "home"}/`, `${base.origin}/`).toString(),
-      };
-    });
-  } catch {
-    return null;
   }
 }
 
@@ -805,8 +787,8 @@ ${webfontUrl ? `<link rel="stylesheet" href="${webfontUrl}">` : ""}
 section{padding:64px clamp(24px,7vw,88px);max-width:1100px;margin:0 auto}h1,h2,h3{line-height:1.13;letter-spacing:-.035em}h1{font-size:clamp(36px,7vw,72px);margin:0 0 20px}h2{font-size:clamp(28px,5vw,48px);margin:0 0 28px}h3{font-size:20px}p{color:#53636c}a{display:inline-block;background:#c8ff61;color:#102029;text-decoration:none;font-weight:750;padding:13px 20px;border-radius:999px}
 .wp-block-figmapress-hero{display:grid;grid-template-columns:1fr;align-items:center;gap:48px;min-height:520px}.wp-block-figmapress-hero[data-layout="text-left-image-right"]{grid-template-columns:1.15fr .85fr}.wp-block-figmapress-hero__image img{width:100%;border-radius:24px}.wp-block-figmapress-service-list,.wp-block-figmapress-faq{background:#fff}.wp-block-figmapress-card-grid__items,.wp-block-figmapress-service-list__items{list-style:none;padding:0;display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.wp-block-figmapress-card-grid__item,.wp-block-figmapress-service-list__item{padding:24px;background:#fff;border:1px solid #dbe1df;border-radius:18px}.wp-block-figmapress-faq__items dt{font-weight:750;margin-top:20px}.wp-block-figmapress-faq__items dd{margin:6px 0 0;color:#53636c}.wp-block-figmapress-cta{text-align:center;background:#112832;color:#fff;border-radius:28px}.wp-block-figmapress-cta h2{color:#fff}.wp-block-figmapress-contact{text-align:center}
 .figmapress-figma-preview{container-type:inline-size;overflow:hidden;position:relative;width:100%}.figmapress-figma-preview *{box-sizing:border-box;margin:0;max-width:none}.figmapress-figma-preview img{display:block}.figmapress-figma-preview--tablet,.figmapress-figma-preview--mobile{display:none}
-@media(min-width:768px) and (max-width:1024px){.figmapress-figma-preview--tablet{display:block}.figmapress-responsive-preview:has(>.figmapress-figma-preview--tablet)>.figmapress-figma-preview--desktop{display:none}}
-@media(max-width:767px){section{padding:44px 22px}.wp-block-figmapress-hero{grid-template-columns:1fr;min-height:auto}.wp-block-figmapress-card-grid__items,.wp-block-figmapress-service-list__items{grid-template-columns:1fr}.figmapress-figma-preview--desktop,.figmapress-figma-preview--tablet{display:none}.figmapress-figma-preview--mobile{display:block}}
+@media(max-width:1024px){.figmapress-figma-preview--tablet{display:block}.figmapress-responsive-preview:has(>.figmapress-figma-preview--tablet)>.figmapress-figma-preview--desktop{display:none}}
+@media(max-width:767px){section{padding:44px 22px}.wp-block-figmapress-hero{grid-template-columns:1fr;min-height:auto}.wp-block-figmapress-card-grid__items,.wp-block-figmapress-service-list__items{grid-template-columns:1fr}.figmapress-responsive-preview:has(>.figmapress-figma-preview--mobile)>.figmapress-figma-preview--desktop,.figmapress-responsive-preview:has(>.figmapress-figma-preview--mobile)>.figmapress-figma-preview--tablet{display:none}.figmapress-figma-preview--mobile{display:block}}
 </style></head><body>${content}</body></html>`;
 }
 
@@ -891,6 +873,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const [wpBuildMode, setWpBuildMode] = useState<"single" | "site">("single");
   const [wpCreateReviewCopy, setWpCreateReviewCopy] = useState(false);
   const [wpSiteResult, setWpSiteResult] = useState<BrowserPreparedSiteResult | null>(null);
+  const wpSiteReceiptRef = useRef<WordPressSiteReceipt | null>(null);
   const [wpSiteProgress, setWpSiteProgress] = useState("");
   const [sitePreflightBusy, setSitePreflightBusy] = useState(false);
   const [sitePreflightError, setSitePreflightError] = useState("");
@@ -931,7 +914,8 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     useState<PreviewTextIntegrity | null>(null);
   const [staleReleaseDetected] = useState(() => {
     if (typeof window === "undefined") return false;
-    return new URL(window.location.href).searchParams.get("release") !== APP_RELEASE;
+    const requestedRelease = new URL(window.location.href).searchParams.get("release");
+    return requestedRelease !== null && requestedRelease !== APP_RELEASE;
   });
   const [visualQaCorrections, setVisualQaCorrections] = useState<ElementorVisualCorrection[]>([]);
   const [visualQaSectionCorrections, setVisualQaSectionCorrections] = useState<
@@ -2186,13 +2170,11 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     try {
       setWpSiteResult(prepared);
 
-    const pageLinks = prepared.pages.map((page) => {
-      const rawLink = sameOriginWordPressLink(credentials.baseUrl, page.rawLink);
-      if (!rawLink) {
-        throw new Error(`${page.title}のWordPress URLを取得できませんでした。`);
-      }
-      return { key: page.key, rawLink };
-    });
+    const receipt = { baseUrl: credentials.baseUrl, result: prepared };
+    const pageLinks = resolveWordPressPageLinks(
+      credentials.baseUrl, conversionSiteSourceKey, plan.pages.map((page) => page.key), receipt,
+    );
+    wpSiteReceiptRef.current = receipt;
     let currentResult = prepared;
     for (let index = startIndex; index < plan.pages.length; index += 1) {
       const page = plan.pages[index];
@@ -2311,9 +2293,18 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   async function createWordPressDraft(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!output || !confirmed) return;
-    const reviewPageLinks = wpBuildMode === "single" && wpCreateReviewCopy
-      ? plannedWordPressPageLinks(baseUrl, output.multiPagePlan)
-      : null;
+    let reviewPageLinks: Array<{ key: FigmaSitePageKey; rawLink: string }> | null = null;
+    if (wpBuildMode === "single" && wpCreateReviewCopy && output.multiPagePlan) {
+      try {
+        reviewPageLinks = resolveWordPressPageLinks(
+          baseUrl, conversionSiteSourceKey, output.multiPagePlan.pages.map((page) => page.key),
+          wpSiteReceiptRef.current,
+        );
+      } catch (error) {
+        setWpError(error instanceof Error ? error.message : "確定済みページ対応表を取得できませんでした。");
+        return;
+      }
+    }
     const singlePageTemplate = reviewPageLinks
       ? rewriteElementorTemplatePageLinks(output.elementorTemplate, reviewPageLinks)
       : output.elementorTemplate;
@@ -2338,6 +2329,12 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       return;
     }
     if (wpTarget === "elementor") {
+      try {
+        assertElementorActionsConnected(singlePageTemplate);
+      } catch (error) {
+        setWpError(error instanceof Error ? error.message : "未接続の操作があります。");
+        return;
+      }
       const nativeAudit = auditNativeElementorTemplate(singlePageTemplate);
       if (!nativeAudit.valid) {
         setWpError(`Elementorネイティブ構造に問題があります（${nativeAudit.errors.slice(0, 4).join("、")}）。WordPressには保存していません。`);
@@ -2998,7 +2995,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         <nav aria-label="ページ内ナビゲーション">
           <a href="#convert">変換する</a>
           <a href="#setup">導入方法</a>
-          <span className="status-pill"><i /> v{APP_RELEASE} live</span>
+          <span className="status-pill"><i aria-hidden="true" /> v{APP_RELEASE}</span>
         </nav>
       </header>
 
@@ -3269,12 +3266,13 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
           <div className="section-heading">
             <span className="step-number step-number--success">✓</span>
             <div>
-              <span className="eyebrow">Conversion complete</span>
-              <h2>変換できました</h2>
+              <span className="eyebrow">Conversion generated</span>
+              <h2>変換データを生成しました</h2>
               <p>
                 {output.summary.pageTitle} — {output.summary.sectionCount}
                 {output.qualityReport ? "レイヤー" : "セクション"}を変換しました。
               </p>
+              <p>生成完了は品質検査の合格ではありません。Figmaとの比較・リンク・機能・WordPress保存後の表示を確認してください。</p>
             </div>
           </div>
 

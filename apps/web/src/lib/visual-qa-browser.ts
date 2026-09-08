@@ -1,4 +1,5 @@
 import html2canvas from "html2canvas";
+import { assertResponsiveIntegrity } from "./responsive-integrity";
 import {
   analyzeVisualRegions,
   analyzeVisualPixels,
@@ -164,37 +165,6 @@ async function waitForFonts(
   } finally {
     window.clearTimeout(timeout);
   }
-}
-
-function enforceElementorResponsiveVariant(
-  document: Document,
-  variant: "desktop" | "tablet" | "mobile",
-): void {
-  const layouts = Array.from(
-    document.querySelectorAll<HTMLElement>(
-      ".figmapress-layout, .figmapress-figma-preview",
-    ),
-  );
-  const hasResponsiveLayouts = layouts.some((layout) =>
-    layout.classList.contains("figmapress-layout--desktop")
-    || layout.classList.contains("figmapress-layout--tablet")
-    || layout.classList.contains("figmapress-layout--mobile")
-    || layout.classList.contains("figmapress-figma-preview--desktop")
-    || layout.classList.contains("figmapress-figma-preview--mobile"),
-  );
-  if (!hasResponsiveLayouts) return;
-
-  layouts.forEach((layout) => {
-    const matchesVariant =
-      layout.classList.contains(`figmapress-layout--${variant}`)
-      || layout.classList.contains(`figmapress-figma-preview--${variant}`);
-    layout.style.setProperty(
-      "display",
-      matchesVariant ? "var(--display, flex)" : "none",
-      "important",
-    );
-    layout.toggleAttribute("aria-hidden", !matchesVariant);
-  });
 }
 
 function clipsVerticalOverflow(style: CSSStyleDeclaration | undefined): boolean {
@@ -397,16 +367,16 @@ export async function runVisualQa(
       throw new Error("生成ページの比較画面を準備できませんでした。");
     }
 
-    // Pin the target before assigning proxied media URLs. The source contains
-    // both PC and mobile trees; downloading the hidden tree doubled requests,
-    // exhausted the image budget and could starve the Figma reference itself.
-    enforceElementorResponsiveVariant(frameDocument, variant);
+    // Determine visibility from the complete, original CSS. Forcing display
+    // here would hide broken responsive rules from the very test of those rules.
+    await waitForStylesheets(frameDocument, 12_000);
+    assertResponsiveIntegrity(frameDocument, variant);
     frameDocument.querySelectorAll<HTMLImageElement>("img").forEach((image) => {
       image.removeAttribute("srcset");
       const responsiveRoot = image.closest<HTMLElement>(
         ".figmapress-layout, .figmapress-figma-preview",
       );
-      if (responsiveRoot?.getAttribute("aria-hidden") === "true") {
+      if (responsiveRoot && frameDocument.defaultView?.getComputedStyle(responsiveRoot).display === "none") {
         image.removeAttribute("src");
         return;
       }
@@ -421,7 +391,7 @@ export async function runVisualQa(
       const responsiveRoot = element.closest<HTMLElement>(
         ".figmapress-layout, .figmapress-figma-preview",
       );
-      if (responsiveRoot?.getAttribute("aria-hidden") === "true") return;
+      if (responsiveRoot && frameDocument.defaultView?.getComputedStyle(responsiveRoot).display === "none") return;
       const rawStyle = element.getAttribute("style");
       if (rawStyle?.includes("url(")) {
         element.setAttribute("style", rewriteCssUrls(rawStyle));
@@ -438,12 +408,7 @@ export async function runVisualQa(
     // before those links finish produces a stable yet misleading low score.
     // Wait for CSS first because it can also discover fonts and backgrounds.
     await waitForStylesheets(frameDocument, 12_000);
-    // Elementor's responsive visibility rules depend on the complete frontend
-    // page context. The authenticated snapshot intentionally contains only the
-    // rendered document, so those rules can otherwise leave both the PC and
-    // mobile roots visible and produce a confidently wrong comparison. Pin the
-    // requested variant explicitly inside this isolated QA document.
-    enforceElementorResponsiveVariant(frameDocument, variant);
+    assertResponsiveIntegrity(frameDocument, variant);
     await Promise.all(
       Array.from(frameDocument.images, (image) => waitForImage(image, 8_000)),
     );

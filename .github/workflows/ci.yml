@@ -23,4 +23,14 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build:web
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: browser-failure-evidence
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
       - run: npm audit --omit=dev --audit-level=high

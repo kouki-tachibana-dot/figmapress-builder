@@ -3,7 +3,7 @@
  * Plugin Name:       FigmaPress Connector
  * Plugin URI:        https://github.com/kouki-tachibana-dot/figmapress-builder
  * Description:       Connects FigmaPress to Gutenberg and Elementor draft pages.
- * Version:           0.19.7
+ * Version:           0.19.8
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Update URI:        https://figmapress-builder.vercel.app/downloads/figmapress-connector.json
@@ -20,9 +20,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 define( 'FIGMAPRESS_CONNECTOR_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FIGMAPRESS_CONNECTOR_URL', plugin_dir_url( __FILE__ ) );
-define( 'FIGMAPRESS_CONNECTOR_VERSION', '0.19.7' );
+define( 'FIGMAPRESS_CONNECTOR_VERSION', '0.19.8' );
 
 require_once FIGMAPRESS_CONNECTOR_DIR . 'includes/pairing.php';
+require_once FIGMAPRESS_CONNECTOR_DIR . 'includes/responsive.php';
 require_once FIGMAPRESS_CONNECTOR_DIR . 'includes/rest-api.php';
 require_once FIGMAPRESS_CONNECTOR_DIR . 'includes/contact-form.php';
 require_once FIGMAPRESS_CONNECTOR_DIR . 'includes/update-checker.php';
@@ -175,12 +176,15 @@ function figmapress_connector_register_elementor_assets() {
         null,
         true
     );
-    wp_register_style(
-        'figmapress-elementor-responsive-0197',
-        FIGMAPRESS_CONNECTOR_URL . 'assets/elementor-responsive-0197.css',
-        array( 'figmapress-elementor-accessibility-0195' ),
-        null
-    );
+    if ( ! wp_style_is( 'figmapress-elementor-responsive-0198', 'registered' ) ) {
+        wp_register_style(
+            'figmapress-elementor-responsive-0198',
+            false,
+            array( 'figmapress-elementor-accessibility-0195' ),
+            null
+        );
+        wp_add_inline_style( 'figmapress-elementor-responsive-0198', figmapress_connector_responsive_css() );
+    }
 }
 add_action( 'wp_enqueue_scripts', 'figmapress_connector_register_elementor_assets' );
 add_action( 'elementor/frontend/before_register_scripts', 'figmapress_connector_register_elementor_assets' );
@@ -204,7 +208,7 @@ function figmapress_connector_enqueue_owned_elementor_assets() {
     wp_enqueue_style( 'figmapress-elementor-accessibility-0195' );
     wp_enqueue_script( 'figmapress-elementor-accessibility-0195' );
     wp_enqueue_script( 'figmapress-elementor-accessibility-0196' );
-    wp_enqueue_style( 'figmapress-elementor-responsive-0197' );
+    wp_enqueue_style( 'figmapress-elementor-responsive-0198' );
 }
 add_action( 'wp_enqueue_scripts', 'figmapress_connector_enqueue_owned_elementor_assets', 30 );
 

@@ -3,7 +3,7 @@ Contributors: figmapress
 Tags: blocks, figma, gutenberg, elementor
 Requires at least: 6.4
 Requires PHP: 7.4
-Stable tag: 0.19.7
+Stable tag: 0.19.8
 License: GPLv2 or later
 
 Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
@@ -15,6 +15,11 @@ Connects FigmaPress output to editable Gutenberg blocks and Elementor pages.
    create a draft page containing figmapress/* blocks.
 
 == Changelog ==
+
+= 0.19.8 =
+* PC/タブレットのみのデザインでも、スマホで空表示にならず既存レイアウトを継承します。
+* 対象サイトのElementorブレークポイントを使用し、ネストした編集コンテナの表示設定を維持します。
+* QAも通常の実CSSを使い、表示の強制補正で不具合を隠さない方式に対応します。
 
 = 0.19.7 =
 * Elementor 4系でもPC・タブレット・スマホの端末別コンテナを正しく切り替えます。
