@@ -76,6 +76,7 @@ import { cssColorIsPainted } from "@/lib/text-integrity";
 import { resolveFigmaRequestAuthentication } from "@/lib/figma-client-auth";
 import type { FigmaPageCandidate } from "@/lib/figma-frame-selection";
 import { currentCandidateFigmaSitePageKey } from "@/lib/figma-site-plan";
+import { assertSitePageBatch, selectFigmaSitePages } from "@/lib/site-page-selection";
 import {
   figmaFrameId,
   figmaReviewSourceKey,
@@ -122,7 +123,7 @@ type SiteVisualQaBrowserResult = VisualQaBrowserResult & {
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
-const APP_RELEASE = "0.31.1";
+const APP_RELEASE = "0.31.2";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -862,6 +863,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const [output, setOutput] = useState<ConversionResult | null>(null);
   const [figmaPageCandidates, setFigmaPageCandidates] = useState<FigmaPageCandidate[]>([]);
   const [selectedFrameId, setSelectedFrameId] = useState("");
+  const [sitePageKeys, setSitePageKeys] = useState<string[]>([]);
+  const [confirmedSitePlan, setConfirmedSitePlan] = useState<FigmaMultiPagePlan | null>(null);
+  const siteSelectionRevision = useRef(0);
   const [converting, setConverting] = useState(false);
   const [error, setError] = useState("");
   const [wpBusy, setWpBusy] = useState(false);
@@ -1088,7 +1092,8 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   );
   const conversionRequiresDynamicForms = wpBuildMode === "site"
     || (output?.qualityReport?.metrics.functionalWidgets.contactForm ?? 0) > 0;
-  const multiPagePlan = output?.multiPagePlan;
+  const candidateSitePlan = output?.multiPagePlan;
+  const multiPagePlan = confirmedSitePlan;
   const siteVisualQaRequired = Boolean(
     multiPagePlan?.pages.every((page) => Boolean(page.frameId)),
   );
@@ -1107,11 +1112,13 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     : versionAtLeast(wpStatus?.connectorVersion, MULTI_PAGE_CONNECTOR_VERSION);
   const multiPageAvailable = wpTarget === "elementor"
     && Boolean(conversionSiteSourceKey)
-    && Boolean(multiPagePlan && multiPagePlan.pages.length > 1);
+    && Boolean(candidateSitePlan && candidateSitePlan.pages.length > 1);
   const multiPageBlocked = wpBuildMode === "site"
     && (!multiPageAvailable
+      || !multiPagePlan
       || !connectorSupportsMultiPage
       || sitePreflightResult?.pages !== multiPagePlan?.pages.length
+      || (sitePreflightResult?.unlinkedDownloads.length ?? 0) > 0
       || (siteVisualQaRequired && siteVisualQaGate?.blocked));
   const wordpressSiteBridgeUrl = connectorToken
     ? safeWordPressSiteBridgeUrl(baseUrl)
@@ -1199,6 +1206,41 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     writeFigmaToken(value);
   }
 
+  function invalidateSiteVerification() {
+    siteSelectionRevision.current += 1;
+    setConfirmedSitePlan(null);
+    sitePreflightTemplates.current.clear();
+    sitePreflightEntries.current.clear();
+    setSitePreflightBusy(false);
+    setSitePreflightResult(null);
+    setSitePreflightError("");
+    setSitePreflightProgress("");
+    setSiteVisualQaResults([]);
+    setSitePlaceholderApproved(false);
+    setWpSiteResult(null);
+    setWpSiteProgress("");
+  }
+
+  function resetSiteSelection() {
+    invalidateSiteVerification();
+    setSitePageKeys([]);
+  }
+
+  function toggleSitePage(key: string, checked: boolean) {
+    invalidateSiteVerification();
+    setSitePageKeys(current => checked ? [...current, key] : current.filter(value => value !== key));
+  }
+
+  function confirmSiteSelection() {
+    if (!candidateSitePlan) return;
+    try {
+      setConfirmedSitePlan(selectFigmaSitePages(candidateSitePlan, sitePageKeys));
+      setSitePreflightError("");
+    } catch (caught) {
+      setSitePreflightError(caught instanceof Error ? caught.message : "採用ページを確認してください。");
+    }
+  }
+
   function markVisualQaCorrectionAttempt(kind: VisualQaCorrectionKind) {
     setVisualQaCorrectionAttempts((current) => ({
       ...current,
@@ -1207,6 +1249,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   }
 
   function changeSourceMode(nextMode: SourceMode) {
+    resetSiteSelection();
     setMode(nextMode);
     setFigmaPageCandidates([]);
     setSelectedFrameId("");
@@ -1252,6 +1295,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
 
   async function convert(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    resetSiteSelection();
     setConverting(true);
     setError("");
     setOutput(null);
@@ -1826,6 +1870,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
 
   async function fetchMultiPageTemplates(
     pages: FigmaSitePagePlan[],
+    plan: FigmaMultiPagePlan,
     onPage?: (entry: PageTemplateEntry) => void,
   ): Promise<PageTemplateEntry[]> {
     let baseBody: Record<string, unknown>;
@@ -1857,6 +1902,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     const requestBatch = async (
       requestedPages: FigmaSitePagePlan[],
     ): Promise<PageTemplateEntry[]> => {
+      assertSitePageBatch(plan, requestedPages);
       const candidateMode = requestedPages.every((page) => page.frameId);
       const maxAttempts = candidateMode ? 4 : 3;
       for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -1876,7 +1922,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                   hasTablet: Boolean(page.hasTablet),
                   hasMobile: page.hasMobile,
                   })),
-                  sitePages: output?.multiPagePlan?.pages
+                  sitePages: plan.pages
                     .filter((page) => page.frameId)
                     .map((page) => ({
                       key: page.key,
@@ -1904,7 +1950,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
         ) {
           if (onPage && requestedPages[0]) {
             setSitePreflightProgress(
-              `${sitePreflightTemplates.current.size}/${output?.multiPagePlan?.pages.length ?? "?"}ページを確認済み・「${requestedPages[0].title}」を自動再取得中`,
+              `${sitePreflightTemplates.current.size}/${plan.pages.length}ページを確認済み・「${requestedPages[0].title}」を自動再取得中`,
             );
           }
           await new Promise((resolve) =>
@@ -1912,7 +1958,13 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
           );
           continue;
         }
-        const data = await readApi<{ ok: true; pages: PageTemplateEntry[] }>(response);
+        const data = await readApi<{ ok: true; pages: Array<PageTemplateEntry & { page: FigmaSitePagePlan }> }>(response);
+        if (candidateMode) assertSitePageBatch(plan, data.pages.map(entry => entry.page));
+        if (data.pages.length !== requestedPages.length
+          || new Set(data.pages.map(entry => entry.page.key)).size !== requestedPages.length
+          || data.pages.some(entry => !requestedPages.some(page => page.key === entry.page.key))) {
+          throw new Error("取得したページが確定した採用ページと一致しません。WordPressには送信していません。");
+        }
         return data.pages;
       }
       throw new Error("Figmaページを取得できませんでした。時間を置いて再試行してください。");
@@ -1934,11 +1986,15 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   }
 
   async function verifyMultiPageTemplates(): Promise<void> {
-    const plan = output?.multiPagePlan;
+    const plan = multiPagePlan;
     if (!output || !plan || plan.pages.length < 2) {
-      setSitePreflightError("複数ページの構成がありません。Figmaからもう一度変換してください。");
+      setSitePreflightError("採用するページを選択し、構成を確定してください。");
       return;
     }
+    const revision = siteSelectionRevision.current;
+    const assertCurrentSelection = () => {
+      if (revision !== siteSelectionRevision.current) throw new Error("採用ページが変更されたため検査結果を破棄しました。再検査してください。");
+    };
     setSitePreflightBusy(true);
     setSitePreflightError("");
     setSitePreflightResult(null);
@@ -1953,25 +2009,25 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
             currentFigmaFrameId,
           )
         : "home";
-      if (!currentPageKey) {
-        throw new Error(
-          "現在のプレビューとサイト内ページを対応付けられませんでした。Figmaからもう一度変換してください。",
-        );
-      }
-      templates.set(currentPageKey, output.elementorTemplate);
-      sitePreflightTemplates.current.set(currentPageKey, output.elementorTemplate);
-      sitePreflightEntries.current.set(currentPageKey, {
+      // A candidate preview was built against the unfiltered plan. Reconvert
+      // every selected frame with the confirmed topology, including this page.
+      if (!candidateMode && currentPageKey) {
+        templates.set(currentPageKey, output.elementorTemplate);
+        sitePreflightTemplates.current.set(currentPageKey, output.elementorTemplate);
+        sitePreflightEntries.current.set(currentPageKey, {
         page: { key: currentPageKey },
         elementorTemplate: output.elementorTemplate,
         previewHtml: output.previewHtml,
         visualReferences: output.visualReferences,
-      });
+        });
+      }
       const missingPages = plan.pages.filter((page) => !templates.has(page.key));
       setSitePreflightProgress(
         `${templates.size}/${plan.pages.length}ページを確認済み`,
       );
       if (missingPages.length) {
-        const fetched = await fetchMultiPageTemplates(missingPages, (entry) => {
+        const fetched = await fetchMultiPageTemplates(missingPages, plan, (entry) => {
+          assertCurrentSelection();
           sitePreflightTemplates.current.set(entry.page.key, entry.elementorTemplate);
           sitePreflightEntries.current.set(entry.page.key, entry);
           templates.set(entry.page.key, entry.elementorTemplate);
@@ -1979,6 +2035,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
             `${sitePreflightTemplates.current.size}/${plan.pages.length}ページを確認済み`,
           );
         });
+        assertCurrentSelection();
         for (const entry of fetched) {
           templates.set(entry.page.key, entry.elementorTemplate);
           sitePreflightEntries.current.set(entry.page.key, entry);
@@ -1989,6 +2046,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       try {
         structuralReport = inspectFigmaSiteTemplates(plan, templates, {
           allowPlaceholderText: sitePlaceholderApproved,
+          inspectUnlinkedDownloads: true,
         });
       } catch (caught) {
         if (caught instanceof FigmaSitePlaceholderError) {
@@ -2031,6 +2089,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
               `${visualResults.length + 1}/${expectedScreens}画面を画素比較中（${page.title}・${deviceLabel(variant)}）`,
             );
             const result = await runVisualQa(reference, sourceDocument, variant);
+            assertCurrentSelection();
             visualResults.push({ ...result, pageKey: page.key, pageTitle: page.title });
             setSiteVisualQaResults([...visualResults]);
           }
@@ -2049,16 +2108,18 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       if (!structuralReport) {
         throw new Error("全ページの構造検査を完了できませんでした。WordPressには送信していません。");
       }
+      assertCurrentSelection();
       setSitePreflightResult(structuralReport);
       setSitePreflightProgress("");
     } catch (caught) {
+      if (revision !== siteSelectionRevision.current) return;
       setSitePreflightError(
         caught instanceof Error
           ? caught.message
           : "全ページの事前検証を完了できませんでした。",
       );
     } finally {
-      setSitePreflightBusy(false);
+      if (revision === siteSelectionRevision.current) setSitePreflightBusy(false);
     }
   }
 
@@ -2066,7 +2127,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     credentials: BrowserWordPressConfig,
     resumeAfterPageKey?: FigmaSitePageKey,
   ): Promise<void> {
-    const plan = output?.multiPagePlan;
+    const plan = multiPagePlan;
     if (!output || !plan || plan.pages.length < 2 || !conversionSiteSourceKey) {
       throw new Error("複数ページ化できるFigma URLとセクションを確認してください。");
     }
@@ -2084,6 +2145,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     }
     if (sitePreflightResult.placeholderTextWidgets > 0 && !sitePlaceholderApproved) {
       throw new Error("Figma内の仮テキストを確認し、そのまま下書きへ含める場合は明示承認してください。");
+    }
+    if (sitePreflightResult.unlinkedDownloads.length > 0) {
+      throw new Error("他の検査は完了しましたが、資料リンクが未接続です。未接続項目を確認してください。WordPressには送信していません。");
     }
     if (siteVisualQaRequired && siteVisualQaGate?.blocked) {
       throw new Error(
@@ -2129,15 +2193,10 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
             currentFigmaFrameId,
           )
         : "home";
-      if (!currentPageKey) {
-        throw new Error(
-          "現在のプレビューとサイト内ページを対応付けられませんでした。Figmaからもう一度変換してください。",
-        );
-      }
-      pageTemplates.set(currentPageKey, output.elementorTemplate);
+      if (!candidateMode && currentPageKey) pageTemplates.set(currentPageKey, output.elementorTemplate);
       const missingPages = pagesToSave.filter((page) => !pageTemplates.has(page.key));
       if (missingPages.length > 0) {
-        const fetched = await fetchMultiPageTemplates(missingPages);
+        const fetched = await fetchMultiPageTemplates(missingPages, plan);
         for (const entry of fetched) {
           pageTemplates.set(entry.page.key, entry.elementorTemplate);
           sitePreflightEntries.current.set(entry.page.key, entry);
@@ -3097,6 +3156,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                   <input
                     autoComplete="off"
                     onChange={(event) => {
+                      resetSiteSelection();
                       setFileKeyOrUrl(event.target.value);
                       setFigmaPageCandidates([]);
                       setSelectedFrameId("");
@@ -3825,7 +3885,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                   <span><strong>Elementor（推奨）</strong><small>Figmaレイアウト・文字・画像を保持</small></span>
                 </label>
               </fieldset>
-              {multiPageAvailable && multiPagePlan && (
+              {multiPageAvailable && candidateSitePlan && (
                 <fieldset className="site-build-picker">
                   <legend>ページ構成</legend>
                   <label className={wpBuildMode === "single" ? "is-active" : ""}>
@@ -3849,17 +3909,27 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                     />
                     <span>
                       <strong>サイト一式を自動構築（推奨）</strong>
-                      <small>{multiPagePlan.pages.length}ページ＋FigmaPress管理メニュー</small>
+                      <small>{multiPagePlan ? `採用${multiPagePlan.pages.length}ページ` : "採用ページを選択してください"}＋FigmaPress管理メニュー</small>
                     </span>
                   </label>
                   {wpBuildMode === "site" && (
                     <div className="site-build-plan">
-                      <strong>作成予定</strong>
+                      <strong>採用ページを選択（候補{candidateSitePlan.pages.length}ページ）</strong>
+                      <p>旧案・部品が含まれる場合があります。採用するページとFigmaフレームIDを確認してください。未選択のページは変換・保存しません。</p>
                       <ol>
-                        {multiPagePlan.pages.map((page) => (
+                        {candidateSitePlan.pages.map((page) => (
                           <li key={page.key}>
-                            <span>{page.title}</span>
-                            <code>/{page.slug.replace(/^\/+|\/+$/g, "")}/</code>
+                            <label className="site-page-choice">
+                              <input
+                                type="checkbox"
+                                checked={sitePageKeys.includes(page.key)}
+                                disabled={sitePreflightBusy || wpBusy || wpMediaBusy}
+                                onChange={event => toggleSitePage(page.key, event.target.checked)}
+                                aria-label={`採用: ${page.title} (${page.frameId ?? page.key})`}
+                              />
+                              <span>{page.title}</span>
+                            </label>
+                            <code>{page.frameId ? `Figma ${page.frameId} · ` : ""}/{page.slug.replace(/^\/+|\/+$/g, "")}/</code>
                             <small>{[
                               page.hasDesktop ? "PC" : "",
                               page.hasTablet ? "タブレット" : "",
@@ -3868,6 +3938,14 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                           </li>
                         ))}
                       </ol>
+                      <button className="button button--dark" type="button"
+                        disabled={sitePageKeys.length < 2 || sitePreflightBusy || wpBusy || wpMediaBusy || Boolean(multiPagePlan)}
+                        onClick={confirmSiteSelection}>
+                        選択した{sitePageKeys.length}ページで構成を確定
+                      </button>
+                      <p role="status">{multiPagePlan
+                        ? `採用${multiPagePlan.pages.length}ページを確定しました。除外${candidateSitePlan.pages.length - multiPagePlan.pages.length}ページ。変更すると検査結果を破棄して再検査します。`
+                        : "採用ページは未確定です。構成を確定するまで検査・WordPress保存は行いません。"}</p>
                       <p>すべて下書きで作成します。メニューは未割り当てのため、公開中サイトには表示されません。再実行時は同じ下書きを更新します。</p>
                       <label className="site-placeholder-approval">
                         <input
@@ -3886,18 +3964,28 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                       </label>
                       <button
                         className="button button--dark"
-                        disabled={sitePreflightBusy}
+                        disabled={!multiPagePlan || sitePreflightBusy || wpBusy || wpMediaBusy}
                         onClick={() => void verifyMultiPageTemplates()}
                         type="button"
                       >
                         {sitePreflightBusy
-                          ? sitePreflightProgress || `${multiPagePlan.pages.length}ページを検証中…`
-                          : `全${multiPagePlan.pages.length}ページを事前検証`}
+                          ? sitePreflightProgress || `${multiPagePlan?.pages.length ?? 0}ページを検証中…`
+                          : `採用${multiPagePlan?.pages.length ?? 0}ページを事前検証`}
                       </button>
-                      {sitePreflightResult && (
+                      {sitePreflightResult && multiPagePlan && (
                         <p role="status">
+                          構造検査（資料リンク接続・WordPress実画面は別判定）：
                           ✓ {sitePreflightResult.pages}/{multiPagePlan.pages.length}ページ合格・ネイティブElementor {sitePreflightResult.nativePages}ページ／main {sitePreflightResult.semanticMains}個・header {sitePreflightResult.semanticHeaders}個・footer {sitePreflightResult.semanticFooters}個・H1 {sitePreflightResult.h1Headings}個／文字 {sitePreflightResult.textWidgets}個／画像 {sitePreflightResult.imageWidgets}個／Button {sitePreflightResult.nativeButtons}個／クリック可能Container {sitePreflightResult.clickableContainers}個・正式URL {sitePreflightResult.structuredLinks}件・実動メニュー {sitePreflightResult.navigationPages}ページ/{sitePreflightResult.navigationWidgets}個・リンク {sitePreflightResult.links}件・移動先 {sitePreflightResult.destinations}ページ・フォーム {sitePreflightResult.contactForms}個・仮テキスト {sitePreflightResult.placeholderTextWidgets}件
                         </p>
+                      )}
+                      {Boolean(sitePreflightResult?.unlinkedDownloads.length) && (
+                        <details className="alert" open>
+                          <summary>資料リンク {sitePreflightResult!.unlinkedDownloads.length}件は未接続です（未完了）</summary>
+                          <p>資料がなくても他ページの検査は実行できます。以下は接続待ちとして残し、全機能の合格とは扱いません。</p>
+                          <ul>{sitePreflightResult!.unlinkedDownloads.map((issue, index) => (
+                            <li key={`${issue.pageKey}:${issue.elementId}:${index}`}>{issue.pageTitle}：{issue.label}（{issue.elementId}）</li>
+                          ))}</ul>
+                        </details>
                       )}
                       {siteVisualQaGate && siteVisualQaGate.completed > 0 && (
                         <p role="status">

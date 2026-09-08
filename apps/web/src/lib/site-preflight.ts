@@ -7,9 +7,10 @@ import {
   type FigmaSitePageKey,
 } from "@figmapress/elementor-renderer";
 import { auditNativeElementorTemplate } from "./elementor-native";
-import { assertElementorActionsConnected } from "./elementor-actions";
+import { assertElementorActionsConnected, inspectUnlinkedElementorActions, type UnlinkedElementorAction } from "./elementor-actions";
 
 export interface FigmaSitePreflightReport {
+  unlinkedDownloads: Array<UnlinkedElementorAction & { pageKey: string; pageTitle: string }>;
   pages: number;
   nativePages: number;
   containers: number;
@@ -35,6 +36,8 @@ export interface FigmaSitePreflightReport {
 
 export interface FigmaSitePreflightOptions {
   allowPlaceholderText?: boolean;
+  /** Read-only inspection can finish without supplied PDFs; saving remains gated. */
+  inspectUnlinkedDownloads?: boolean;
 }
 
 export class FigmaSitePlaceholderError extends Error {
@@ -155,6 +158,7 @@ export function inspectFigmaSiteTemplates(
   let contactForms = 0;
   let carousels = 0;
   let accordions = 0;
+  const unlinkedDownloads: FigmaSitePreflightReport["unlinkedDownloads"] = [];
 
   for (const page of plan.pages) {
     const template = templates.get(page.key);
@@ -162,7 +166,13 @@ export function inspectFigmaSiteTemplates(
       throw new Error(`「${page.title}」の編集データを準備できませんでした。`);
     }
     const nativeAudit = auditNativeElementorTemplate(template);
-    assertElementorActionsConnected(template);
+    if (options.inspectUnlinkedDownloads) {
+      unlinkedDownloads.push(...inspectUnlinkedElementorActions(template).map(issue => ({
+        ...issue, pageKey: page.key, pageTitle: page.title,
+      })));
+    } else {
+      assertElementorActionsConnected(template);
+    }
     if (!nativeAudit.valid) {
       throw new Error(
         `「${page.title}」のElementorネイティブ構造に問題があります（${nativeAudit.errors.slice(0, 4).join("、")}）。WordPressには送信していません。`,
@@ -291,6 +301,7 @@ export function inspectFigmaSiteTemplates(
 
   return {
     pages: plan.pages.length,
+    unlinkedDownloads,
     nativePages,
     containers,
     widgets,

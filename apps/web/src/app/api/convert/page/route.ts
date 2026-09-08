@@ -28,6 +28,7 @@ import {
   createSemanticPageLinkTargets,
 } from "@/lib/figma-site-plan";
 import { markNativeElementorTemplate } from "@/lib/elementor-native";
+import { assertSitePageBatch } from "@/lib/site-page-selection";
 import {
   RequestError,
   clientIp,
@@ -93,6 +94,14 @@ export async function POST(request: Request): Promise<Response> {
     const parsed = RequestSchema.safeParse(await readJsonBody(request));
     if (!parsed.success) {
       throw new RequestError("複数ページ変換の入力内容を確認してください。", 422);
+    }
+    if (parsed.data.mode === "figma" && parsed.data.candidatePages) {
+      if (!parsed.data.sitePages) throw new RequestError("確定した採用ページの構成が必要です。", 422);
+      try {
+        assertSitePageBatch({ title: "", menuName: "", pages: parsed.data.sitePages }, parsed.data.candidatePages);
+      } catch (error) {
+        throw new RequestError(error instanceof Error ? error.message : "採用ページの構成を確認してください。", 422);
+      }
     }
 
     let file: MockFigmaFile;

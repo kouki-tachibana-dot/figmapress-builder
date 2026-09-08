@@ -141,6 +141,7 @@ test("all native pages and every logical destination pass the preflight", () => 
     ["contact", nativeTemplate("contact", ["home", "company"])],
   ]);
   assert.deepEqual(inspectFigmaSiteTemplates(plan, templates), {
+    unlinkedDownloads: [],
     pages: 3,
     nativePages: 3,
     containers: 12,
@@ -163,6 +164,28 @@ test("all native pages and every logical destination pass the preflight", () => 
     carousels: 0,
     accordions: 0,
   });
+});
+
+test("missing PDFs remain reported while read-only inspection checks every other page", () => {
+  const company = nativeTemplate("company", ["home", "contact"]);
+  company.content[0].elements.push({
+    id: "missing-document", elType: "widget", widgetType: "text-editor", isInner: false,
+    settings: { editor: "請求書フォーマット.pdf" }, elements: [],
+  });
+  const templates = new Map([
+    ["home", nativeTemplate("home", ["company", "contact"])],
+    ["company", company],
+    ["contact", nativeTemplate("contact", ["home", "company"])],
+  ]);
+  assert.throws(() => inspectFigmaSiteTemplates(plan, templates), /資料ダウンロード/);
+  const report = inspectFigmaSiteTemplates(plan, templates, { inspectUnlinkedDownloads: true });
+  assert.equal(report.pages, 3);
+  assert.deepEqual(report.unlinkedDownloads, [{
+    elementId: "missing-document", label: "請求書フォーマット.pdf", kind: "download", pageKey: "company", pageTitle: "会社案内",
+  }]);
+  // A later page's defect is still rejected; inspection mode is not a quality bypass.
+  templates.get("contact")!.content[0].elements = [];
+  assert.throws(() => inspectFigmaSiteTemplates(plan, templates, { inspectUnlinkedDownloads: true }), /お問い合わせ/);
 });
 
 test("placeholder copy blocks the entire site before WordPress receives it", () => {
