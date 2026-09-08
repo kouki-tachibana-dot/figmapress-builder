@@ -7,6 +7,7 @@ import {
   clampVisibleBottom,
   estimateVisualGeometry,
   resolveVisualQaDraftGate,
+  visualQaSourceVariants,
   shouldKeepDecorationGeometryCorrections,
   shouldKeepMediaGeometryCorrections,
   shouldKeepSectionVisualCorrections,
@@ -608,6 +609,68 @@ test("Elementor visual QA gate blocks only incomplete or unacknowledged failures
     { state: gutenberg.state, blocksDraft: gutenberg.blocksDraft },
     { state: "off", blocksDraft: false },
   );
+});
+
+test("source QA coverage includes real tablet roots but excludes inferred tablet and nested classes", () => {
+  const roots = ["desktop", "tablet", "mobile"].map((variant) => ({
+    settings: { css_classes: `figmapress-layout figmapress-layout--${variant}` },
+  }));
+  assert.deepEqual(visualQaSourceVariants({ content: roots }), ["desktop", "tablet", "mobile"]);
+  roots[1].settings.css_classes += " figmapress-layout--adaptive-tablet";
+  assert.deepEqual(visualQaSourceVariants({ content: roots }), ["desktop", "mobile"]);
+  assert.deepEqual(visualQaSourceVariants({ content: [{ settings: {} }] }), []);
+});
+
+test("missing PC reference cannot become a pass from the one passing mobile result", () => {
+  for (const acknowledged of [false, true]) {
+    const gate = resolveVisualQaDraftGate({
+      enabled: true, referenceCount: 1, resultStatuses: ["pass"],
+      busy: false, error: false, acknowledged,
+      coverage: { required: ["desktop", "mobile"], references: ["mobile"], results: ["mobile"] },
+    });
+    assert.equal(gate.state, "pending");
+    assert.equal(gate.blocksDraft, true);
+    assert.equal(gate.complete, false);
+  }
+});
+
+test("all reference failures keep real Figma QA pending, even after acknowledgment", () => {
+  const gate = resolveVisualQaDraftGate({
+    enabled: true, referenceCount: 0, resultStatuses: [],
+    busy: false, error: true, acknowledged: true,
+    coverage: { required: ["desktop", "mobile"], references: [], results: [] },
+  });
+  assert.equal(gate.state, "pending");
+  assert.equal(gate.blocksDraft, true);
+  assert.equal(gate.complete, false);
+});
+
+test("duplicate and wrong-device results never satisfy required QA coverage", () => {
+  for (const results of [["desktop", "desktop"], ["desktop", "tablet"]] as const) {
+    const gate = resolveVisualQaDraftGate({
+      enabled: true, referenceCount: 2, resultStatuses: ["pass", "pass"],
+      busy: false, error: false, acknowledged: true,
+      coverage: { required: ["desktop", "mobile"], references: ["desktop", "mobile"], results: [...results] },
+    });
+    assert.equal(gate.blocksDraft, true);
+    assert.equal(gate.complete, false);
+  }
+});
+
+test("all real Figma variants must have distinct completed results, including tablet", () => {
+  const coverage = {
+    required: ["desktop", "tablet", "mobile"] as const,
+    references: ["desktop", "tablet", "mobile"] as const,
+  };
+  for (const busy of [false, true]) {
+    const gate = resolveVisualQaDraftGate({
+      enabled: true, referenceCount: 3, resultStatuses: ["pass", "pass", "pass"],
+      busy, error: false, acknowledged: false,
+      coverage: { required: [...coverage.required], references: [...coverage.references], results: ["mobile", "tablet", "desktop"] },
+    });
+    assert.equal(gate.complete, !busy);
+    assert.equal(gate.blocksDraft, busy);
+  }
 });
 
 test("safe visual corrections become viewport-scaled Elementor transforms", () => {

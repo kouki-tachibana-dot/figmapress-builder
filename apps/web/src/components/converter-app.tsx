@@ -64,6 +64,7 @@ import {
 } from "@/lib/visual-qa-browser";
 import {
   resolveVisualQaDraftGate,
+  visualQaSourceVariants,
   shouldKeepDecorationGeometryCorrections,
   shouldKeepMediaGeometryCorrections,
   shouldKeepSectionVisualCorrections,
@@ -121,7 +122,7 @@ type SiteVisualQaBrowserResult = VisualQaBrowserResult & {
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
-const APP_RELEASE = "0.31.0";
+const APP_RELEASE = "0.31.1";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -1115,17 +1116,24 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const wordpressSiteBridgeUrl = connectorToken
     ? safeWordPressSiteBridgeUrl(baseUrl)
     : "";
-  const visualQaReferenceCount = output
-    ? Number(Boolean(output.visualReferences.desktop)) +
-      Number(Boolean(output.visualReferences.mobile))
-    : 0;
+  const visualQaReferenceVariants = output ? visualReferencesFor(output).map(([variant]) => variant) : [];
+  const visualQaReferenceCount = visualQaReferenceVariants.length;
+  const visualQaRequiredVariants = output ? visualQaSourceVariants(output.elementorTemplate) : [];
+  const visualQaMissingReferences = visualQaRequiredVariants.filter((variant) =>
+    !visualQaReferenceVariants.includes(variant),
+  );
   const visualQaGate = resolveVisualQaDraftGate({
-    enabled: wpTarget === "elementor",
-    referenceCount: visualQaReferenceCount,
+    enabled: wpTarget === "elementor" && Boolean(conversionSourceKey),
+    referenceCount: visualQaReferenceVariants.length,
     resultStatuses: visualQaResults.map((result) => result.status),
     busy: visualQaBusy,
     error: Boolean(visualQaError),
     acknowledged: visualQaAcknowledged,
+    coverage: {
+      required: visualQaRequiredVariants,
+      references: visualQaReferenceVariants,
+      results: visualQaResults.map((result) => result.variant),
+    },
   });
   const visualQaComplete = visualQaGate.complete;
   const visualQaHasFailure = visualQaGate.hasFailure;
@@ -4091,8 +4099,10 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
               {visualQaGateRequired && !visualQaComplete && (
                 <div className="visual-qa-gate is-pending" role="status">
                   <div>
-                    <strong>Elementor下書き前の視覚確認が必要です</strong>
-                    <span>FigmaのPC／タブレット／スマホ基準画像と生成結果を比較してから送信します。</span>
+                    <strong>{visualQaMissingReferences.length > 0 ? "Figma基準画像が不足しています" : "Elementor下書き前の視覚確認が必要です"}</strong>
+                    <span>{visualQaMissingReferences.length > 0
+                      ? `${visualQaMissingReferences.map(deviceLabel).join("・")}の基準画像を取得できていません。一部端末の比較だけでは合格にしません。Figmaから再変換してください。`
+                      : "Figma原稿がある全端末の比較を完了してから送信します。自動生成したタブレットは別途、崩れ・操作を確認してください。"}</span>
                   </div>
                   <button disabled={visualQaBusy} onClick={checkVisualQuality} type="button">
                     {visualQaBusy ? "比較中…" : "視覚差分を測定"}

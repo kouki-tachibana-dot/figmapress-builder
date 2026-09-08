@@ -1,5 +1,20 @@
 export type VisualQaStatus = "pass" | "review" | "fail";
 export type VisualQaDraftGateState = "off" | "pending" | "clear" | "warning";
+export type VisualQaVariant = "desktop" | "tablet" | "mobile";
+
+// Source coverage must not shrink when a Figma reference-image request fails.
+// An inferred tablet is tested for responsiveness, not original-design fidelity.
+export function visualQaSourceVariants(template: {
+  content: Array<{ settings: Record<string, unknown> }>;
+}): VisualQaVariant[] {
+  const classes = template.content.map((root) =>
+    new Set(String(root.settings.css_classes ?? "").split(/\s+/)),
+  );
+  return (["desktop", "tablet", "mobile"] as const).filter((variant) =>
+    classes.some((tokens) => tokens.has(`figmapress-layout--${variant}`)
+      && !(variant === "tablet" && tokens.has("figmapress-layout--adaptive-tablet"))),
+  );
+}
 
 export function clampVisibleBottom(
   bottom: number,
@@ -25,9 +40,33 @@ export function resolveVisualQaDraftGate(input: {
   busy: boolean;
   error: boolean;
   acknowledged: boolean;
+  coverage?: {
+    required: VisualQaVariant[];
+    references: VisualQaVariant[];
+    results: VisualQaVariant[];
+  };
 }): VisualQaDraftGate {
   const hasFailure = input.error
     || input.resultStatuses.some((status) => status !== "pass");
+  if (input.enabled && input.coverage) {
+    const { required, references, results } = input.coverage;
+    const requiredSet = new Set(required);
+    const complete = requiredSet.size > 0
+      && !input.busy
+      && required.every((variant) => references.includes(variant) && results.includes(variant))
+      && results.every((variant) => requiredSet.has(variant))
+      && results.length === requiredSet.size
+      && results.length === input.resultStatuses.length;
+    if (!complete) {
+      return { state: "pending", blocksDraft: true, complete: false, hasFailure };
+    }
+    return {
+      state: hasFailure ? "warning" : "clear",
+      blocksDraft: hasFailure && !input.acknowledged,
+      complete: true,
+      hasFailure,
+    };
+  }
   const complete =
     input.referenceCount > 0 &&
     !input.busy &&
