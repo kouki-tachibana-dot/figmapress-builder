@@ -124,6 +124,8 @@ test("only explicitly confirmed pages are fetched and changing selection invalid
   }
   await page.getByRole("button", { name: "選択した9ページで構成を確定", exact: true }).click();
   await expect(page.getByRole("status").filter({ hasText: "採用9ページを確定しました。除外10ページ。" })).toBeVisible();
+  // Site mode uses the selected pages' QA, not the unrelated single preview.
+  await expect(page.getByText("Figma基準画像が不足しています", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "採用9ページを事前検証", exact: true }).click();
   await expect(page.getByRole("button", { name: "採用9ページを事前検証", exact: true })).toBeEnabled();
   expect(batches.map(batch => batch.candidatePages[0].key)).toEqual(keys.slice(0, 9));

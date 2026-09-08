@@ -1144,8 +1144,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   });
   const visualQaComplete = visualQaGate.complete;
   const visualQaHasFailure = visualQaGate.hasFailure;
-  const visualQaGateRequired = visualQaGate.state !== "off";
-  const visualQaBlocksDraft = visualQaGate.blocksDraft;
+  const usesSinglePreviewGate = wpBuildMode === "single" || !siteVisualQaRequired;
+  const visualQaGateRequired = usesSinglePreviewGate && visualQaGate.state !== "off";
+  const visualQaBlocksDraft = usesSinglePreviewGate && visualQaGate.blocksDraft;
   const visualQaCorrectionCandidates = safeVisualCorrections(visualQaResults);
   const visualQaSectionCorrectionCandidates =
     visualQaCorrectionCandidates.length > 0
@@ -2202,6 +2203,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
           sitePreflightEntries.current.set(entry.page.key, entry);
         }
       }
+      // Recheck the exact selected documents before preparing any WordPress
+      // pages. The unrelated single-page preview is never a save prerequisite.
+      inspectFigmaSiteTemplates(plan, pageTemplates, { allowPlaceholderText: sitePlaceholderApproved });
       setWpSiteProgress("下書きページと未割り当てメニューを準備しています…");
       const prepareThroughProxy = async (): Promise<BrowserPreparedSiteResult> => {
         if (wpTransport === "direct") {
@@ -2395,7 +2399,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
       setWpError(`実テキスト・コンテナ方式のElementor保存にはConnector v${NATIVE_ELEMENTOR_CONNECTOR_VERSION}以上が必要です。`);
       return;
     }
-    if (wpTarget === "elementor") {
+    if (wpTarget === "elementor" && wpBuildMode === "single") {
       try {
         assertElementorActionsConnected(singlePageTemplate);
       } catch (error) {
