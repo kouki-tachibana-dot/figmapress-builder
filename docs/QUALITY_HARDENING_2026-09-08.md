@@ -12,6 +12,10 @@
 - 単に制限を緩めず、home必須・ページkeyの重複禁止・各source keyと対象site keyの完全一致を追加。別サイトの識別子、不正key、ページ内へのstatus追加などを拒否する。
 - 採用ページUIでもhomeなしの構成を確定時に拒否し、WordPressへ送る前に不足を知らせる。
 - この修正は既存の下書きを変更する操作ではない。実WordPress書き込みを使わず、9ページ入力がURL安全検査まで進むことと、異なるsource keyがその前に422で止まることをAPI試験する。
+- 最終コード `6def570e5c42a8de11a476cd288125237c0a1fac`。単体258件、ブラウザ17件、型・Lint・ビルド成功。[CI 34232704100](https://github.com/kouki-tachibana-dot/figmapress-builder/actions/runs/34232704100)も成功。
+- production候補 [6et73lzmz](https://figmapress-builder-6et73lzmz-chat-oikaze.vercel.app)、ID `dpl_2JFFzhvVUiFmZfJxaV6SLBMDNPgk`、READY、Next.js 16.3.0、ビルド21秒。候補HTTP200/版数0.31.3と9ページ入力の安全拒否試験（HTTP URLで400、外部WP送信なし）を確認。
+- promote成功。公開URL [v0.31.3](https://figmapress-builder.vercel.app/?release=0.31.3#convert) でHTTP200と版数を再確認した。Connectorはv0.19.9のままで、今回WordPress側の更新操作はない。
+- 配信後30分のerrorログは1件。上記の意図的なHTTP URL拒否試験（`公開版ではHTTPSのWordPressサイトのみ接続できます。`、7ms）と一致し、それ以外のerrorは同検索範囲では検出されなかった。Drains/継続監視は今回未確認。
 
 ### v0.31.2（追加実装・配信済み）
 
@@ -40,6 +44,9 @@
 
 - 保存済みPATで会社案内を再変換し、実19候補を確認した。以下の9ページのみチェックして「採用9ページを確定しました。除外10ページ。」を確認。初期状態で自動選択されないこと、確定後は未採用プレビューのQAが保存判定に混ざらないことも確認。
 - 検査用に、従来承認済みのサンプル原稿保持を選択。資料添付なしで採用9ページの事前検査を開始した。WordPress保存の同意・送信ボタンは操作していない。
+- **完了結果**: 実Figma全9ページの取得後、PC/SP全18画面が比較ゲートに合格、最低知覚スコア99.90。無修正でのBuilder生成プレビュー比較であり、WordPress保存後の視覚比較でも製品完成率でもない。
+- 構造検査: ネイティブElementor 9ページ、main/header/footer/H1 各27個（PC/派生Tablet/SP）、文字1265個、画像911個、Button11個、構造化URL15件、ナビゲーション27個、リンク471件、移動先9ページ、フォーム3個。フォームの受信は未試験、画像数は破損ゼロを意味しない。
+- サンプル原稿98要素を承認済みのまま保持。未接続資料12要素（会社案内9・お問い合わせ3）は未完了一覧に残り、保存ボタンは無効。資料未提供でも他の構造/画素比較が完了することを実データで確認した。
 
 | 採用ページ | 主フレームID | ページkey |
 | --- | --- | --- |
