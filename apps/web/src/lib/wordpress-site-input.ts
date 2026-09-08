@@ -1,6 +1,22 @@
 import { z } from "zod";
 
 const SiteKeySchema = z.string().trim().regex(/^figma:[A-Za-z0-9_-]{6,160}:(?:root|[0-9]+:[0-9]+)$/);
+export const WordPressSiteLookupShape = {
+  siteKey: SiteKeySchema,
+  pages: z.array(z.object({
+    key: z.string().regex(/^[a-z0-9][a-z0-9-]{0,79}$/),
+    sourceKey: z.string().max(260),
+  }).strict()).min(1).max(20),
+};
+export const WordPressSiteLookupSchema = z.object(WordPressSiteLookupShape).superRefine((value, context) => {
+  const seen = new Set<string>();
+  value.pages.forEach((page, index) => {
+    if (seen.has(page.key) || page.sourceKey !== (page.key === "home" ? value.siteKey : `${value.siteKey}:page:${page.key}`)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["pages", index], message: "ページ識別子が一致しないか重複しています。" });
+    }
+    seen.add(page.key);
+  });
+});
 const SitePageSchema = z.object({
   key: z.string().regex(/^(?:home|[a-z0-9][a-z0-9-]{0,79})$/),
   title: z.string().trim().min(1).max(200),

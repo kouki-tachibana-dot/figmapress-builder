@@ -1,11 +1,12 @@
 import { z } from "zod";
-import { WordPressSiteInputSchema, WordPressSiteShape } from "@/lib/wordpress-site-input";
+import { WordPressSiteInputSchema, WordPressSiteShape, WordPressSiteLookupSchema, WordPressSiteLookupShape } from "@/lib/wordpress-site-input";
 import {
   WpAuthError,
   WpRequestError,
   createDraftPage,
   createElementorDraftPage,
   prepareWordPressSite,
+  lookupWordPressSite,
 } from "@figmapress/wp-connector";
 import {
   RequestError,
@@ -44,6 +45,7 @@ const ElementorTemplateSchema = z.object({
 }).strict();
 
 const RequestSchema = z.discriminatedUnion("target", [
+  CredentialsSchema.extend({ target: z.literal("site-map"), ...WordPressSiteLookupShape }).strict(),
   CommonSchema.extend({
     target: z.literal("gutenberg"),
     content: z.string().min(1).max(900_000),
@@ -62,6 +64,11 @@ const RequestSchema = z.discriminatedUnion("target", [
     ...WordPressSiteShape,
   }).strict(),
 ]).superRefine((value, context) => {
+  if (value.target === "site-map") {
+    const result = WordPressSiteLookupSchema.safeParse(value);
+    if (!result.success) result.error.issues.forEach(issue => context.addIssue(issue));
+    return;
+  }
   if (value.target !== "site") return;
   const result = WordPressSiteInputSchema.safeParse(value);
   if (!result.success) result.error.issues.forEach(issue => context.addIssue(issue));
@@ -110,7 +117,9 @@ export async function POST(request: Request): Promise<Response> {
         applicationPassword: parsed.data.applicationPassword,
         connectorToken: parsed.data.connectorToken,
       };
-      const result = parsed.data.target === "site"
+      const result = parsed.data.target === "site-map"
+        ? await lookupWordPressSite(config, { siteKey: parsed.data.siteKey, pages: parsed.data.pages })
+        : parsed.data.target === "site"
         ? await prepareWordPressSite(config, {
             siteKey: parsed.data.siteKey,
             title: parsed.data.title,

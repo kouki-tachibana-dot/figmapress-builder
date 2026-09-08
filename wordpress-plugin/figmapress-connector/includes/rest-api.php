@@ -280,6 +280,7 @@ function figmapress_connector_rest_status() {
                 'snapshotContent' => false,
             ),
             'siteBuild'         => array(
+                'readOnlyMap' => true,
                 'pages'  => true,
                 'menus'  => current_user_can( 'edit_theme_options' ),
                 'bridge' => true,

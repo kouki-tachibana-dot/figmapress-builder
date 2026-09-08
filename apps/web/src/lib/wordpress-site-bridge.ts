@@ -1,4 +1,5 @@
 export type WordPressSiteBridge = {
+  lookup<T>(connectorToken: string, payload: unknown): Promise<T>;
   prepare<T>(connectorToken: string, payload: unknown): Promise<T>;
   saveElementor<T>(connectorToken: string, payload: unknown): Promise<T>;
   confirmElementor<T>(connectorToken: string, payload: unknown): Promise<T>;
@@ -96,6 +97,10 @@ export function openWordPressSiteBridge(baseUrl: string): WordPressSiteBridge | 
   };
 
   return {
+    async lookup<T>(connectorToken: string, payload: unknown): Promise<T> {
+      return request<T>("figmapress:lookup-site", "figmapress:site-map", connectorToken, payload,
+        BRIDGE_REQUEST_TIMEOUT_MS, "ページ対応表の読み取りがタイムアウトしました。ページは変更していません。");
+    },
     async prepare<T>(connectorToken: string, payload: unknown): Promise<T> {
       return request<T>(
         "figmapress:prepare-site",

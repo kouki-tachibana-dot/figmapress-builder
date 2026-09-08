@@ -7,6 +7,9 @@
  * conflict — see §5-6).
  */
 
+import { validateWordPressSiteMap, type WordPressSiteLookupInput, type WordPressSiteMapResult } from "./site-map";
+export { validateWordPressSiteMap, type WordPressSiteLookupInput, type WordPressSiteMapResult, type WordPressSiteMapIssue } from "./site-map";
+
 export interface WpConfig {
   baseUrl: string;
   username: string;
@@ -291,6 +294,9 @@ async function wpAdminPost(
   action: string,
   fields: Record<string, string>,
 ): Promise<Response> {
+  const pairedRoute = action === "figmapress_site_prepare" ? "site-prepare"
+    : action === "figmapress_site_lookup" ? "site-map" : null;
+  if (!pairedRoute) throw new Error("Unsupported WordPress site action.");
   const connectorToken = cfg.connectorToken?.trim();
   if (!connectorToken) {
     throw new WpAuthError("FigmaPress Connector pairing is required.");
@@ -326,7 +332,7 @@ async function wpAdminPost(
   // callback verifies the token and checks the exact user capabilities.
   if (response.status === 403) {
     response = await fetch(
-      `${baseUrl}/wp-json/figmapress/v1/paired/site-prepare`,
+      `${baseUrl}/wp-json/figmapress/v1/paired/${pairedRoute}`,
       requestInit,
     );
   }
@@ -475,6 +481,19 @@ export async function probeWordPressConnection(
       active: status.pairing.active === true,
     } : undefined,
   };
+}
+
+export async function lookupWordPressSite(
+  cfg: WpConfig,
+  input: WordPressSiteLookupInput,
+): Promise<WordPressSiteMapResult> {
+  const payload = JSON.stringify(input);
+  const res = cfg.connectorToken
+    ? await wpAdminPost(cfg, "figmapress_site_lookup", { payload })
+    : await wpFetch(cfg, "/figmapress/v1/sites/lookup", { method: "POST", body: payload });
+  const text = await res.text();
+  if (!res.ok) throw new WpRequestError(`Failed to read WordPress site map (HTTP ${res.status})`, res.status, text);
+  return validateWordPressSiteMap(input, JSON.parse(text));
 }
 
 export async function prepareWordPressSite(

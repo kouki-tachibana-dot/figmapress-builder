@@ -40,6 +40,7 @@ import {
   createWordPressDraftDirect,
   fetchWordPressElementorSnapshotDirect,
   localizeWordPressElementorMediaDirect,
+  lookupWordPressSiteDirect,
   prepareWordPressSiteDirect,
   probeWordPressDirect,
   updateWordPressElementorDocumentDirect,
@@ -49,7 +50,8 @@ import {
   type BrowserPreparedSiteResult,
 } from "@/lib/wordpress-browser";
 import { readWordPressCredentials } from "@/lib/wordpress-form";
-import { resolveWordPressPageLinks, type WordPressSiteReceipt } from "@/lib/wordpress-page-links";
+import { resolveWordPressPageLinks, receiptFromWordPressSiteMap, type WordPressSiteReceipt } from "@/lib/wordpress-page-links";
+import { validateWordPressSiteMap, type WordPressSiteMapResult } from "@figmapress/wp-connector";
 import {
   decodeWordPressPairingFragment,
   pruneWordPressProfiles,
@@ -123,7 +125,7 @@ type SiteVisualQaBrowserResult = VisualQaBrowserResult & {
 const FIGMA_TOKEN_SESSION_KEY = "figmapress:figma-token";
 const FIGMA_TOKEN_LOCAL_KEY = "figmapress:figma-token:persistent";
 const FIGMA_TOKEN_PERSIST_KEY = "figmapress:remember-figma-token";
-const APP_RELEASE = "0.31.3";
+const APP_RELEASE = "0.31.4";
 const FUNCTIONAL_WIDGETS_CONNECTOR_VERSION = "0.13.0";
 const ACTUAL_VISUAL_QA_CONNECTOR_VERSION = "0.16.0";
 const ONE_CLICK_CONNECTOR_VERSION = "0.15.0";
@@ -879,6 +881,9 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
   const [wpCreateReviewCopy, setWpCreateReviewCopy] = useState(false);
   const [wpSiteResult, setWpSiteResult] = useState<BrowserPreparedSiteResult | null>(null);
   const wpSiteReceiptRef = useRef<WordPressSiteReceipt | null>(null);
+  const wpMapRequest = useRef(0);
+  const [wpMapBusy, setWpMapBusy] = useState(false);
+  const [wpMapState, setWpMapState] = useState<{ context: string; connection: WordPressStatus | null; result: WordPressSiteMapResult } | null>(null);
   const [wpSiteProgress, setWpSiteProgress] = useState("");
   const [sitePreflightBusy, setSitePreflightBusy] = useState(false);
   const [sitePreflightError, setSitePreflightError] = useState("");
@@ -1094,6 +1099,12 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     || (output?.qualityReport?.metrics.functionalWidgets.contactForm ?? 0) > 0;
   const candidateSitePlan = output?.multiPagePlan;
   const multiPagePlan = confirmedSitePlan;
+  const wpMapContext = JSON.stringify([baseUrl, username, conversionSiteSourceKey, multiPagePlan?.pages.map(page => page.key)]);
+  const wpPageMap = wpMapState?.context === wpMapContext && wpMapState.connection === wpStatus ? wpMapState.result : null;
+  useEffect(() => {
+    wpMapRequest.current += 1;
+    wpSiteReceiptRef.current = null;
+  }, [wpMapContext, connectorToken, applicationPassword, wpStatus]);
   const siteVisualQaRequired = Boolean(
     multiPagePlan?.pages.every((page) => Boolean(page.frameId)),
   );
@@ -2124,6 +2135,50 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     }
   }
 
+  async function lookupExistingWordPressPages(event: MouseEvent<HTMLButtonElement>): Promise<void> {
+    if (!multiPagePlan || !conversionSiteSourceKey || wpMapBusy) return;
+    const credentials = readWordPressCredentials(event.currentTarget.form ? new FormData(event.currentTarget.form) : null, {
+      baseUrl, username, applicationPassword, connectorToken,
+    });
+    const input = {
+      siteKey: conversionSiteSourceKey,
+      pages: multiPagePlan.pages.map(page => ({ key: page.key,
+        sourceKey: page.key === "home" ? conversionSiteSourceKey : `${conversionSiteSourceKey}:page:${page.key}` })),
+    };
+    const request = ++wpMapRequest.current;
+    wpSiteReceiptRef.current = null;
+    setWpMapState(null);
+    setWpMapBusy(true);
+    setWpError("");
+    const bridge = credentials.connectorToken ? openWordPressSiteBridge(credentials.baseUrl) : null;
+    try {
+      const throughProxy = async () => {
+        const response = await fetch("/api/wordpress", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ target: "site-map", ...credentials, ...input }) });
+        return (await readApi<{ ok: true; result: WordPressSiteMapResult }>(response)).result;
+      };
+      let result: WordPressSiteMapResult;
+      // Paired users keep the token on the destination-origin bridge. No
+      // lookup fallback may invoke the mutating site preparation endpoint.
+      if (credentials.connectorToken && bridge) {
+        result = await bridge.lookup<WordPressSiteMapResult>(credentials.connectorToken, input);
+      } else {
+        result = await runWordPressWriteWithNetworkFallback(wpTransport,
+          () => lookupWordPressSiteDirect(credentials, input), throughProxy,
+          error => error instanceof WordPressDirectError && error.kind === "network");
+      }
+      if (request !== wpMapRequest.current) return;
+      validateWordPressSiteMap(input, result);
+      if (result.status === "ready") wpSiteReceiptRef.current = receiptFromWordPressSiteMap(credentials.baseUrl, input, result);
+      setWpMapState({ context: wpMapContext, connection: wpStatus, result });
+    } catch (error) {
+      if (request === wpMapRequest.current) setWpError(error instanceof Error ? error.message : "ページ対応表を取得できませんでした。ページは変更していません。");
+    } finally {
+      bridge?.close();
+      setWpMapBusy(false);
+    }
+  }
+
   async function createWordPressSiteDraft(
     credentials: BrowserWordPressConfig,
     resumeAfterPageKey?: FigmaSitePageKey,
@@ -2368,7 +2423,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
     if (wpBuildMode === "single" && wpCreateReviewCopy && output.multiPagePlan) {
       try {
         reviewPageLinks = resolveWordPressPageLinks(
-          baseUrl, conversionSiteSourceKey, output.multiPagePlan.pages.map((page) => page.key),
+          baseUrl, conversionSiteSourceKey, (multiPagePlan ?? output.multiPagePlan).pages.map((page) => page.key),
           wpSiteReceiptRef.current,
         );
       } catch (error) {
@@ -4110,6 +4165,26 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                   </div>
                 )}
               </div>
+              {multiPageAvailable && (
+                <div className="site-build-result site-page-map" data-state={wpPageMap?.status ?? "pending"}>
+                  <strong>既存ページの確認（読み取り専用）</strong>
+                  <p>採用ページに対応する下書きIDを照会します。本文・タイトル・メニューの作成や更新は行いません。</p>
+                  {!multiPagePlan && <p>先に「サイト一式」で採用ページを選択し、構成を確定してください。</p>}
+                  {wpStatus && !versionAtLeast(wpStatus.connectorVersion, "0.19.10") && <p>対応表の取得にはConnector v0.19.10以上が必要です。最新版へ更新し、接続を再診断してください。</p>}
+                  <button type="button" className="connection-button" onClick={lookupExistingWordPressPages}
+                    disabled={!multiPagePlan || !wpStatus?.canEditPages || !versionAtLeast(wpStatus.connectorVersion, "0.19.10") || wpMapBusy || wpBusy || wpMediaBusy || sitePreflightBusy}>
+                    {wpMapBusy ? "対応表を読み取り中…" : "既存ページの対応表を取得（変更なし）"}
+                  </button>
+                  {wpPageMap && <div role="status">
+                    <p>{wpPageMap.status === "ready" ? `✓ ${wpPageMap.pages.length}ページの下書きIDを確認しました。` : `未解決 ${wpPageMap.unresolved.length}ページ。自動作成・更新はしていません。`}</p>
+                    <ul>{wpPageMap.pages.map(page => <li key={page.key}>{page.title}：下書き #{page.id}</li>)}
+                      {wpPageMap.unresolved.map(issue => <li key={issue.key}>{multiPagePlan?.pages.find(page => page.key === issue.key)?.title ?? issue.key}：{{
+                        missing: "対応するページなし", duplicate: "同じ識別子のページが複数存在", not_draft: "下書き以外のページ", forbidden: "編集権限なし", identity_mismatch: "保存された識別子が不一致",
+                      }[issue.reason]}</li>)}</ul>
+                    <p>これはページ対応の確認です。リンク遷移・保存後の表示・機能の合格を意味しません。</p>
+                  </div>}
+                </div>
+              )}
               {wpStatus && !wpStatus.connectorInstalled && (
                 <div className="alert alert--error" role="alert">Connectorプラグインをインストールしてから再診断してください。</div>
               )}
@@ -4165,7 +4240,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                   複数ページとWordPressメニューの自動構築にはConnector v{requiredMultiPageConnectorVersion}以上が必要です。<a href="/downloads/figmapress-connector.zip" download>最新版ZIPをダウンロード</a>して更新し、再診断してください。
                 </div>
               )}
-              {wpBuildMode === "site" && wpStatus && connectorToken && wordpressSiteBridgeUrl && (
+              {(wpBuildMode === "site" || multiPageAvailable) && wpStatus && connectorToken && wordpressSiteBridgeUrl && (
                 <div className="paired-connection paired-connection--setup">
                   <strong>WordPress安全接続を準備</strong>
                   <span>対象WordPress内の安全接続をこの画面で待機させます。認証情報はFigmaPressサーバーへ保存・転送しません。</span>
@@ -4356,7 +4431,7 @@ export function ConverterApp({ sampleJson }: { sampleJson: string }) {
                 <span>常に <code>status: draft</code></span>
                 <button
                   className="button button--dark"
-                  disabled={!confirmed || wpBusy || visualQaBlocksDraft || multiPageBlocked || !wpStatus || !wpStatus.connectorInstalled || !wpStatus.canEditPages || (wpTarget === "elementor" && (!wpStatus.elementor.active || !connectorSupportsInteractions || !connectorSupportsNativeElementor || (wpBuildMode === "site" && !connectorSupportsRequiredProWidgets) || (conversionRequiresDynamicForms && !connectorSupportsDynamicForms) || (visualQaReferenceCount > 0 && !connectorSupportsActualVisualQa)))}
+                  disabled={!confirmed || wpBusy || wpMapBusy || visualQaBlocksDraft || multiPageBlocked || !wpStatus || !wpStatus.connectorInstalled || !wpStatus.canEditPages || (wpTarget === "elementor" && (!wpStatus.elementor.active || !connectorSupportsInteractions || !connectorSupportsNativeElementor || (wpBuildMode === "site" && !connectorSupportsRequiredProWidgets) || (conversionRequiresDynamicForms && !connectorSupportsDynamicForms) || (visualQaReferenceCount > 0 && !connectorSupportsActualVisualQa)))}
                   type="submit"
                 >
                   {wpBusy

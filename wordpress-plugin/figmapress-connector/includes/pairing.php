@@ -79,7 +79,7 @@ function figmapress_connector_pairing_token_from_request() {
     return '' !== $header_token ? $header_token : $body_token;
 }
 
-function figmapress_connector_verify_pairing_token( $token ) {
+function figmapress_connector_verify_pairing_token( $token, $record_usage = true ) {
     if (
         ! preg_match(
             '/^fp1\.([1-9][0-9]{0,19})\.([A-Za-z0-9_-]{32,128})$/',
@@ -123,7 +123,7 @@ function figmapress_connector_verify_pairing_token( $token ) {
             true
         )
     );
-    if ( $last_used < time() - HOUR_IN_SECONDS ) {
+    if ( $record_usage && $last_used < time() - HOUR_IN_SECONDS ) {
         update_user_meta(
             $paired_user_id,
             '_figmapress_pairing_last_used',
@@ -138,7 +138,7 @@ function figmapress_connector_is_manual_pairing_request() {
     $rest_route = isset( $_GET['rest_route'] )
         ? wp_unslash( $_GET['rest_route'] )
         : '';
-    if ( '/figmapress/v1/paired/site-prepare' === rtrim( $rest_route, '/' ) ) {
+    if ( in_array( rtrim( $rest_route, '/' ), array( '/figmapress/v1/paired/site-prepare', '/figmapress/v1/paired/site-map' ), true ) ) {
         return true;
     }
 
@@ -151,9 +151,9 @@ function figmapress_connector_is_manual_pairing_request() {
     }
     $manual_path = '/'
         . trim( rest_get_url_prefix(), '/' )
-        . '/figmapress/v1/paired/site-prepare';
+        . '/figmapress/v1/paired/';
     return 1 === preg_match(
-        '#' . preg_quote( $manual_path, '#' ) . '/?$#',
+        '#' . preg_quote( $manual_path, '#' ) . '(?:site-prepare|site-map)/?$#',
         $request_path
     );
 }
@@ -330,6 +330,7 @@ function figmapress_connector_render_browser_bridge() {
     $prepare_url    = wp_json_encode(
         rest_url( 'figmapress/v1/paired/site-prepare' )
     );
+    $lookup_url = wp_json_encode( rest_url( 'figmapress/v1/paired/site-map' ) );
     $elementor_upload_url = wp_json_encode(
         rest_url( 'figmapress/v1/elementor/uploads/' )
     );
@@ -362,6 +363,7 @@ function figmapress_connector_render_browser_bridge() {
     'use strict';
     const allowedOrigin = <?php echo $builder_origin; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>;
     const prepareUrl = <?php echo $prepare_url; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>;
+    const lookupUrl = <?php echo $lookup_url; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>;
     const elementorUploadUrl = <?php echo $elementor_upload_url; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>;
     const elementorPageUrl = <?php echo $elementor_page_url; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>;
     const status = document.getElementById('status');
@@ -446,6 +448,7 @@ function figmapress_connector_render_browser_bridge() {
             busy || !peer || event.origin !== allowedOrigin || event.source !== peer ||
             !event.data || ![
                 'figmapress:prepare-site',
+                'figmapress:lookup-site',
                 'figmapress:save-elementor',
                 'figmapress:confirm-elementor',
                 'figmapress:localize-media'
@@ -462,7 +465,9 @@ function figmapress_connector_render_browser_bridge() {
         const maxBytes = action === 'figmapress:save-elementor' ? 4000000 : 100000;
         if (serialized.length < 20 || serialized.length > maxBytes) return;
         busy = true;
-        status.textContent = action === 'figmapress:prepare-site'
+        status.textContent = action === 'figmapress:lookup-site'
+            ? '既存ページの対応表を読み取っています（変更なし）…'
+            : action === 'figmapress:prepare-site'
             ? '下書きページとメニューを準備しています…'
             : action === 'figmapress:save-elementor'
                 ? 'Elementor編集データを安全に保存しています…'
@@ -470,7 +475,10 @@ function figmapress_connector_render_browser_bridge() {
         try {
             let parsed = null;
             let responseType = 'figmapress:site-prepared';
-            if (action === 'figmapress:prepare-site') {
+            if (action === 'figmapress:lookup-site') {
+                parsed = await postForm(lookupUrl, connectorToken, { payload: serialized });
+                responseType = 'figmapress:site-map';
+            } else if (action === 'figmapress:prepare-site') {
                 parsed = await postForm(prepareUrl, connectorToken, { payload: serialized });
             } else if (action === 'figmapress:save-elementor') {
                 if (!payload || typeof payload.requestId !== 'string' || !requestPattern.test(payload.requestId)) return;
@@ -568,7 +576,9 @@ function figmapress_connector_render_browser_bridge() {
                 : 0;
             status.textContent = message;
             post({
-                type: action === 'figmapress:save-elementor'
+                type: action === 'figmapress:lookup-site'
+                    ? 'figmapress:site-map'
+                    : action === 'figmapress:save-elementor'
                     ? 'figmapress:elementor-saved'
                     : action === 'figmapress:confirm-elementor'
                         ? 'figmapress:elementor-confirmed'

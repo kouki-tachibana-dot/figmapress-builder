@@ -427,6 +427,9 @@ a { color: inherit; }
 .site-placeholder-approval small { color: #75652f; font-size: 9px; font-weight: 500; }
 .site-build-progress { align-items: center; background: #edf7ff; border: 1px solid #c5e0ef; border-radius: 12px; color: #315f77; display: flex; font-size: 11px; gap: 8px; margin-top: 16px; padding: 13px 15px; }
 .site-build-result { background: #f3faed; border: 1px solid #bad99d; border-radius: 16px; display: grid; gap: 14px; margin-top: 16px; padding: 17px; }
+.site-page-map { background: #f5f7fa; border-color: #ccd4de; }
+.site-page-map[data-state="unresolved"] { background: #fff8eb; border-color: #dfbf83; }
+.site-page-map .connection-button { min-height: 44px; }
 .site-build-result > div:first-child { display: flex; flex-direction: column; gap: 3px; }
 .site-build-result > div:first-child > span { color: #59705e; font-size: 9px; }
 .site-build-result ul { display: grid; gap: 7px; list-style: none; margin: 0; padding: 0; }

@@ -177,3 +177,93 @@ test("nine-page proxy input reaches the URL safety gate while foreign page ident
   const invalid = await request.post("/api/wordpress", { headers: { Origin: "http://127.0.0.1:3031" }, data });
   expect(invalid.status()).toBe(422);
 });
+
+test("read-only page lookup needs confirmed selection, never writes, and discards stale responses", async ({ page }) => {
+  const errors: string[] = [];
+  const reads: string[] = [];
+  const writes: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
+  await page.route("**/api/wordpress**", route => { writes.push(route.request().url()); return route.abort(); });
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "サンプルで試す" }).click();
+  const converted = page.waitForResponse(response => response.url().endsWith("/api/convert") && response.request().method() === "POST");
+  await page.getByRole("button", { name: "WordPress用に変換" }).click();
+  const fixture = await (await converted).json();
+  await expect(page.getByRole("heading", { name: "変換データを生成しました" })).toBeVisible();
+  fixture.multiPagePlan = { title: "照会テスト", menuName: "未割り当て", pages: ["home", "company", "contact"].map((key, i) => ({
+    key, title: key, slug: key, frameId: `${i+1}:1`, hasDesktop: true, hasMobile: true, hasTablet: false,
+  })) };
+  fixture.visualReferences = {};
+  await page.route("**/api/convert", route => route.fulfill({ json: fixture }));
+  await page.getByRole("tab", { name: "Figmaから読み込む" }).click();
+  await page.getByRole("textbox", { name: "FigmaファイルURL またはファイルキー" }).fill("https://www.figma.com/design/FixtureOnly123/Test?node-id=1-1");
+  await page.getByRole("textbox", { name: "Figma Personal Access Token", exact: true }).fill("figd_test_fixture_never_sent");
+  await page.getByRole("button", { name: "WordPress用に変換" }).click();
+  const lookup = page.getByRole("button", { name: "既存ページの対応表を取得（変更なし）" });
+  await expect(lookup).toBeDisabled();
+  for (const [key, id] of [["home", 1], ["company", 2]]) {
+    await page.getByRole("checkbox", { name: `採用: ${key} (${id}:1)`, exact: true }).check();
+  }
+  await page.getByRole("button", { name: "選択した2ページで構成を確定", exact: true }).click();
+  let resolveDelayed: () => void = () => {};
+  let hold = false;
+  let conflict = false;
+  await page.route("https://wp.example/**", async route => {
+    const url = route.request().url();
+    if (url.endsWith("/figmapress/v1/status")) return route.fulfill({ json: {
+      user: { id: 7, name: "Test Editor" }, canEditPages: true, connectorVersion: "0.19.10",
+      elementor: { active: true }, siteBuild: { pages: true, menus: true, bridge: true },
+    } });
+    if (!url.endsWith("/figmapress/v1/sites/lookup")) { writes.push(url); return route.abort(); }
+    reads.push(url);
+    const input = route.request().postDataJSON();
+    if (hold) await new Promise<void>(resolve => { resolveDelayed = resolve; });
+    return route.fulfill({ json: { siteKey: input.siteKey, readOnly: true, status: conflict ? "unresolved" : "ready",
+      unresolved: conflict ? [{ key: "home", reason: "duplicate" }] : [],
+      pages: input.pages.filter((p: { key: string }) => !conflict || p.key !== "home").map((p: { key: string; sourceKey: string }, i: number) => ({
+        ...p, id: 41+i, title: p.key, slug: p.key, status: "draft", created: false, updated: false,
+        previewLink: `https://wp.example/?page_id=${41+i}&preview=true`,
+      })),
+    } });
+  });
+  await page.getByRole("textbox", { name: "WordPress URL", exact: true }).fill("https://wp.example");
+  await page.getByRole("textbox", { name: "ユーザー名", exact: true }).fill("fixture");
+  await page.getByLabel("Application Password", { exact: true }).fill("test-only-password");
+  await page.getByRole("button", { name: "接続を診断", exact: true }).click();
+  await expect(lookup).toBeEnabled();
+  await lookup.click();
+  await expect(page.getByText("✓ 2ページの下書きIDを確認しました。", { exact: true })).toBeVisible();
+  hold = true;
+  await lookup.click();
+  await expect.poll(() => reads.length).toBe(2);
+  await page.getByRole("checkbox", { name: "採用: contact (3:1)", exact: true }).check();
+  resolveDelayed();
+  await expect(lookup).toBeDisabled();
+  await expect(page.getByText("✓ 2ページの下書きIDを確認しました。", { exact: true })).toHaveCount(0);
+  hold = false; conflict = true;
+  await page.getByRole("button", { name: "選択した3ページで構成を確定", exact: true }).click();
+  await expect(lookup).toBeEnabled();
+  await lookup.click();
+  await expect(page.getByText("未解決 1ページ。自動作成・更新はしていません。", { exact: true })).toBeVisible();
+  await expect(page.getByText("home：同じ識別子のページが複数存在", { exact: true })).toBeVisible();
+  const mapPanel = page.getByText("既存ページの確認（読み取り専用）", { exact: true }).locator("..");
+  await mapPanel.screenshot({ path: test.info().outputPath("readonly-site-map-390.png") });
+  const geometry = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
+  expect(geometry.scroll).toBeLessThanOrEqual(geometry.width);
+  expect(writes).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test("read-only proxy input validates identities and origin before any external lookup", async ({ request }) => {
+  const siteKey = "figma:FixtureOnly123:root";
+  const data = { target: "site-map", baseUrl: "http://127.0.0.1", username: "fixture", applicationPassword: "test-only-password", siteKey,
+    pages: ["home", "company"].map(key => ({ key, sourceKey: key === "home" ? siteKey : `${siteKey}:page:${key}` })),
+  };
+  const send = (body: unknown, origin = "http://127.0.0.1:3031") => request.post("/api/wordpress", { headers: { Origin: origin }, data: body });
+  expect((await send(data)).status()).toBe(400);
+  expect((await send({ ...data, pages: [...data.pages, data.pages[0]] })).status()).toBe(422);
+  expect((await send({ ...data, title: "must-not-rename" })).status()).toBe(422);
+  expect((await send(data, "https://foreign.example")).status()).toBe(403);
+});

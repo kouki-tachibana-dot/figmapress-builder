@@ -1,8 +1,19 @@
 import type { BrowserPreparedSiteResult } from "./wordpress-browser";
+import { validateWordPressSiteMap, type WordPressSiteLookupInput, type WordPressSiteMapResult } from "../../../../packages/wp-connector/src/site-map";
 
 export interface WordPressSiteReceipt {
   baseUrl: string;
   result: BrowserPreparedSiteResult;
+}
+
+export function receiptFromWordPressSiteMap(baseUrl: string, input: WordPressSiteLookupInput, value: WordPressSiteMapResult): WordPressSiteReceipt {
+  const map = validateWordPressSiteMap(input, value);
+  if (map.status !== "ready") throw new Error("未解決のページがあります。自動選択・新規作成は行っていません。");
+  const receipt: WordPressSiteReceipt = { baseUrl, result: {
+    siteKey: map.siteKey, title: "", status: "draft", pages: map.pages, menu: null, warnings: [],
+  } };
+  resolveWordPressPageLinks(baseUrl, input.siteKey, input.pages.map(page => page.key), receipt);
+  return receipt;
 }
 
 function siteUrl(value: string): URL {
@@ -26,7 +37,7 @@ export function resolveWordPressPageLinks(
     !siteKey || !receipt || siteUrl(receipt.baseUrl).href !== base.href
     || receipt.result.siteKey !== siteKey || receipt.result.status !== "draft"
   ) {
-    throw new Error("このサイトの確定済みページ対応表がありません。「サイト一式を自動構築」で下書きページを準備してください。推測URLでは保存しません。");
+    throw new Error("このサイトの確定済みページ対応表がありません。「既存ページの対応表を取得（変更なし）」で再取得してください。推測URLでは保存しません。");
   }
   const seenKeys = new Set<string>();
   const seenIds = new Set<number>();

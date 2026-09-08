@@ -1,3 +1,5 @@
+import { validateWordPressSiteMap, type WordPressSiteLookupInput, type WordPressSiteMapResult } from "../../../../packages/wp-connector/src/site-map";
+
 export interface BrowserWordPressConfig {
   baseUrl: string;
   username: string;
@@ -472,6 +474,20 @@ export async function probeWordPressDirect(
       active: status.pairing.active === true,
     } : undefined,
   };
+}
+
+export async function lookupWordPressSiteDirect(
+  config: BrowserWordPressConfig,
+  input: WordPressSiteLookupInput,
+): Promise<WordPressSiteMapResult> {
+  const payload = JSON.stringify(input);
+  const result = await responseJson<unknown>(
+    await directFetch(config, config.connectorToken ? "/figmapress/v1/paired/site-map" : "/figmapress/v1/sites/lookup", {
+      method: "POST", body: config.connectorToken ? undefined : payload,
+    }, config.connectorToken ? { payload } : undefined, "hex"),
+    config.connectorToken,
+  );
+  return validateWordPressSiteMap(input, result);
 }
 
 export async function prepareWordPressSiteDirect(

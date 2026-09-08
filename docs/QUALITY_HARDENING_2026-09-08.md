@@ -6,6 +6,15 @@
 
 ## 現在地
 
+### v0.31.4（読み取り専用ページ対応表）
+
+- Builder v0.31.4 / Connector v0.19.10。WordPressのページ本文・タイトル・メニューを変更せず、確定した採用ページのIDを照会する処理を追加。
+- 5種の未解決状態（missing / duplicate / not_draft / forbidden / identity_mismatch）は勝手に補完しない。完全な対応表だけを既存の厳密な下書きURL検証へ渡す。
+- 認証を行ってからページ単位の権限を確認する。公式の[REST endpoint権限設計](https://developer.wordpress.org/rest-api/extending-the-rest-api/adding-custom-endpoints/)に従い、サイト構築に必要なメニュー編集権限を読み取りには要求しない。
+- [get_posts](https://developer.wordpress.org/reference/functions/get_posts/)は最大2 IDの取得に制限し、曖昧なページを先頭1件で選ばない。全postmetaのキャッシュを避け、巨大なElementorデータを対応表照会のために読まない。
+- PHP実コールバックを実行する書き込み検出付きテスト、Basic/ペアリング/全403フォールバック、9ページ取得、権限・入力拒否を追加。ブラウザでは未確定の拒否、構成変更中の古い応答破棄、未解決表示、390px横はみ出しなし、書き込み通信0件を検証。
+- 配信と実WordPressでの結果は下記へ追記する。検証コピーの一式作成と実保存再読込は、この照会の合格とは別の未完了項目。
+
 ### v0.31.3（保存経路の追加修正）
 
 - サーバー経由の `/api/wordpress` だけ、旧版の6種類のページkey・最大8ページという制限が残っていた。直接/paired Connectorと同じ2〜20ページ、動的なページkeyへ統一した。
